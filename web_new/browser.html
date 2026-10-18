@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🦖 Fossil-Nim - In-Browser VCS & MCP</title>
+  <meta name="description" content="Fossil-Nim Browser Edition: 100% in-browser distributed version control, 3 storage backends (IndexedDB, SQLite WASM, Pure-Nim CDB), and 89-tool MCP server for AI Agents.">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="stylesheet" href="css/themes.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦖</text></svg>">
+</head>
+<body>
+  <div id="app">
+    <!-- Main In-Browser Navigation Header -->
+    <header class="navbar">
+      <div class="navbar-brand">
+        <a href="browser.html">🦖 Fossil-Nim <span class="badge badge-primary">Browser Edition</span></a>
+        <span class="badge" style="background:#6366f1;">89 MCP Tools</span>
+      </div>
+      <div class="navbar-actions">
+        <!-- Storage Selector Dropdown -->
+        <div class="storage-selector-group">
+          <div class="status-dot" title="Storage Ready"></div>
+          <span style="font-size:0.82rem; font-weight:600; color:var(--color-text-secondary);">Storage:</span>
+          <select id="storage-backend-select" class="form-select" style="padding:0.25rem 2rem 0.25rem 0.65rem; font-size:0.85rem; width:auto; border-radius:12px; height:auto;">
+            <option value="indexeddb">🗄️ IndexedDB (Local-First)</option>
+            <option value="sqlite_wasm">⚡ SQLite WASM (.fossil)</option>
+            <option value="cdb">🚀 Pure-Nim CDB (RAM)</option>
+          </select>
+        </div>
+        <button id="btn-export-repo" class="btn btn-secondary btn-sm" title="Download repository snapshot">💾 Export</button>
+        <button id="theme-toggle-btn" class="btn btn-icon" title="Toggle Theme">🌙</button>
+        <a href="/" class="btn btn-secondary btn-sm" title="Go to Server UI">🖥️ Server UI</a>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="main">
+      <!-- Hero Banner -->
+      <div class="browser-hero">
+        <div class="browser-hero-title">
+          <span style="font-size:2.5rem;">🦖</span>
+          <div>
+            <h1>Fossil-Nim WebAssembly & JS</h1>
+            <p style="margin:0; font-size:0.92rem; color:var(--color-text-muted);">
+              Distributed Version Control running 100% inside your browser. No server required.
+              Active backend: <b id="active-backend-name" style="color:var(--color-primary);">IndexedDB</b>
+            </p>
+          </div>
+        </div>
+        <div style="display:flex; gap:0.5rem; align-items:center;">
+          <span class="badge badge-success">Local-First</span>
+          <span class="badge badge-info">Myers Diff</span>
+          <span class="badge badge-warning">MCP 89 Tools</span>
+        </div>
+      </div>
+
+      <!-- Loading overlay -->
+      <div id="loading-indicator" class="loading hidden" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:9999; background:rgba(0,0,0,0.5); padding:2rem; border-radius:12px;">
+        <div class="spinner"></div>
+      </div>
+
+      <!-- Tab Navigation Strip -->
+      <div class="tabs-nav">
+        <button class="tab-btn active" data-tab="timeline">📜 Timeline</button>
+        <button class="tab-btn" data-tab="files">📁 Files & Editor</button>
+        <button class="tab-btn" data-tab="diff">🔍 Myers Diff</button>
+        <button class="tab-btn" data-tab="wiki">📖 Wiki & Docs</button>
+        <button class="tab-btn" data-tab="tickets">🎫 Tickets</button>
+        <button class="tab-btn" data-tab="mcp">🤖 AI Agent MCP (89)</button>
+        <button class="tab-btn" data-tab="storage">💾 Multi-DB Diagnostics</button>
+      </div>
+
+      <!-- TAB 1: Timeline -->
+      <section id="tab-timeline" class="tab-content active">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <div>
+            <h2 style="margin:0;">Repository Timeline</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">History of check-ins and commits saved in current browser storage backend.</p>
+          </div>
+          <button id="btn-new-commit-modal" class="btn btn-primary btn-sm">+ New Commit</button>
+        </div>
+        <div id="timeline-list">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </section>
+
+      <!-- TAB 2: Virtual Files & Editor -->
+      <section id="tab-files" class="tab-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <div>
+            <h2 style="margin:0;">In-Browser Virtual File System</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Edit repository files directly in browser with live Myers diff and commits.</p>
+          </div>
+          <button id="btn-new-file" class="btn btn-secondary btn-sm">+ New File</button>
+        </div>
+
+        <div class="editor-container">
+          <!-- Left: Files Tree -->
+          <div class="file-tree">
+            <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.6rem; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;">
+              Repository Tree
+            </div>
+            <div id="files-tree"></div>
+          </div>
+
+          <!-- Right: Code Editor -->
+          <div class="code-area">
+            <div class="editor-toolbar">
+              <span id="active-file-label" style="font-family:var(--font-mono); font-weight:600; font-size:0.95rem;">README.md</span>
+              <div style="display:flex; gap:0.4rem;">
+                <button id="btn-editor-diff" class="btn btn-secondary btn-sm">⚡ Compare Diff</button>
+                <button id="btn-editor-save" class="btn btn-secondary btn-sm">💾 Save File</button>
+                <button id="btn-editor-commit" class="btn btn-primary btn-sm">🚀 Commit</button>
+              </div>
+            </div>
+
+            <!-- Optional Diff preview -->
+            <div id="editor-diff-preview" class="hidden" style="margin-bottom:0.75rem;"></div>
+
+            <textarea id="code-editor-text" class="editor-textarea" spellcheck="false" placeholder="Write or edit code here..."></textarea>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: Myers Diff Engine Tool -->
+      <section id="tab-diff" class="tab-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <div>
+            <h2 style="margin:0;">Myers Diff Engine (Pure Nim in JS)</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Unified Myers diff algorithm compiled directly from Nim Lang to JavaScript.</p>
+          </div>
+          <div style="display:flex; align-items:center; gap:0.5rem;">
+            <span style="font-size:0.85rem; font-weight:600;">Sample:</span>
+            <select id="diff-preset-select" class="form-select" style="padding:0.25rem 2rem 0.25rem 0.65rem; font-size:0.85rem; width:auto;">
+              <option value="code">Nim Code Diff</option>
+              <option value="doc">Markdown Doc Diff</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-2" style="margin-bottom:1rem;">
+          <div>
+            <label class="form-label">Original Text (v1)</label>
+            <textarea id="diff-input-a" class="form-textarea" style="height:170px;" spellcheck="false">import std/[strutils, tables]
+
+proc processTask(id: int): string =
+  result = "Task #" & $id
+  echo "Starting..."
+</textarea>
+          </div>
+          <div>
+            <label class="form-label">Modified Text (v2)</label>
+            <textarea id="diff-input-b" class="form-textarea" style="height:170px;" spellcheck="false">import std/[strutils, tables, os]
+
+proc processTask(id: int): string =
+  result = "Task #" & $id & " [OPTIMIZED]"
+  echo "Starting high-speed processing..."
+  echo "Completed!"
+</textarea>
+          </div>
+        </div>
+
+        <button id="btn-run-standalone-diff" class="btn btn-primary" style="margin-bottom:1rem;">⚡ Compute Myers Diff (via Nim)</button>
+
+        <div id="standalone-diff-result"></div>
+      </section>
+
+      <!-- TAB 4: Wiki & Documentation -->
+      <section id="tab-wiki" class="tab-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <div>
+            <h2 style="margin:0;">Wiki & Built-in Documentation</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Shipped out-of-the-box with complete Fossil-Nim architecture and reference docs.</p>
+          </div>
+          <button id="btn-wiki-new" class="btn btn-secondary btn-sm">+ New Wiki Page</button>
+        </div>
+
+        <div class="editor-container" style="min-height:540px;">
+          <!-- Left: Wiki Pages -->
+          <div class="file-tree">
+            <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.6rem; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;">
+              Documentation Pages
+            </div>
+            <div id="wiki-pages-list"></div>
+          </div>
+
+          <!-- Right: Wiki Reader & Live Editor -->
+          <div class="code-area">
+            <!-- Reader Mode -->
+            <div id="wiki-reader-wrap">
+              <div class="editor-toolbar">
+                <span id="wiki-view-title" style="font-weight:700; font-size:1.15rem;">Home</span>
+                <button id="btn-wiki-edit" class="btn btn-secondary btn-sm">✏️ Edit Page</button>
+              </div>
+              <div id="wiki-view-content" style="padding:1rem; line-height:1.7;"></div>
+            </div>
+
+            <!-- Editor Mode (hidden by default) -->
+            <div id="wiki-editor-wrap" class="hidden">
+              <div class="editor-toolbar">
+                <span style="font-weight:600;">Editing Wiki Page</span>
+                <div style="display:flex; gap:0.4rem;">
+                  <button id="btn-wiki-cancel" class="btn btn-secondary btn-sm">Cancel</button>
+                  <button id="btn-wiki-save" class="btn btn-primary btn-sm">💾 Save Page</button>
+                </div>
+              </div>
+              <div class="grid grid-2" style="min-height:360px;">
+                <textarea id="wiki-markdown-input" class="editor-textarea" style="min-height:360px;" placeholder="Write markdown..."></textarea>
+                <div id="wiki-live-preview" style="padding:0.75rem; border:1px solid var(--color-border); border-radius:6px; background:var(--color-bg); overflow-y:auto; max-height:420px;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: Tickets / Issue Tracker -->
+      <section id="tab-tickets" class="tab-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <div>
+            <h2 style="margin:0;">Issue & Task Tracker</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Manage bug reports, roadmap items, and feature requests directly in browser.</p>
+          </div>
+          <button id="btn-ticket-modal" class="btn btn-primary btn-sm">+ New Ticket</button>
+        </div>
+        <div id="tickets-list"></div>
+      </section>
+
+      <!-- TAB 6: 89-Tool MCP Agent Console -->
+      <section id="tab-mcp" class="tab-content">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+          <div>
+            <h2 style="margin:0;">In-Browser AI Agent MCP Server (89 Tools)</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">
+              Model Context Protocol server running directly in browser for Gemini, Claude, ChatGPT, WebLLM.
+            </p>
+          </div>
+          <button id="btn-copy-mcp-prompt" class="btn btn-secondary btn-sm">📋 Copy Prompt for AI Agent</button>
+        </div>
+
+        <div class="mcp-layout">
+          <!-- Tools List -->
+          <div>
+            <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.5rem; color:var(--color-text-secondary); text-transform:uppercase;">
+              Available Tools (89 Total)
+            </div>
+            <div id="mcp-tools-list" class="mcp-tools-list"></div>
+          </div>
+
+          <!-- Tool Invoker & Output -->
+          <div>
+            <div class="card" style="margin-bottom:1rem;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
+                <h3 id="mcp-active-tool-name" style="margin:0; font-family:var(--font-mono); color:var(--color-primary);">vcs_status</h3>
+                <span class="badge badge-primary">MCP Tool</span>
+              </div>
+              <p id="mcp-active-tool-desc" style="font-size:0.88rem; color:var(--color-text-muted); margin-bottom:1rem;">
+                Get working copy status
+              </p>
+
+              <div class="form-group">
+                <label class="form-label">Parameters (JSON Schema)</label>
+                <textarea id="mcp-params-input" class="form-textarea" style="height:90px; font-family:var(--font-mono); font-size:0.85rem;" spellcheck="false">{}</textarea>
+              </div>
+
+              <button id="btn-mcp-invoke" class="btn btn-primary">🚀 Invoke Tool (window.fossilMcp)</button>
+            </div>
+
+            <div>
+              <label class="form-label">Tool Execution Output (JSON-RPC Result)</label>
+              <pre id="mcp-output-json" class="mcp-response-box">// Select a tool and click "Invoke Tool" to inspect response...</pre>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 7: Multi-DB Diagnostics & SQL Console -->
+      <section id="tab-storage" class="tab-content">
+        <h2 style="margin-bottom:0.25rem;">Multi-Database Diagnostics</h2>
+        <p style="margin-bottom:1.5rem; font-size:0.85rem; color:var(--color-text-muted);">
+          Inspect and interact with the 3 supported browser database engines.
+        </p>
+
+        <div id="storage-stats-container"></div>
+
+        <!-- SQL Console for SQLite WASM -->
+        <div class="card" style="margin-top:1.5rem;">
+          <h3 style="margin-bottom:0.5rem;">⚡ SQLite WASM Interactive Query Console</h3>
+          <p style="font-size:0.85rem; color:var(--color-text-muted); margin-bottom:1rem;">
+            Run direct SQL statements against the WebAssembly SQLite database when SQLite WASM backend is active.
+          </p>
+          <div class="form-group">
+            <textarea id="sql-query-input" class="form-textarea" style="height:70px; font-family:var(--font-mono);" spellcheck="false">SELECT name, author FROM wiki;</textarea>
+          </div>
+          <button id="btn-run-sql" class="btn btn-primary btn-sm">▶ Run SQL Query</button>
+
+          <div id="sql-query-output" style="margin-top:1rem; overflow-x:auto;"></div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-content">
+        <span>🦖 Fossil-Nim 2.26.0 | 100% In-Browser Edition | Multi-DB: IndexedDB / SQLite WASM / Pure-Nim CDB | MCP 89 Tools</span>
+        <span>
+          <a href="https://github.com" target="_blank">GitHub</a> |
+          <a href="https://nim-lang.org" target="_blank">Nim Lang</a>
+        </span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Modal: New Commit -->
+  <div id="modal-commit" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🚀 Create Check-in / Commit</h2>
+        <button class="btn btn-icon" id="btn-commit-cancel">✕</button>
+      </div>
+      <form id="form-commit">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Commit Message</label>
+            <input type="text" id="commit-comment" class="form-input" placeholder="e.g. Implement browser-native storage engine" required>
+          </div>
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label class="form-label">Branch</label>
+              <input type="text" id="commit-branch" class="form-input" value="trunk">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Author / User</label>
+              <input type="text" id="commit-user" class="form-input" value="developer">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">Commit to Storage</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: New Ticket -->
+  <div id="modal-ticket" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🎫 Create New Ticket</h2>
+        <button class="btn btn-icon" id="btn-ticket-cancel">✕</button>
+      </div>
+      <form id="form-ticket">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Ticket Title</label>
+            <input type="text" id="ticket-title" class="form-input" placeholder="e.g. Add offline sync for mobile devices" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Priority</label>
+            <select id="ticket-priority" class="form-select">
+              <option value="Low">Low</option>
+              <option value="Medium" selected>Medium</option>
+              <option value="High">High</option>
+              <option value="Critical">Critical</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea id="ticket-desc" class="form-textarea" placeholder="Detailed description of the issue or feature request..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="submit" class="btn btn-primary">Save Ticket</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Core Scripts -->
+  <script src="js/fossil_core.js"></script>
+  <script src="js/fossil_browser_storage.js"></script>
+  <script src="js/fossil_mcp_agent.js"></script>
+  <script src="js/fossil_browser_ui.js"></script>
+</body>
+</html>

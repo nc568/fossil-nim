@@ -1,0 +1,208 @@
+/* Fossil-Nim Themes - Modular, easy to edit palette
+   Generated from src/fossil/ui/theme.nim via tools/generate_themes.nim
+   Edit palette in theme.nim to change colors, then regenerate
+   Or edit directly here for quick tweaks
+*/
+
+/* Theme: light - Light */
+/* Default light theme, clean and minimal */
+[data-theme="light"] {
+  --color-primary: #0d6efd;
+  --color-primary-hover: #0b5ed7;
+  --color-primary-light: #cfe2ff;
+  --color-secondary: #6c757d;
+  --color-success: #198754;
+  --color-danger: #dc3545;
+  --color-warning: #ffc107;
+  --color-info: #0dcaf0;
+  --color-bg: #f8f9fa;
+  --color-bg-secondary: #e9ecef;
+  --color-bg-card: #ffffff;
+  --color-bg-code: #f1f3f5;
+  --color-bg-hover: #e9ecef;
+  --color-text: #212529;
+  --color-text-secondary: #495057;
+  --color-text-muted: #6c757d;
+  --color-text-inverse: #ffffff;
+  --color-border: #dee2e6;
+  --color-border-light: #e9ecef;
+  --color-border-dark: #343a40;
+  --shadow: 0 1px 3px rgba(0,0,0,0.1);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.15);
+  --radius: 6px;
+  --radius-lg: 12px;
+}
+
+/* Theme: dark - Dark */
+/* Dark theme for low light */
+[data-theme="dark"] {
+  --color-primary: #3b82f6;
+  --color-primary-hover: #2563eb;
+  --color-primary-light: #1e3a5f;
+  --color-secondary: #6b7280;
+  --color-success: #10b981;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+  --color-info: #06b6d4;
+  --color-bg: #111827;
+  --color-bg-secondary: #1f2937;
+  --color-bg-card: #1f2937;
+  --color-bg-code: #374151;
+  --color-bg-hover: #374151;
+  --color-text: #f9fafb;
+  --color-text-secondary: #d1d5db;
+  --color-text-muted: #9ca3af;
+  --color-text-inverse: #111827;
+  --color-border: #374151;
+  --color-border-light: #4b5563;
+  --color-border-dark: #6b7280;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.4);
+  --radius: 6px;
+  --radius-lg: 12px;
+}
+
+/* Theme: solarized-light - Solarized Light */
+/* Solarized light, easy on eyes */
+[data-theme="solarized-light"] {
+  --color-primary: #268bd2;
+  --color-primary-hover: #2075b5;
+  --color-primary-light: #d6e9f5;
+  --color-secondary: #93a1a1;
+  --color-success: #859900;
+  --color-danger: #dc322f;
+  --color-warning: #b58900;
+  --color-info: #2aa198;
+  --color-bg: #fdf6e3;
+  --color-bg-secondary: #eee8d5;
+  --color-bg-card: #ffffff;
+  --color-bg-code: #eee8d5;
+  --color-bg-hover: #eee8d5;
+  --color-text: #586e75;
+  --color-text-secondary: #657b83;
+  --color-text-muted: #93a1a1;
+  --color-text-inverse: #fdf6e3;
+  --color-border: #93a1a1;
+  --color-border-light: #eee8d5;
+  --color-border-dark: #586e75;
+  --shadow: 0 1px 3px rgba(88,110,117,0.1);
+  --shadow-lg: 0 4px 12px rgba(88,110,117,0.15);
+  --radius: 6px;
+  --radius-lg: 12px;
+}
+
+/* Theme: nord - Nord */
+/* Nord dark, arctic bluish */
+[data-theme="nord"] {
+  --color-primary: #88c0d0;
+  --color-primary-hover: #81a1c1;
+  --color-primary-light: #4c566a;
+  --color-secondary: #4c566a;
+  --color-success: #a3be8c;
+  --color-danger: #bf616a;
+  --color-warning: #ebcb8b;
+  --color-info: #88c0d0;
+  --color-bg: #2e3440;
+  --color-bg-secondary: #3b4252;
+  --color-bg-card: #3b4252;
+  --color-bg-code: #4c566a;
+  --color-bg-hover: #4c566a;
+  --color-text: #eceff4;
+  --color-text-secondary: #d8dee9;
+  --color-text-muted: #4c566a;
+  --color-text-inverse: #2e3440;
+  --color-border: #4c566a;
+  --color-border-light: #5e81ac;
+  --color-border-dark: #2e3440;
+  --shadow: 0 1px 3px rgba(0,0,0,0.3);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.4);
+  --radius: 6px;
+  --radius-lg: 12px;
+}
+
+
+/* Monokai - Vibrant dark */
+[data-theme="monokai"] {
+  --color-primary: #a6e22e;
+  --color-primary-hover: #8ac627;
+  --color-primary-light: #3e4a2d;
+  --color-secondary: #75715e;
+  --color-success: #a6e22e;
+  --color-danger: #f92672;
+  --color-warning: #fd971f;
+  --color-info: #66d9ef;
+  --color-bg: #272822;
+  --color-bg-secondary: #3e3d32;
+  --color-bg-card: #3e3d32;
+  --color-bg-code: #49483e;
+  --color-bg-hover: #49483e;
+  --color-text: #f8f8f2;
+  --color-text-secondary: #cfcfc2;
+  --color-text-muted: #75715e;
+  --color-text-inverse: #272822;
+  --color-border: #49483e;
+  --color-border-light: #75715e;
+  --color-border-dark: #f8f8f2;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.5);
+  --radius: 6px;
+  --radius-lg: 12px;
+}
+
+/* GitHub Light */
+[data-theme="github-light"] {
+  --color-primary: #0969da;
+  --color-primary-hover: #0550ae;
+  --color-primary-light: #ddf4ff;
+  --color-secondary: #656d76;
+  --color-success: #1a7f37;
+  --color-danger: #cf222e;
+  --color-warning: #9a6700;
+  --color-info: #0969da;
+  --color-bg: #ffffff;
+  --color-bg-secondary: #f6f8fa;
+  --color-bg-card: #ffffff;
+  --color-bg-code: #f6f8fa;
+  --color-bg-hover: #f6f8fa;
+  --color-text: #24292f;
+  --color-text-secondary: #57606a;
+  --color-text-muted: #8c959f;
+  --color-text-inverse: #ffffff;
+  --color-border: #d0d7de;
+  --color-border-light: #d8dee4;
+  --color-border-dark: #24292f;
+  --shadow: 0 1px 0 rgba(27,31,36,0.04);
+  --shadow-lg: 0 3px 6px rgba(140,149,159,0.15);
+  --radius: 6px;
+  --radius-lg: 12px;
+}
+
+/* Template for custom themes - copy and edit */
+/*
+[data-theme="my-custom"] {
+  --color-primary: #your-color;
+  --color-primary-hover: #your-hover;
+  --color-primary-light: #your-light;
+  --color-secondary: #...
+  --color-success: #...
+  --color-danger: #...
+  --color-warning: #...
+  --color-info: #...
+  --color-bg: #...
+  --color-bg-secondary: #...
+  --color-bg-card: #...
+  --color-bg-code: #...
+  --color-bg-hover: #...
+  --color-text: #...
+  --color-text-secondary: #...
+  --color-text-muted: #...
+  --color-text-inverse: #...
+  --color-border: #...
+  --color-border-light: #...
+  --color-border-dark: #...
+  --shadow: 0 1px 3px rgba(0,0,0,0.1);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.15);
+  --radius: 6px;
+  --radius-lg: 12px;
+}
+*/

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🦖 Fossil-Nim - Modern SCM</title>
+  <meta name="description" content="Fossil-Nim - Complete rewrite of Fossil SCM in Nim, with modern vanilla JS UI">
+  <link rel="stylesheet" href="/assets/app.css">
+  <link rel="stylesheet" href="/assets/themes.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦖</text></svg>">
+  <style>
+    /* Critical CSS - minimal for fast first paint */
+    :root {
+      --color-primary: #0d6efd;
+      --color-bg: #f8f9fa;
+      --color-bg-card: #ffffff;
+      --color-text: #212529;
+      --color-border: #dee2e6;
+      --radius: 6px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.1);
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font-sans); background: var(--color-bg); color: var(--color-text); line-height: 1.6; }
+    #app { min-height: 100vh; display: flex; flex-direction: column; }
+    .loading { display: flex; justify-content: center; align-items: center; height: 200px; }
+    .spinner { width: 40px; height: 40px; border: 3px solid var(--color-border); border-top-color: var(--color-primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Navbar - modular component -->
+    <nav id="navbar" class="navbar" data-component="navbar">
+      <div class="navbar-brand">
+        <a href="/" data-link>🦖 Fossil-Nim</a>
+        <span class="badge">2.26.0-nim</span>
+      </div>
+      <div class="navbar-menu" id="navbar-menu">
+        <a href="/timeline" data-link>Timeline</a>
+        <a href="/file" data-link>Files</a>
+        <a href="/graph" data-link>Graph</a>
+        <a href="/wiki" data-link>Wiki</a>
+        <a href="/ticket" data-link>Tickets</a>
+        <a href="/forum" data-link>Forum</a>
+        <a href="/chat" data-link>Chat</a>
+        <a href="/search" data-link>Search</a>
+      </div>
+      <div class="navbar-actions">
+        <a href="/browser" target="_blank" class="badge badge-success" style="padding:0.4rem 0.7rem; font-size:0.85rem; text-decoration:none;" title="Zero-install In-Browser Edition with 3 databases and 89 MCP tools">🌐 Browser Mode</a>
+        <button id="theme-toggle" class="btn btn-icon" title="Toggle theme">🌙</button>
+        <button id="theme-editor-btn" class="btn btn-icon" title="Theme editor">🎨</button>
+        <a href="/login" data-link class="btn btn-primary" id="login-btn">Login</a>
+        <a href="/setup" data-link class="btn btn-secondary" id="setup-btn">Setup</a>
+      </div>
+      <button class="navbar-burger" id="burger">☰</button>
+    </nav>
+
+    <!-- Main content - xhttp target -->
+    <main id="main" class="main">
+      <div class="loading"><div class="spinner"></div></div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="footer-content">
+        <span>Fossil-Nim 2.26.0 | Storage: SQLite/LMDB/MDBX/CDB | QBE compatible | MCP 89 tools</span>
+        <span>
+          <a href="/api/v1/openapi.json">API</a> |
+          <a href="https://fossil-scm.org" target="_blank">Fossil SCM</a> |
+          <a href="https://nim-lang.org" target="_blank">Nim</a>
+        </span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Theme Editor Modal - modular -->
+  <div id="theme-editor" class="modal hidden">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🎨 Theme Editor</h2>
+        <button class="btn btn-icon" onclick="document.getElementById('theme-editor').classList.add('hidden')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="theme-presets">
+          <h3>Presets</h3>
+          <div class="theme-grid" id="theme-presets-grid"></div>
+        </div>
+        <div class="theme-custom">
+          <h3>Custom Palette</h3>
+          <div class="color-grid" id="color-grid"></div>
+          <div class="theme-actions">
+            <button class="btn btn-primary" onclick="themeEditor.save()">Save Custom</button>
+            <button class="btn btn-secondary" onclick="themeEditor.reset()">Reset</button>
+            <button class="btn btn-secondary" onclick="themeEditor.export()">Export JSON</button>
+            <input type="file" id="theme-import" accept=".json" style="display:none" onchange="themeEditor.import(event)">
+            <button class="btn btn-secondary" onclick="document.getElementById('theme-import').click()">Import JSON</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts - vanilla JS, modular, no frameworks, xhttp style -->
+  <script src="/assets/lib/xhttp.js"></script>
+  <script src="/assets/lib/theme.js"></script>
+  <script src="/assets/api.js"></script>
+  <script src="/assets/lib/component.js"></script>
+  <script src="/assets/components/editor.js"></script>
+  <script src="/assets/components/navbar.js"></script>
+  <script src="/assets/components/timeline.js"></script>
+  <script src="/assets/components/file.js"></script>
+  <script src="/assets/components/info.js"></script>
+  <script src="/assets/components/graph.js"></script>
+  <script src="/assets/components/wiki.js"></script>
+  <script src="/assets/components/ticket.js"></script>
+  <script src="/assets/components/forum.js"></script>
+  <script src="/assets/components/chat.js"></script>
+  <script src="/assets/components/search.js"></script>
+  <script src="/assets/components/login.js"></script>
+  <script src="/assets/components/setup.js"></script>
+  <script src="/assets/components/diff.js"></script>
+  <script src="/assets/app.js"></script>
+
+  <script>
+    // Init - vanilla JS, no framework
+    document.addEventListener('DOMContentLoaded', () => {
+      window.app.init();
+    });
+  </script>
+</body>
+</html>
