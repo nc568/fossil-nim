@@ -1,7 +1,7 @@
 # Push state
 
 Repository: `nc568/fossil-nim`
-Branch under development: **`feat/foccil-db-v0.1`** — currently **`b514de4`**
+Branch under development: **`feat/foccil-db-v0.1`** — currently **`0ecca54`**
 `main` stays at `dd7630e` and is not merged until the implementation is complete.
 
 PR / diff for review:
@@ -15,15 +15,29 @@ PR / diff for review:
 | `e207022` | storage layer — VFS + 4 KiB pager with LRU and freelist |
 | `50ed8fb` | WAL — `src/fossil/db/wal.nim` + 17 tests, docs in RU and EN |
 | `b514de4` | wiki index updated for storage and WAL |
+| `0ecca54` | B+tree — page format, overflow values, structural verification, docs RU/EN |
 
 ## Gate
 
-**26 core + 20 security + 17 storage + 17 WAL**, 0 failures.
+**26 core + 20 security + 17 storage + 17 WAL + 24 btree**, 0 failures.
 Backend parity digest unchanged: `0376a7c4c0dfd8cf602e8fcff9dddb40`.
+
+Storage stress (1 000 000 keys, `-d:release`, in memory):
+
+```
+insert  1 000 000   17 885 ops/s
+lookup  1 000 000   14 212 ops/s
+scan                 identical to the model, key for key
+verify   depth=2, 13 117 leaves, 13 254 pages
+delete   593 404     survivors match exactly
+```
+
+The throughput is the next task (K9L-67): `readPage` copies 4 KiB per level and
+`parseNode` allocates a string per cell. Measured, written down, not hand-waved.
 
 ```sh
 export PATH=$HOME/.cache/tc/nim-2.2.12/bin:$PATH
-for t in t_core t_security t_storage t_wal; do
+for t in t_core t_security t_storage t_wal t_btree; do
   nim c -r --skipParentCfg:on --mm:arc --hints:off --warnings:off \
       --path:src --outdir:build/db tests/db/$t.nim
 done
