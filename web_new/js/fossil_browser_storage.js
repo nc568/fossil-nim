@@ -442,9 +442,12 @@ class SqliteWasmStorage {
       CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, content TEXT, mtime REAL);
       CREATE TABLE IF NOT EXISTS mlink (mid INTEGER, fid INTEGER, fnid INTEGER, pid INTEGER, mperm INTEGER);
       CREATE TABLE IF NOT EXISTS wiki (name TEXT PRIMARY KEY, text TEXT, author TEXT, mtime REAL);
-      CREATE TABLE IF NOT EXISTS ticket (tkt_uuid TEXT PRIMARY KEY, title TEXT, desc TEXT, status TEXT, type TEXT, priority TEXT, reporter TEXT, mtime REAL, deadline REAL, history TEXT, linked_prs TEXT);
+      CREATE TABLE IF NOT EXISTS ticket (tkt_uuid TEXT PRIMARY KEY, title TEXT, desc TEXT, status TEXT, type TEXT, priority TEXT, reporter TEXT, mtime REAL, deadline REAL, created REAL, history TEXT, linked_prs TEXT);
       CREATE TABLE IF NOT EXISTS pull_request (id TEXT PRIMARY KEY, title TEXT, description TEXT, source_branch TEXT, target_branch TEXT, author TEXT, status TEXT, ticket_id TEXT, created REAL, modified REAL, merged_at REAL, merge_commit TEXT);
     `);
+    try {
+      this.db.run("ALTER TABLE ticket ADD COLUMN created REAL");
+    } catch (_) {}
   }
 
   seedDefaults() {
@@ -461,8 +464,9 @@ class SqliteWasmStorage {
       const rows = this.exec("SELECT count(*) as cnt FROM ticket");
       if (!rows || rows.length === 0 || rows[0].cnt === 0) {
         for (const t of DEFAULT_TICKETS_SEED) {
-          this.db.run("INSERT OR REPLACE INTO ticket(tkt_uuid, title, desc, status, type, priority, reporter, mtime, deadline, history, linked_prs) VALUES(?, ?, ?, ?, 'code', ?, ?, ?, ?, ?, ?)",
-            [t.id, t.title, t.desc, t.status, t.priority, t.reporter, t.mtime / 1000, (t.deadline || 0) / 1000, JSON.stringify(t.history || []), JSON.stringify(t.linkedPrs || [])]);
+          const cTs = (t.created || t.mtime || Date.now()) / 1000;
+          this.db.run("INSERT OR REPLACE INTO ticket(tkt_uuid, title, desc, status, type, priority, reporter, mtime, deadline, created, history, linked_prs) VALUES(?, ?, ?, ?, 'code', ?, ?, ?, ?, ?, ?, ?)",
+            [t.id, t.title, t.desc, t.status, t.priority, t.reporter, t.mtime / 1000, (t.deadline || 0) / 1000, cTs, JSON.stringify(t.history || []), JSON.stringify(t.linkedPrs || [])]);
         }
       }
     } catch (_) {}

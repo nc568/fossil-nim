@@ -1497,6 +1497,68 @@ pre code {
   gap: 0.25rem;
 }
 
+/* Ticket Status Badges */
+.badge-status-open {
+  background: rgba(59, 130, 246, 0.15) !important;
+  color: #3b82f6 !important;
+  border: 1px solid rgba(59, 130, 246, 0.4) !important;
+}
+.badge-status-in_process, .badge-status-in-process {
+  background: rgba(168, 85, 247, 0.15) !important;
+  color: #a855f7 !important;
+  border: 1px solid rgba(168, 85, 247, 0.4) !important;
+}
+.badge-status-closed, .badge-status-fixed {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #10b981 !important;
+  border: 1px solid rgba(16, 185, 129, 0.4) !important;
+}
+.badge-status-deferred, .badge-status-rejected {
+  background: rgba(100, 116, 139, 0.15) !important;
+  color: #94a3b8 !important;
+  border: 1px solid rgba(100, 116, 139, 0.4) !important;
+}
+
+/* Timeline Bar Status Tag */
+.timeline-bar-status-tag {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.38);
+  color: #fff;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+/* Pulse animation for jumped ticket */
+@keyframes timelinePulseHighlight {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.8); }
+  50% { transform: scale(1.03); box-shadow: 0 0 22px 6px rgba(59, 130, 246, 0.9); outline: 2px solid #3b82f6; }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+.timeline-highlight-pulse {
+  animation: timelinePulseHighlight 1.5s ease-in-out 2;
+  z-index: 20 !important;
+}
+
+/* Ghost button */
+.btn-ghost {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius);
+  transition: all 0.15s;
+}
+.btn-ghost:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
 /* 17. Tickets Overhaul & Filter Bar */
 .ticket-filter-bar {
   display: flex;

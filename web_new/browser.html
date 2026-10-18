@@ -382,14 +382,28 @@ proc processTask(id: int): string =
           <!-- Left Side Panel: Backlog without deadlines & Legend -->
           <div class="calendar-side-panel" id="calendar-side-panel">
             <div class="card" style="padding:1rem;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-                <b style="font-size:0.92rem;">📋 Бэклог (Без дедлайна)</b>
-                <span class="badge badge-secondary" id="cal-backlog-count">0</span>
+              <div class="btn-group" id="side-panel-tabs" style="display:flex; width:100%; margin-bottom:0.75rem; border:1px solid var(--color-border); border-radius:var(--radius); overflow:hidden;">
+                <button id="btn-side-tab-backlog" class="btn btn-sm btn-secondary active" style="flex:1; border:none; border-radius:0; font-size:0.78rem; font-weight:600;">
+                  📋 Бэклог (<span id="cal-backlog-count">0</span>)
+                </button>
+                <button id="btn-side-tab-scheduled" class="btn btn-sm btn-secondary" style="flex:1; border:none; border-radius:0; font-size:0.78rem; font-weight:600;">
+                  📅 С дедлайном (<span id="cal-side-scheduled-count">0</span>)
+                </button>
               </div>
-              <p style="font-size:0.8rem; color:var(--color-text-muted); margin-bottom:0.75rem;">
-                Задачи без назначенной даты. Нажмите на задачу, чтобы установить дедлайн и вынести на линейный таймлайн.
-              </p>
-              <div id="calendar-backlog-list" style="display:flex; flex-direction:column; gap:0.5rem; max-height:360px; overflow-y:auto;"></div>
+
+              <div id="side-tab-backlog-content">
+                <p style="font-size:0.78rem; color:var(--color-text-muted); margin-bottom:0.6rem;">
+                  Задачи без назначенной даты. Нажмите на задачу, чтобы установить дедлайн и вынести на линейный таймлайн.
+                </p>
+                <div id="calendar-backlog-list" style="display:flex; flex-direction:column; gap:0.5rem; max-height:360px; overflow-y:auto;"></div>
+              </div>
+
+              <div id="side-tab-scheduled-content" style="display:none;">
+                <p style="font-size:0.78rem; color:var(--color-text-muted); margin-bottom:0.6rem;">
+                  Все задачи со сроками. <b>Клик по тикету перемещает календарь к его началу:</b>
+                </p>
+                <div id="calendar-scheduled-list" style="display:flex; flex-direction:column; gap:0.5rem; max-height:360px; overflow-y:auto;"></div>
+              </div>
             </div>
 
             <!-- Side upcoming list (kept for full compatibility) -->

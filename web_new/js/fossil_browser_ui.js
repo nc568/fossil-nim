@@ -1386,6 +1386,14 @@
             $('ticket-desc').value = '';
             if ($('ticket-deadline')) $('ticket-deadline').value = '';
             modal.classList.add('hidden');
+            if (deadline) {
+              const dDate = new Date(deadline);
+              if (!isNaN(dDate.getTime())) {
+                state.calendarMonth = dDate.getMonth();
+                state.calendarYear = dDate.getFullYear();
+                state.calendarDate = dDate;
+              }
+            }
             await this.refreshTickets();
             await this.refreshCalendar();
             showToast('Тикет успешно создан!');
@@ -1435,6 +1443,14 @@
           const res = await window.fossilMcp.callTool('ticket_update', { id, title, priority, status, deadline, desc });
           if (res.success) {
             editModal.classList.add('hidden');
+            if (deadline) {
+              const dDate = new Date(deadline);
+              if (!isNaN(dDate.getTime())) {
+                state.calendarMonth = dDate.getMonth();
+                state.calendarYear = dDate.getFullYear();
+                state.calendarDate = dDate;
+              }
+            }
             await this.refreshTickets();
             await this.refreshCalendar();
             showToast('Изменения сохранены!');
@@ -1794,6 +1810,31 @@
         });
       }
 
+      // Side Panel Tabs (Backlog vs Scheduled)
+      const sideTabBacklog = $('btn-side-tab-backlog');
+      const sideTabScheduled = $('btn-side-tab-scheduled');
+      const sideBacklogContent = $('side-tab-backlog-content');
+      const sideScheduledContent = $('side-tab-scheduled-content');
+
+      if (sideTabBacklog && sideTabScheduled) {
+        sideTabBacklog.addEventListener('click', () => {
+          sideTabBacklog.classList.add('active', 'btn-primary');
+          sideTabBacklog.classList.remove('btn-secondary');
+          sideTabScheduled.classList.remove('active', 'btn-primary');
+          sideTabScheduled.classList.add('btn-secondary');
+          if (sideBacklogContent) sideBacklogContent.style.display = 'block';
+          if (sideScheduledContent) sideScheduledContent.style.display = 'none';
+        });
+        sideTabScheduled.addEventListener('click', () => {
+          sideTabScheduled.classList.add('active', 'btn-primary');
+          sideTabScheduled.classList.remove('btn-secondary');
+          sideTabBacklog.classList.remove('active', 'btn-primary');
+          sideTabBacklog.classList.add('btn-secondary');
+          if (sideBacklogContent) sideBacklogContent.style.display = 'none';
+          if (sideScheduledContent) sideScheduledContent.style.display = 'block';
+        });
+      }
+
       if (filterStatus) {
         filterStatus.addEventListener('change', () => this.refreshCalendar());
       }
@@ -1831,6 +1872,58 @@
       }
     },
 
+    async navigateToTicketStart(ticketId) {
+      const tickets = state.cachedTickets || [];
+      const t = tickets.find(x => x.id === ticketId);
+      if (!t) return;
+
+      const ONE_DAY = 24 * 60 * 60 * 1000;
+      let deadlineTs = Number(t.deadline) || 0;
+      if (deadlineTs < 1e11 && deadlineTs > 0) deadlineTs *= 1000;
+
+      let createdTs = Number(t.created) || Number(t.mtime) || (deadlineTs > 0 ? deadlineTs - 4 * ONE_DAY : Date.now());
+      if (createdTs < 1e11) createdTs *= 1000;
+      if (deadlineTs > 0 && createdTs > deadlineTs) createdTs = deadlineTs - ONE_DAY;
+
+      const startDate = new Date(createdTs);
+      const startYear = startDate.getFullYear();
+      const startMonth = startDate.getMonth();
+
+      // If in month scale and not viewing the ticket's start month, switch to it
+      if (state.calendarScale === 'month' && (state.calendarYear !== startYear || state.calendarMonth !== startMonth)) {
+        state.calendarYear = startYear;
+        state.calendarMonth = startMonth;
+        state.calendarDate = startDate;
+        await this.refreshCalendar();
+      }
+
+      setTimeout(() => {
+        const chartArea = $('timeline-chart-area');
+        const bar = document.querySelector(`.timeline-bar[data-id="${ticketId}"]`);
+        const item = document.querySelector(`.timeline-task-item[data-id="${ticketId}"]`);
+
+        if (chartArea && bar) {
+          const barLeft = bar.offsetLeft || 0;
+          chartArea.scrollTo({ left: Math.max(0, barLeft - 80), behavior: 'smooth' });
+        }
+        if (bar) {
+          bar.classList.remove('timeline-highlight-pulse');
+          void bar.offsetWidth;
+          bar.classList.add('timeline-highlight-pulse');
+          setTimeout(() => bar.classList.remove('timeline-highlight-pulse'), 3500);
+        }
+        if (item) {
+          item.classList.remove('timeline-highlight-pulse');
+          void item.offsetWidth;
+          item.classList.add('timeline-highlight-pulse');
+          setTimeout(() => item.classList.remove('timeline-highlight-pulse'), 3500);
+          item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        const dStr = `${startDate.getDate()}.${String(startDate.getMonth() + 1).padStart(2, '0')}.${startDate.getFullYear()}`;
+        showToast(`Переход к дате начала задачи #${ticketId}: ${dStr}`);
+      }, 80);
+    },
+
     async refreshCalendar() {
       const monthLabel = $('calendar-month-label');
       const datesHeader = $('timeline-dates-header');
@@ -1856,16 +1949,31 @@
       // Fetch all tickets from MCP
       const allRes = await window.fossilMcp.callTool('ticket_list', { status: 'all' });
       const tickets = allRes.tickets || [];
+      state.cachedTickets = tickets;
+
       const now = new Date();
       const nowTs = now.getTime();
       const ONE_DAY = 24 * 60 * 60 * 1000;
+
+      // Status badge CSS helper
+      const getStatusBadgeClass = (st) => {
+        const s = (st || 'Open').toLowerCase().replace(/\s+/g, '_');
+        if (s === 'open') return 'badge-status-open';
+        if (s === 'in_process' || s === 'in-process') return 'badge-status-in_process';
+        if (s === 'closed' || s === 'fixed') return 'badge-status-closed';
+        return 'badge-status-deferred';
+      };
 
       // Filter tickets with and without deadlines
       const scheduled = tickets.filter(t => t.deadline && Number(t.deadline) > 0);
       const backlog = tickets.filter(t => !t.deadline || Number(t.deadline) === 0);
 
       // Overdue tickets
-      const overdue = scheduled.filter(t => Number(t.deadline) < nowTs && (t.status || 'Open').toLowerCase() !== 'closed');
+      const overdue = scheduled.filter(t => {
+        let d = Number(t.deadline);
+        if (d < 1e11 && d > 0) d *= 1000;
+        return d < nowTs && (t.status || 'Open').toLowerCase() !== 'closed';
+      });
       const closed = scheduled.filter(t => (t.status || 'Open').toLowerCase() === 'closed');
 
       // Update counters & badges
@@ -1874,11 +1982,13 @@
       const totalOverdueEl = $('cal-total-overdue');
       const backlogCountEl = $('cal-backlog-count');
       const btnBacklogCountEl = $('btn-backlog-count');
+      const sideScheduledCountEl = $('cal-side-scheduled-count');
       const upcomingCountEl = $('cal-upcoming-count');
       const sidebarCalBadge = $('sidebar-calendar-badge');
 
       if (totalScheduledEl) totalScheduledEl.innerText = `${scheduled.length} с дедлайном`;
       if (totalClosedEl) totalClosedEl.innerText = `${closed.length} завершено`;
+      if (sideScheduledCountEl) sideScheduledCountEl.innerText = scheduled.length;
       if (totalOverdueEl) {
         if (overdue.length > 0) {
           totalOverdueEl.style.display = 'inline-block';
@@ -1908,10 +2018,14 @@
           let bHtml = '';
           for (const t of backlog) {
             const pClass = `priority-${(t.priority || 'Medium').toLowerCase()}`;
+            const sClass = getStatusBadgeClass(t.status);
             bHtml += `
               <div class="ticket-card ${pClass}" style="padding:0.6rem 0.75rem; cursor:pointer;" data-id="${escapeHtml(t.id)}">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.2rem;">
-                  <span class="badge ${pClass}" style="font-size:0.7rem; padding:0.1rem 0.35rem;">${escapeHtml(t.priority || 'Medium')}</span>
+                  <div style="display:flex; gap:4px; align-items:center;">
+                    <span class="badge ${pClass}" style="font-size:0.7rem; padding:0.1rem 0.35rem;">${escapeHtml(t.priority || 'Medium')}</span>
+                    <span class="badge ${sClass}" style="font-size:0.7rem; padding:0.1rem 0.35rem;">${escapeHtml(t.status || 'Open')}</span>
+                  </div>
                   <span style="font-size:0.72rem; color:var(--color-text-muted);">#${escapeHtml(t.id)}</span>
                 </div>
                 <div style="font-weight:600; font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.title)}</div>
@@ -1929,27 +2043,51 @@
         }
       }
 
-      // Filter scheduled tickets by UI controls
-      const statusFilter = $('cal-filter-status') ? $('cal-filter-status').value : 'all';
-      const priorityFilter = $('cal-filter-priority') ? $('cal-filter-priority').value : 'all';
+      // Render Scheduled side panel tab list
+      const sideScheduledList = $('calendar-scheduled-list');
+      if (sideScheduledList) {
+        if (scheduled.length === 0) {
+          sideScheduledList.innerHTML = '<div style="font-size:0.8rem; color:var(--color-text-muted); padding:0.5rem 0;">Нет задач с дедлайнами</div>';
+        } else {
+          let sHtml = '';
+          const sortedScheduled = scheduled.slice().sort((a, b) => {
+            let aD = Number(a.deadline) || 0; if (aD < 1e11) aD *= 1000;
+            let bD = Number(b.deadline) || 0; if (bD < 1e11) bD *= 1000;
+            return aD - bD;
+          });
+          for (const t of sortedScheduled) {
+            const pClass = `priority-${(t.priority || 'Medium').toLowerCase()}`;
+            const sClass = getStatusBadgeClass(t.status);
+            let dTs = Number(t.deadline) || 0; if (dTs < 1e11) dTs *= 1000;
+            let cTs = Number(t.created) || Number(t.mtime) || (dTs - 4 * ONE_DAY); if (cTs < 1e11) cTs *= 1000;
+            const dStart = new Date(cTs);
+            const dEnd = new Date(dTs);
+            const startStr = `${dStart.getDate()}.${String(dStart.getMonth() + 1).padStart(2, '0')}.${String(dStart.getFullYear()).slice(-2)}`;
+            const endStr = `${dEnd.getDate()}.${String(dEnd.getMonth() + 1).padStart(2, '0')}.${String(dEnd.getFullYear()).slice(-2)}`;
 
-      let displayedScheduled = scheduled.filter(t => {
-        if (statusFilter === 'open' && (t.status || 'Open').toLowerCase() === 'closed') return false;
-        if (statusFilter === 'closed' && (t.status || 'Open').toLowerCase() !== 'closed') return false;
-        if (priorityFilter !== 'all' && (t.priority || 'Medium').toLowerCase() !== priorityFilter.toLowerCase()) return false;
-        return true;
-      });
-
-      // Sort: Critical & Overdue first, then by deadline
-      displayedScheduled.sort((a, b) => {
-        const aDead = Number(a.deadline);
-        const bDead = Number(b.deadline);
-        const aOver = aDead < nowTs && (a.status||'Open').toLowerCase() !== 'closed';
-        const bOver = bDead < nowTs && (b.status||'Open').toLowerCase() !== 'closed';
-        if (aOver && !bOver) return -1;
-        if (!aOver && bOver) return 1;
-        return aDead - bDead;
-      });
+            sHtml += `
+              <div class="ticket-card ${pClass}" style="padding:0.6rem 0.75rem; cursor:pointer;" data-id="${escapeHtml(t.id)}">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.2rem;">
+                  <div style="display:flex; gap:4px; align-items:center;">
+                    <span class="badge ${pClass}" style="font-size:0.7rem; padding:0.1rem 0.35rem;">${escapeHtml(t.priority || 'Medium')}</span>
+                    <span class="badge ${sClass}" style="font-size:0.7rem; padding:0.1rem 0.35rem;">${escapeHtml(t.status || 'Open')}</span>
+                  </div>
+                  <span style="font-size:0.72rem; color:var(--color-text-muted);">#${escapeHtml(t.id)}</span>
+                </div>
+                <div style="font-weight:600; font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.title)}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.35rem; font-size:0.72rem;">
+                  <span style="color:var(--color-text-muted); font-size:0.7rem;">${startStr} → ${endStr}</span>
+                  <span style="color:var(--color-primary); font-weight:600;">➔ К дате начала</span>
+                </div>
+              </div>
+            `;
+          }
+          sideScheduledList.innerHTML = sHtml;
+          sideScheduledList.querySelectorAll('.ticket-card').forEach(el => {
+            el.addEventListener('click', () => this.navigateToTicketStart(el.getAttribute('data-id')));
+          });
+        }
+      }
 
       // Compute Timeline Visible Window (Start Date, End Date, Total Days)
       const year = state.calendarYear;
@@ -1967,10 +2105,10 @@
         let minTs = nowTs - 3 * ONE_DAY;
         let maxTs = nowTs + 7 * ONE_DAY;
         for (const t of scheduled) {
-          const cStart = Number(t.created) || (Number(t.deadline) - 4 * ONE_DAY);
-          const cEnd = Number(t.deadline);
-          if (cStart < minTs) minTs = cStart;
-          if (cEnd > maxTs) maxTs = cEnd;
+          let dEnd = Number(t.deadline) || 0; if (dEnd < 1e11 && dEnd > 0) dEnd *= 1000;
+          let dStart = Number(t.created) || Number(t.mtime) || (dEnd - 4 * ONE_DAY); if (dStart < 1e11) dStart *= 1000;
+          if (dStart < minTs) minTs = dStart;
+          if (dEnd > maxTs) maxTs = dEnd;
         }
         startDate = new Date(minTs);
         startDate.setHours(0, 0, 0, 0);
@@ -1982,9 +2120,41 @@
         cellWidth = 42;
         startDate = new Date(year, month, 1, 0, 0, 0);
         const daysInMonth = new Date(year, month + 1, 0).getDate();
-        endDate = new Date(year, month, daysInMonth, 23, 59, 59);
+        endDate = new Date(year, month, daysInMonth, 23, 59, 59, 999);
         totalDays = daysInMonth;
       }
+
+      // Filter scheduled tickets by UI controls AND window overlap
+      const statusFilter = $('cal-filter-status') ? $('cal-filter-status').value : 'all';
+      const priorityFilter = $('cal-filter-priority') ? $('cal-filter-priority').value : 'all';
+
+      let displayedScheduled = scheduled.filter(t => {
+        if (statusFilter === 'open' && (t.status || 'Open').toLowerCase() === 'closed') return false;
+        if (statusFilter === 'closed' && (t.status || 'Open').toLowerCase() !== 'closed') return false;
+        if (priorityFilter !== 'all' && (t.priority || 'Medium').toLowerCase() !== priorityFilter.toLowerCase()) return false;
+
+        // Window overlap check for month and 2weeks scales
+        if (state.calendarScale !== 'all') {
+          let deadlineTs = Number(t.deadline) || 0; if (deadlineTs < 1e11 && deadlineTs > 0) deadlineTs *= 1000;
+          let createdTs = Number(t.created) || Number(t.mtime) || (deadlineTs - 4 * ONE_DAY); if (createdTs < 1e11) createdTs *= 1000;
+          if (deadlineTs > 0 && createdTs > deadlineTs) createdTs = deadlineTs - ONE_DAY;
+
+          const overlaps = (createdTs <= endDate.getTime() && deadlineTs >= startDate.getTime());
+          if (!overlaps) return false;
+        }
+        return true;
+      });
+
+      // Sort: Critical & Overdue first, then by deadline
+      displayedScheduled.sort((a, b) => {
+        let aDead = Number(a.deadline) || 0; if (aDead < 1e11) aDead *= 1000;
+        let bDead = Number(b.deadline) || 0; if (bDead < 1e11) bDead *= 1000;
+        const aOver = aDead < nowTs && (a.status||'Open').toLowerCase() !== 'closed';
+        const bOver = bDead < nowTs && (b.status||'Open').toLowerCase() !== 'closed';
+        if (aOver && !bOver) return -1;
+        if (!aOver && bOver) return 1;
+        return aDead - bDead;
+      });
 
       const totalCanvasWidth = totalDays * cellWidth;
       const weekdaysRu = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
@@ -2019,16 +2189,95 @@
       // 2. Build Tasks Column (Left) and Gantt Rows (Right)
       if (tasksList && bodyGrid) {
         if (displayedScheduled.length === 0) {
+          // Find closest scheduled task to suggest jumping to
+          let closestTask = null;
+          let minDistance = Infinity;
+          for (const t of scheduled) {
+            let dTs = Number(t.deadline) || 0; if (dTs < 1e11) dTs *= 1000;
+            const dist = Math.abs(dTs - startDate.getTime());
+            if (dist < minDistance) {
+              minDistance = dist;
+              closestTask = t;
+            }
+          }
+
+          let emptyJumpHtml = '';
+          if (closestTask) {
+            let cTs = Number(closestTask.created) || Number(closestTask.mtime) || Number(closestTask.deadline);
+            if (cTs < 1e11) cTs *= 1000;
+            const cDate = new Date(cTs);
+            const cMonth = cDate.getMonth();
+            const cYear = cDate.getFullYear();
+            const cName = curLang === 'ru' ? monthNamesRu[cMonth] : monthNamesEn[cMonth];
+            const countInMonth = scheduled.filter(t => {
+              let ts = Number(t.created) || Number(t.mtime) || Number(t.deadline);
+              if (ts < 1e11) ts *= 1000;
+              const d = new Date(ts);
+              return d.getFullYear() === cYear && d.getMonth() === cMonth;
+            }).length;
+
+            emptyJumpHtml = `
+              <div style="margin-top:0.75rem;">
+                <button class="btn btn-sm btn-primary btn-jump-to-month" data-year="${cYear}" data-month="${cMonth}" style="font-weight:600; width:100%;">
+                  📅 Перейти к ${cName} ${cYear} (${countInMonth} ${countInMonth === 1 ? 'задача' : 'задач'})
+                </button>
+              </div>
+            `;
+          }
+
           tasksList.innerHTML = `
-            <div style="padding:2rem 1rem; color:var(--color-text-muted); font-size:0.82rem; text-align:center;">
-              Нет запланированных задач по выбранным фильтрам.
+            <div style="padding:1.5rem 1rem; color:var(--color-text-muted); font-size:0.82rem; text-align:center;">
+              <div style="font-size:1.6rem; margin-bottom:0.4rem;">📅</div>
+              <div style="font-weight:700; color:var(--color-text); margin-bottom:0.25rem;">В этом периоде нет задач</div>
+              <div style="font-size:0.75rem; color:var(--color-text-muted); margin-bottom:0.4rem;">
+                Всего задач со сроками: ${scheduled.length}
+              </div>
+              ${emptyJumpHtml}
+              <div style="margin-top:0.5rem;">
+                <button class="btn btn-sm btn-secondary btn-switch-scale-all" style="font-size:0.75rem; width:100%;">
+                  🌐 Показать все задачи (Roadmap)
+                </button>
+              </div>
             </div>
           `;
-          bodyGrid.innerHTML = `
-            <div style="padding:2.5rem 1.5rem; color:var(--color-text-muted); font-size:0.85rem; width:${totalCanvasWidth}px;">
-              💡 Назначьте дедлайн задаче из бэклога или нажмите <b>«+ Создать тикет с дедлайном»</b>.
+
+          // Background grid lines in empty state
+          let gridLinesHtml = `<div class="timeline-grid-lines" style="width:${totalCanvasWidth}px;">`;
+          for (let i = 0; i < totalDays; i++) {
+            const cDate = new Date(startDate.getTime() + i * ONE_DAY);
+            const dWeek = cDate.getDay();
+            const isWeekend = dWeek === 0 || dWeek === 6;
+            const isToday = cDate.getFullYear() === now.getFullYear() &&
+                            cDate.getMonth() === now.getMonth() &&
+                            cDate.getDate() === now.getDate();
+            gridLinesHtml += `
+              <div class="timeline-grid-line ${isWeekend ? 'weekend' : ''} ${isToday ? 'today-line' : ''}"
+                   style="width:${cellWidth}px;"></div>
+            `;
+          }
+          gridLinesHtml += `</div>`;
+
+          bodyGrid.innerHTML = gridLinesHtml + `
+            <div style="padding:2.5rem 1.5rem; color:var(--color-text-muted); font-size:0.85rem; width:${totalCanvasWidth}px; position:relative; z-index:5;">
+              💡 В выбранном окне нет задач. Перейдите к месяцу с задачами или выберите задачу из списка «С дедлайном» на боковой панели.
             </div>
           `;
+          bodyGrid.style.width = `${totalCanvasWidth}px`;
+
+          // Event listeners for jump buttons
+          tasksList.querySelectorAll('.btn-jump-to-month').forEach(btn => {
+            btn.addEventListener('click', () => {
+              state.calendarYear = Number(btn.getAttribute('data-year'));
+              state.calendarMonth = Number(btn.getAttribute('data-month'));
+              this.refreshCalendar();
+            });
+          });
+          tasksList.querySelectorAll('.btn-switch-scale-all').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const allBtn = $('scale-all');
+              if (allBtn) allBtn.click();
+            });
+          });
         } else {
           let leftHtml = '';
           let rightRowsHtml = '';
@@ -2053,24 +2302,32 @@
           for (const t of displayedScheduled) {
             const priorityLower = (t.priority || 'Medium').toLowerCase();
             const pClass = `priority-${priorityLower}`;
+            const sBadgeClass = getStatusBadgeClass(t.status);
             const isClosed = (t.status || 'Open').toLowerCase() === 'closed';
-            const deadlineTs = Number(t.deadline);
-            const createdTs = Number(t.created) || (deadlineTs - 4 * ONE_DAY);
+
+            let deadlineTs = Number(t.deadline) || 0; if (deadlineTs < 1e11 && deadlineTs > 0) deadlineTs *= 1000;
+            let createdTs = Number(t.created) || Number(t.mtime) || (deadlineTs - 4 * ONE_DAY); if (createdTs < 1e11) createdTs *= 1000;
+            if (deadlineTs > 0 && createdTs > deadlineTs) createdTs = deadlineTs - ONE_DAY;
+
             const isOverdue = deadlineTs < nowTs && !isClosed;
             const diffDays = Math.ceil((deadlineTs - nowTs) / ONE_DAY);
             const totalSpanDays = Math.max(1, Math.round((deadlineTs - createdTs) / ONE_DAY));
 
             const dStart = new Date(createdTs);
             const dEnd = new Date(deadlineTs);
-            const startStr = `${dStart.getDate()}.${String(dStart.getMonth() + 1).padStart(2, '0')}`;
-            const endStr = `${dEnd.getDate()}.${String(dEnd.getMonth() + 1).padStart(2, '0')}`;
+            const startStr = `${dStart.getDate()}.${String(dStart.getMonth() + 1).padStart(2, '0')}.${String(dStart.getFullYear()).slice(-2)}`;
+            const endStr = `${dEnd.getDate()}.${String(dEnd.getMonth() + 1).padStart(2, '0')}.${String(dEnd.getFullYear()).slice(-2)}`;
 
-            // Left Task Item
+            // Left Task Item: Shows ID, Priority Badge, Status Badge, Title, Dates, Days counter, and Edit button
             leftHtml += `
-              <div class="timeline-task-item ${pClass}" data-id="${escapeHtml(t.id)}" title="${escapeHtml(t.title)} (${escapeHtml(t.priority || 'Medium')})">
+              <div class="timeline-task-item ${pClass}" data-id="${escapeHtml(t.id)}" title="Кликните, чтобы переместиться к началу задачи #${escapeHtml(t.id)}">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-                  <span style="font-weight:700; font-size:0.75rem; color:var(--color-primary);">#${escapeHtml(t.id)}</span>
-                  <span class="badge ${pClass}" style="font-size:0.65rem; padding:0.05rem 0.35rem;">${escapeHtml(t.priority || 'Medium')}</span>
+                  <div style="display:flex; align-items:center; gap:4px; overflow:hidden;">
+                    <span style="font-weight:700; font-size:0.75rem; color:var(--color-primary);">#${escapeHtml(t.id)}</span>
+                    <span class="badge ${pClass}" style="font-size:0.65rem; padding:0.05rem 0.35rem;">${escapeHtml(t.priority || 'Medium')}</span>
+                    <span class="badge ${sBadgeClass}" style="font-size:0.65rem; padding:0.05rem 0.35rem;">${escapeHtml(t.status || 'Open')}</span>
+                  </div>
+                  <button class="btn-ghost btn-edit-ticket" data-id="${escapeHtml(t.id)}" title="Редактировать тикет" style="padding:1px 5px; font-size:0.75rem;">✏️</button>
                 </div>
                 <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:0.82rem;">
                   ${isClosed ? '✓ ' : (isOverdue ? '⚠️ ' : '')}${escapeHtml(t.title)}
@@ -2090,10 +2347,10 @@
 
             const visStart = Math.max(0, startDayOffset);
             const visEnd = Math.min(totalDays, endDayOffset);
-            const safeVisEnd = visEnd <= visStart ? visStart + 0.9 : visEnd;
+            const safeVisEnd = Math.max(visStart + 0.9, visEnd);
 
             const leftPx = visStart * cellWidth;
-            const widthPx = Math.max((safeVisEnd - visStart) * cellWidth, 34);
+            const widthPx = Math.max((safeVisEnd - visStart) * cellWidth, 42);
 
             const hasLeftContinuation = startDayOffset < 0;
             const hasRightContinuation = endDayOffset > totalDays;
@@ -2113,6 +2370,7 @@
                      data-diff="${diffDays}"
                      data-overdue="${isOverdue ? 'true' : 'false'}"
                      data-closed="${isClosed ? 'true' : 'false'}">
+                  <span class="timeline-bar-status-tag">${escapeHtml(t.status || 'Open')}</span>
                   <span class="timeline-bar-title">
                     ${hasLeftContinuation ? '◄ ' : ''}${escapeHtml(t.title)} (${totalSpanDays} дн.)${hasRightContinuation ? ' ►' : ''}
                   </span>
@@ -2194,10 +2452,16 @@
             });
           });
 
-          // Click on left item opens edit modal as well
+          // Clicking on left task item: if edit button clicked, open edit modal; otherwise jump to start date!
           tasksList.querySelectorAll('.timeline-task-item').forEach(el => {
-            el.addEventListener('click', () => {
-              this.openTicketEditModal(el.getAttribute('data-id'));
+            el.addEventListener('click', (e) => {
+              const editBtn = e.target.closest('.btn-edit-ticket');
+              const id = el.getAttribute('data-id');
+              if (editBtn) {
+                this.openTicketEditModal(id);
+              } else {
+                this.navigateToTicketStart(id);
+              }
             });
           });
         }
@@ -2647,6 +2911,8 @@
     }
   };
 
+  window.fossilUi = window.FossilBrowserUI;
+
   // Auto-init on DOMContentLoaded
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => window.FossilBrowserUI.init());
@@ -2654,3 +2920,4 @@
     window.FossilBrowserUI.init();
   }
 })();
+

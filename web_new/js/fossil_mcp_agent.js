@@ -842,12 +842,13 @@ class BrowserMcpServer {
           if (mgr.backendType === "indexeddb") {
             list = await backend.getAll("tickets");
           } else if (mgr.backendType === "sqlite_wasm") {
-            list = backend.exec("SELECT tkt_uuid AS id, title, desc, status, priority, reporter, mtime, deadline, history, linked_prs FROM ticket ORDER BY mtime DESC");
+            list = backend.exec("SELECT tkt_uuid AS id, title, desc, status, priority, reporter, mtime, deadline, created, history, linked_prs FROM ticket ORDER BY mtime DESC");
             list = list.map(t => {
               try { t.history = typeof t.history === 'string' ? JSON.parse(t.history) : (t.history || []); } catch (_) { t.history = []; }
               try { t.linkedPrs = typeof t.linked_prs === 'string' ? JSON.parse(t.linked_prs) : (t.linkedPrs || []); } catch (_) { t.linkedPrs = []; }
               t.deadline = (Number(t.deadline) || 0) * 1000;
               t.mtime = (Number(t.mtime) || 0) * 1000;
+              t.created = (Number(t.created) || Number(t.mtime) || 0) * (Number(t.created) < 1e11 ? 1000 : 1);
               return t;
             });
           } else if (mgr.backendType === "cdb") {
@@ -868,13 +869,14 @@ class BrowserMcpServer {
           if (mgr.backendType === "indexeddb") {
             tkt = await backend.get("tickets", params.id);
           } else if (mgr.backendType === "sqlite_wasm") {
-            const rows = backend.exec("SELECT tkt_uuid AS id, title, desc, status, priority, reporter, mtime, deadline, history, linked_prs FROM ticket WHERE tkt_uuid = ?", [params.id]);
+            const rows = backend.exec("SELECT tkt_uuid AS id, title, desc, status, priority, reporter, mtime, deadline, created, history, linked_prs FROM ticket WHERE tkt_uuid = ?", [params.id]);
             if (rows.length > 0) {
               tkt = rows[0];
               try { tkt.history = typeof tkt.history === 'string' ? JSON.parse(tkt.history) : (tkt.history || []); } catch (_) { tkt.history = []; }
               try { tkt.linkedPrs = typeof tkt.linked_prs === 'string' ? JSON.parse(tkt.linked_prs) : (tkt.linkedPrs || []); } catch (_) { tkt.linkedPrs = []; }
               tkt.deadline = (Number(tkt.deadline) || 0) * 1000;
               tkt.mtime = (Number(tkt.mtime) || 0) * 1000;
+              tkt.created = (Number(tkt.created) || Number(tkt.mtime) || 0) * (Number(tkt.created) < 1e11 ? 1000 : 1);
             }
           } else if (mgr.backendType === "cdb") {
             const list = backend.getTickets ? backend.getTickets() : [];
@@ -911,8 +913,8 @@ class BrowserMcpServer {
           if (mgr.backendType === "indexeddb") {
             await backend.put("tickets", tkt);
           } else if (mgr.backendType === "sqlite_wasm") {
-            backend.run("INSERT INTO ticket(tkt_uuid, title, desc, status, type, priority, reporter, mtime, deadline, history, linked_prs) VALUES(?, ?, ?, ?, 'code', ?, ?, ?, ?, ?, ?)",
-              [id, tkt.title, tkt.desc, tkt.status, tkt.priority, tkt.reporter, now / 1000, deadlineTs / 1000, JSON.stringify(tkt.history), JSON.stringify(tkt.linkedPrs)]);
+            backend.run("INSERT INTO ticket(tkt_uuid, title, desc, status, type, priority, reporter, mtime, deadline, created, history, linked_prs) VALUES(?, ?, ?, ?, 'code', ?, ?, ?, ?, ?, ?, ?)",
+              [id, tkt.title, tkt.desc, tkt.status, tkt.priority, tkt.reporter, now / 1000, deadlineTs / 1000, now / 1000, JSON.stringify(tkt.history), JSON.stringify(tkt.linkedPrs)]);
           } else if (mgr.backendType === "cdb") {
             if (backend.addTicket) backend.addTicket(tkt);
           }
