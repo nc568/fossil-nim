@@ -6,6 +6,11 @@
 ##  * no message contains user data unless explicitly marked `safe`;
 ##  * errors are raised, never abort the process (no `quit`, no `assert`).
 
+# `failf` is a template, so whatever it uses is resolved at the *call site*.
+# Without this import it compiled only for callers that happened to import
+# strutils themselves -- a latent break for every new module.
+import std/strutils
+
 type
   DbCode* = enum
     ok = 0
@@ -47,8 +52,12 @@ proc dbErr*(code: DbCode; msg: string; context = ""): ref DbError =
 template fail*(code: DbCode; msg: string) =
   raise dbErr(code, msg)
 
-template failf*(code: DbCode; fmt: string; args: varargs[untyped]) =
-  raise dbErr(code, fmt % args)
+proc failf*(code: DbCode; fmt: string; args: varargs[string, `$`]) =
+  ## Formatted failure. `$` is applied to every argument by the compiler, so
+  ## `failf(corrupt, "bad page $1", pid)` works for any type and for 0..n args.
+  ## It is a proc, not a template, precisely because a template used to resolve
+  ## `%` at the call site and broke for everything except a single argument.
+  raise dbErr(code, fmt % @args)
 
 proc codeName*(c: DbCode): string =
   ## Stable textual code, safe for logs and wire protocols.
