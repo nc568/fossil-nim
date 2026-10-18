@@ -27,12 +27,32 @@ proc cmdAdd*(args: seq[string], checkoutRoot: string = ""): FossilResult[seq[str
   defer: db.close()
 
   var added: seq[string] = @[]
+  let normRoot = normalizedPath(absolutePath(root))
   var fileTargets: seq[string] = @[]
   for f in args:
     let full = if isAbsolute(f): f else: root / f
+    let normFull = normalizedPath(absolutePath(full))
+    if not normFull.startsWith(normRoot & DirSep) and normFull != normRoot:
+      continue # Outside checkout root
+    if symlinkExists(full):
+      try:
+        let target = expandSymlink(full)
+        let normTarget = normalizedPath(if isAbsolute(target): target else: parentDir(full) / target)
+        if not normTarget.startsWith(normRoot & DirSep) and normTarget != normRoot:
+          continue # Symlink points outside checkout
+      except:
+        continue
     if dirExists(full):
       for entry in walkDirRec(full):
         if not entry.contains(".git") and not entry.contains("_FOSSIL_") and not entry.endsWith(".fossil") and not entry.contains("build/cgen") and not entry.contains("nimcache"):
+          if symlinkExists(entry):
+            try:
+              let target = expandSymlink(entry)
+              let normTarget = normalizedPath(if isAbsolute(target): target else: parentDir(entry) / target)
+              if not normTarget.startsWith(normRoot & DirSep) and normTarget != normRoot:
+                continue
+            except:
+              continue
           fileTargets.add entry
     elif fileExists(full):
       fileTargets.add full

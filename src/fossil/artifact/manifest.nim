@@ -29,6 +29,14 @@ type
 
   ManifestParseError* = object of ValueError
 
+proc isSafeRelativePath*(p: string): bool =
+  if p.len == 0: return false
+  if p.startsWith("/") or p.startsWith("\\"): return false
+  if p.contains("..") or p.contains("//") or p.contains("\\\\"): return false
+  if p.len >= 2 and p[1] == ':': return false # Windows drive letter e.g. C:
+  if '\0' in p: return false
+  true
+
 proc parseManifest*(text: string): FossilResult[Manifest] =
   var m = Manifest(raw: text)
   m.files = @[]
@@ -49,10 +57,7 @@ proc parseManifest*(text: string): FossilResult[Manifest] =
     let rest = if line.len>1: line[1..^1].strip() else: ""
     case card
     of 'C':
-      # C comment, may be multi-line? In Fossil, C can be "C ..." and continuation lines starting with space?
-      # Simplified: C <text> and following lines starting with space are continuation
       commentLines.add rest
-      # Check continuation
       var j = i+1
       while j < lines.len and lines[j].len>0 and lines[j][0]==' ':
         commentLines.add lines[j].strip()
@@ -68,10 +73,11 @@ proc parseManifest*(text: string): FossilResult[Manifest] =
           m.date = now().utc
     of 'F':
       # F filename uuid ?perm?
-      # Format: F <name> <uuid> ?perm?
       var parts = rest.splitWhitespace()
       if parts.len >= 2:
         let name = parts[0]
+        if not isSafeRelativePath(name):
+          return err[Manifest](feManifestError, "unsafe file path in manifest (path traversal blocked)", name)
         let uuidStr = parts[1]
         let uuidRes = uuidFromHex(uuidStr)
         if uuidRes.isErr:

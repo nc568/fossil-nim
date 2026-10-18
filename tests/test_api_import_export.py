@@ -30,12 +30,27 @@ try:
     subprocess.run(f'{BIN_FOSSIL} wiki create Home "Welcome to API Test Repo"', shell=True, cwd=CHECKOUT_DIR, check=True)
     subprocess.run(f'{BIN_FOSSIL} ticket create "Test Issue 1" "Description for issue 1"', shell=True, cwd=CHECKOUT_DIR, check=True)
 
-    # 2. Start server
-    proc = subprocess.Popen([BIN_FOSSIL, "server", "--port", str(PORT), "--bind", "127.0.0.1"], cwd=CHECKOUT_DIR)
+    # 2. Start server with FOSSIL_API_TOKEN configured
+    env = os.environ.copy()
+    API_TOKEN = "test-token-sec-42"
+    env["FOSSIL_API_TOKEN"] = API_TOKEN
+    proc = subprocess.Popen([BIN_FOSSIL, "server", "--port", str(PORT), "--bind", "127.0.0.1"], cwd=CHECKOUT_DIR, env=env)
     time.sleep(1.5)
 
-    # 3. Test Export
-    req = urllib.request.Request(f"{BASE_URL}/api/v1/repo/export")
+    # 3. Test Security: Unauthenticated Export MUST fail with 401
+    try:
+        req_unauth = urllib.request.Request(f"{BASE_URL}/api/v1/repo/export")
+        with urllib.request.urlopen(req_unauth, timeout=5) as resp:
+            assert False, "Unauthenticated export should have returned 401"
+    except urllib.error.HTTPError as e:
+        assert e.code == 401
+        print("Security Check Passed: /api/v1/repo/export rejected unauthenticated request with 401")
+
+    # 4. Test Authenticated Export
+    req = urllib.request.Request(
+        f"{BASE_URL}/api/v1/repo/export",
+        headers={"Authorization": f"Bearer {API_TOKEN}"}
+    )
     with urllib.request.urlopen(req, timeout=5) as resp:
         export_data = json.loads(resp.read().decode())
     print("Export Response:", json.dumps(export_data, indent=2)[:300], "...")
@@ -66,10 +81,23 @@ try:
         "wiki": [{"name": "ImportedWiki", "text": "This wiki was imported", "author": "tester"}],
         "tickets": [{"id": "tkt-imported-999", "title": "Imported Ticket", "desc": "Imported via merge", "status": "Open", "priority": "High"}]
     }
+    # Security test: unauthenticated import must fail with 401
+    try:
+        req_unauth_imp = urllib.request.Request(
+            f"{BASE_URL}/api/v1/repo/import",
+            data=json.dumps(import_payload).encode(),
+            headers={"Content-Type": "application/json"}
+        )
+        with urllib.request.urlopen(req_unauth_imp, timeout=5) as resp:
+            assert False, "Unauthenticated import should have returned 401"
+    except urllib.error.HTTPError as e:
+        assert e.code == 401
+        print("Security Check Passed: /api/v1/repo/import rejected unauthenticated request with 401")
+
     req = urllib.request.Request(
         f"{BASE_URL}/api/v1/repo/import",
         data=json.dumps(import_payload).encode(),
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {API_TOKEN}"}
     )
     with urllib.request.urlopen(req, timeout=5) as resp:
         import_res = json.loads(resp.read().decode())
@@ -80,7 +108,10 @@ try:
     assert import_res["data"]["importedTickets"] == 1
 
     # Verify Export after merge contains both original and merged
-    req = urllib.request.Request(f"{BASE_URL}/api/v1/repo/export")
+    req = urllib.request.Request(
+        f"{BASE_URL}/api/v1/repo/export",
+        headers={"Authorization": f"Bearer {API_TOKEN}"}
+    )
     with urllib.request.urlopen(req, timeout=5) as resp:
         post_merge = json.loads(resp.read().decode())["data"]
     wiki_names = [w["name"] for w in post_merge["wiki"]]
@@ -107,7 +138,7 @@ try:
     req = urllib.request.Request(
         f"{BASE_URL}/api/v1/repo/import",
         data=json.dumps(replace_payload).encode(),
-        headers={"Content-Type": "application/json"}
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {API_TOKEN}"}
     )
     with urllib.request.urlopen(req, timeout=5) as resp:
         replace_res = json.loads(resp.read().decode())
@@ -116,7 +147,10 @@ try:
     assert replace_res["data"]["mode"] == "replace"
 
     # Verify Export after replace contains ONLY new data
-    req = urllib.request.Request(f"{BASE_URL}/api/v1/repo/export")
+    req = urllib.request.Request(
+        f"{BASE_URL}/api/v1/repo/export",
+        headers={"Authorization": f"Bearer {API_TOKEN}"}
+    )
     with urllib.request.urlopen(req, timeout=5) as resp:
         post_replace = json.loads(resp.read().decode())["data"]
     wiki_names_rep = [w["name"] for w in post_replace["wiki"]]

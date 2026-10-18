@@ -18,6 +18,8 @@ type
     returnFlag*: bool
     returnValue*: Th1Value
     error*: string
+    stepCount*: int
+    maxSteps*: int
 
   Th1Proc* = object
     args*: seq[string]
@@ -41,8 +43,8 @@ proc toBool*(v: Th1Value): bool =
   let s = v.toStr.toLowerAscii.strip()
   if s=="0" or s=="" or s=="false" or s=="no" or s=="off": false else: true
 
-proc newInterp*(): Th1Interp =
-  Th1Interp(vars: initTable[string, Th1Value](), procs: initTable[string, Th1Proc](), output: "", returnFlag: false, returnValue: th1Str(""), error: "")
+proc newInterp*(maxSteps: int = 50_000): Th1Interp =
+  Th1Interp(vars: initTable[string, Th1Value](), procs: initTable[string, Th1Proc](), output: "", returnFlag: false, returnValue: th1Str(""), error: "", stepCount: 0, maxSteps: maxSteps)
 
 proc setVar*(interp: var Th1Interp, name, value: string) =
   interp.vars[name] = th1Str(value)
@@ -115,7 +117,7 @@ proc th1ParseWords(s: string): seq[string] =
       elif ch==']' and bracketDepth>0:
         bracketDepth-=1
       elif ch.isSpaceAscii() and braceDepth==0 and bracketDepth==0 and not inQuote:
-        if cur.len>0 or true:
+        if cur.len>0:
           words.add cur
         cur=""
         inWord=false
@@ -123,7 +125,7 @@ proc th1ParseWords(s: string): seq[string] =
         continue
     cur.add ch
     inc i
-  if cur.len>0 or inWord:
+  if cur.len>0:
     words.add cur
   words
 
@@ -158,6 +160,7 @@ proc th1SplitCommands(script: string): seq[string] =
 # Forward decl
 proc evalScript*(interp: var Th1Interp, script: string): Th1Value {.gcsafe.}
 proc evalWord*(interp: var Th1Interp, word: string): string {.gcsafe.}
+proc evalCondition*(interp: var Th1Interp, condWord: string): bool {.gcsafe.}
 
 proc evalWord*(interp: var Th1Interp, word: string): string {.gcsafe.} =
   if word.len>=2 and word[0]=='\x01' and word[^1]=='\x01':
@@ -221,9 +224,48 @@ proc evalWord*(interp: var Th1Interp, word: string): string {.gcsafe.} =
       res.add ch; inc i
   res
 
+proc evalCondition*(interp: var Th1Interp, condWord: string): bool {.gcsafe.} =
+  var condStr = interp.evalWord(condWord).strip()
+  if condStr.startsWith("[") and condStr.endsWith("]"):
+    condStr = interp.evalScript(condStr[1..^2]).toStr.strip()
+  elif condStr.startsWith("expr ") or condStr == "expr":
+    condStr = interp.evalScript(condStr).toStr.strip()
+  if condStr == "1" or condStr.toLowerAscii() == "true" or condStr == "yes":
+    return true
+  elif condStr == "0" or condStr.toLowerAscii() == "false" or condStr == "" or condStr == "no":
+    return false
+  try:
+    if condStr.contains("=="):
+      let parts = condStr.split("==")
+      return parts[0].strip() == parts[1].strip()
+    elif condStr.contains("!="):
+      let parts = condStr.split("!=")
+      return parts[0].strip() != parts[1].strip()
+    elif condStr.contains(">="):
+      let parts = condStr.split(">=")
+      return safeParseInt(parts[0]) >= safeParseInt(parts[1])
+    elif condStr.contains("<="):
+      let parts = condStr.split("<=")
+      return safeParseInt(parts[0]) <= safeParseInt(parts[1])
+    elif condStr.contains(">"):
+      let parts = condStr.split(">")
+      return safeParseInt(parts[0]) > safeParseInt(parts[1])
+    elif condStr.contains("<"):
+      let parts = condStr.split("<")
+      return safeParseInt(parts[0]) < safeParseInt(parts[1])
+    else:
+      return safeParseInt(condStr) != 0
+  except:
+    return condStr.len > 0
+
 proc evalScript*(interp: var Th1Interp, script: string): Th1Value {.gcsafe.} =
   if interp.returnFlag:
     return interp.returnValue
+  inc interp.stepCount
+  if interp.maxSteps > 0 and interp.stepCount > interp.maxSteps:
+    interp.error = "TH1 execution limit exceeded: maximum step count reached (" & $interp.maxSteps & ")"
+    interp.returnFlag = true
+    return th1Str("")
   var last = th1Str("")
   let commands = th1SplitCommands(script)
   for cmdStr in commands:
@@ -272,37 +314,7 @@ proc evalScript*(interp: var Th1Interp, script: string): Th1Value {.gcsafe.} =
         last = th1Int(cur)
     of "if":
       if args.len>=2:
-        var condStr = interp.evalWord(args[0])
-        var condTrue=false
-        let condEval = condStr.strip()
-        if condEval=="1" or condEval.toLowerAscii()=="true" or condEval=="yes":
-          condTrue=true
-        elif condEval=="0" or condEval.toLowerAscii()=="false" or condEval=="" or condEval=="no":
-          condTrue=false
-        else:
-          try:
-            if condEval.contains("=="):
-              let parts = condEval.split("==")
-              condTrue = parts[0].strip() == parts[1].strip()
-            elif condEval.contains("!="):
-              let parts = condEval.split("!=")
-              condTrue = parts[0].strip() != parts[1].strip()
-            elif condEval.contains(">="):
-              let parts = condEval.split(">=")
-              condTrue = safeParseInt(parts[0]) >= safeParseInt(parts[1])
-            elif condEval.contains("<="):
-              let parts = condEval.split("<=")
-              condTrue = safeParseInt(parts[0]) <= safeParseInt(parts[1])
-            elif condEval.contains(">"):
-              let parts = condEval.split(">")
-              condTrue = safeParseInt(parts[0]) > safeParseInt(parts[1])
-            elif condEval.contains("<"):
-              let parts = condEval.split("<")
-              condTrue = safeParseInt(parts[0]) < safeParseInt(parts[1])
-            else:
-              condTrue = safeParseInt(condEval) != 0
-          except:
-            condTrue = condEval.len>0
+        let condTrue = interp.evalCondition(args[0])
         if condTrue:
           last = interp.evalScript(args[1])
         else:
@@ -357,9 +369,14 @@ proc evalScript*(interp: var Th1Interp, script: string): Th1Value {.gcsafe.} =
         let nextScript = args[2]
         let body = args[3]
         discard interp.evalScript(initScript)
+        var iter = 0
         while true:
-          let condVal = interp.evalScript(condScript)
-          if not condVal.toBool: break
+          inc iter
+          if iter > 10_000 or (interp.maxSteps > 0 and interp.stepCount > interp.maxSteps):
+            interp.error = "TH1 loop iteration limit exceeded"
+            interp.returnFlag = true
+            break
+          if not interp.evalCondition(condScript): break
           last = interp.evalScript(body)
           if interp.returnFlag: break
           discard interp.evalScript(nextScript)
@@ -367,9 +384,14 @@ proc evalScript*(interp: var Th1Interp, script: string): Th1Value {.gcsafe.} =
       if args.len>=2:
         let condScript = args[0]
         let body = args[1]
+        var iter = 0
         while true:
-          let condVal = interp.evalScript(condScript)
-          if not condVal.toBool: break
+          inc iter
+          if iter > 10_000 or (interp.maxSteps > 0 and interp.stepCount > interp.maxSteps):
+            interp.error = "TH1 loop iteration limit exceeded"
+            interp.returnFlag = true
+            break
+          if not interp.evalCondition(condScript): break
           last = interp.evalScript(body)
           if interp.returnFlag: break
     of "proc":

@@ -131,6 +131,18 @@ const DEFAULT_PRS_SEED = [
   }
 ];
 
+// Security validation helpers
+function isSafeFilePath(p) {
+  if (!p || typeof p !== 'string') return false;
+  if (p.includes('..') || p.startsWith('/') || p.startsWith('\\') || p.includes('\0')) return false;
+  return true;
+}
+
+function isSafePropKey(k) {
+  if (!k || typeof k !== 'string') return false;
+  return k !== '__proto__' && k !== 'constructor' && k !== 'prototype';
+}
+
 // =========================================================================
 // Backend 1: IndexedDB Storage
 // =========================================================================
@@ -288,22 +300,29 @@ class IndexedDbStorage {
       if (Array.isArray(bundle.files)) {
         const fileStore = tx.objectStore("files");
         for (const f of bundle.files) {
-          fileStore.put(f);
-          countFiles++;
+          const path = f.path || f.name;
+          if (isSafeFilePath(path)) {
+            fileStore.put(f);
+            countFiles++;
+          }
         }
       }
 
       if (Array.isArray(bundle.wiki)) {
         const wikiStore = tx.objectStore("wiki");
         for (const w of bundle.wiki) {
-          wikiStore.put(w);
-          countWiki++;
+          if (w && isSafePropKey(w.name)) {
+            wikiStore.put(w);
+            countWiki++;
+          }
         }
       } else if (bundle.wiki && typeof bundle.wiki === "object") {
         const wikiStore = tx.objectStore("wiki");
         for (const [name, text] of Object.entries(bundle.wiki)) {
-          wikiStore.put({ name, text: typeof text === "string" ? text : (text.text || ""), author: "imported", mtime: Date.now() });
-          countWiki++;
+          if (Object.prototype.hasOwnProperty.call(bundle.wiki, name) && isSafePropKey(name)) {
+            wikiStore.put({ name, text: typeof text === "string" ? text : (text.text || ""), author: "imported", mtime: Date.now() });
+            countWiki++;
+          }
         }
       }
 
@@ -508,16 +527,21 @@ class SqliteWasmStorage {
 
     if (Array.isArray(bundle.wiki)) {
       for (const w of bundle.wiki) {
-        this.db.run("INSERT OR REPLACE INTO wiki(name, text, author, mtime) VALUES(?, ?, ?, ?)",
-          [w.name, w.text, w.author || "imported", Date.now() / 1000]);
-        countWiki++;
+        if (w && isSafePropKey(w.name)) {
+          this.db.run("INSERT OR REPLACE INTO wiki(name, text, author, mtime) VALUES(?, ?, ?, ?)",
+            [w.name, w.text, w.author || "imported", Date.now() / 1000]);
+          countWiki++;
+        }
       }
     }
 
     if (Array.isArray(bundle.files)) {
       for (const f of bundle.files) {
-        this.db.run("INSERT OR IGNORE INTO filename(name) VALUES(?)", [f.path]);
-        countFiles++;
+        const path = f.path || f.name;
+        if (isSafeFilePath(path)) {
+          this.db.run("INSERT OR IGNORE INTO filename(name) VALUES(?)", [path]);
+          countFiles++;
+        }
       }
     }
 
@@ -694,15 +718,20 @@ class CdbMemoryStorage {
     let countFiles = 0, countWiki = 0;
     if (Array.isArray(bundle.files)) {
       for (const f of bundle.files) {
-        window.FossilCore.cdbPut(this.handle, "file:" + f.path, f.content || "");
-        this.fileList.add(f.path);
-        countFiles++;
+        const path = f.path || f.name;
+        if (isSafeFilePath(path)) {
+          window.FossilCore.cdbPut(this.handle, "file:" + path, f.content || "");
+          this.fileList.add(path);
+          countFiles++;
+        }
       }
     }
     if (Array.isArray(bundle.wiki)) {
       for (const w of bundle.wiki) {
-        window.FossilCore.cdbPut(this.handle, "wiki:" + w.name, w.text || "");
-        countWiki++;
+        if (w && isSafePropKey(w.name)) {
+          window.FossilCore.cdbPut(this.handle, "wiki:" + w.name, w.text || "");
+          countWiki++;
+        }
       }
     }
     if (Array.isArray(bundle.tickets)) {

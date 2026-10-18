@@ -2118,7 +2118,7 @@ proc handleRepoImport*(req: Request, params: Table[string, string]): Future[Json
     if sqlite3_prepare_v2(db.db, "INSERT OR IGNORE INTO filename(name) VALUES(?1)", -1, addr stmt, nil) == SQLITE_OK:
       for f in bodyJson["files"]:
         let path = if f.hasKey("path"): f["path"].getStr() else: f.getStr()
-        if path.len > 0:
+        if path.len > 0 and not path.contains("..") and not path.startsWith("/") and not path.startsWith("\\") and '\0' notin path:
           discard sqlite3_bind_text(stmt, 1, path.cstring, -1, SQLITE_TRANSIENT)
           if sqlite3_step(stmt) == SQLITE_DONE:
             inc importedFiles
@@ -2243,8 +2243,9 @@ proc registerDefaultRoutes*(server: var ApiServer) =
   server.routes.add ApiRoute(meth: "GET", path: "/api/v1/search/reindex", handler: handleSearchReindex, requiresAuth: true)
   server.routes.add ApiRoute(meth: "POST", path: "/api/v1/markdown", handler: handleMarkdown, requiresAuth: false)
   server.routes.add ApiRoute(meth: "GET", path: "/api/v1/markdown", handler: handleMarkdown, requiresAuth: false)
-  server.routes.add ApiRoute(meth: "POST", path: "/api/v1/th1", handler: handleTh1, requiresAuth: false)
-  server.routes.add ApiRoute(meth: "GET", path: "/api/v1/th1", handler: handleTh1, requiresAuth: false)
+  # TH1 execution and repo management endpoints require authentication
+  server.routes.add ApiRoute(meth: "POST", path: "/api/v1/th1", handler: handleTh1, requiresAuth: true)
+  server.routes.add ApiRoute(meth: "GET", path: "/api/v1/th1", handler: handleTh1, requiresAuth: true)
   server.routes.add ApiRoute(meth: "GET", path: "/api/v1/blame", handler: handleBlame, requiresAuth: false)
   server.routes.add ApiRoute(meth: "GET", path: "/api/v1/annotate", handler: handleBlame, requiresAuth: false)
   server.routes.add ApiRoute(meth: "GET", path: "/api/v1/brlist", handler: handleBrlist, requiresAuth: false)
@@ -2279,8 +2280,8 @@ proc registerDefaultRoutes*(server: var ApiServer) =
   server.routes.add ApiRoute(meth: "GET", path: "/.well-known/mcp", handler: handleMcpDiscovery, requiresAuth: false)
   server.routes.add ApiRoute(meth: "GET", path: "/api/v1/openapi", handler: handleOpenApi, requiresAuth: false)
   server.routes.add ApiRoute(meth: "GET", path: "/api/v1/csrf", handler: handleCsrf, requiresAuth: false)
-  server.routes.add ApiRoute(meth: "GET", path: "/api/v1/repo/export", handler: handleRepoExport, requiresAuth: false)
-  server.routes.add ApiRoute(meth: "POST", path: "/api/v1/repo/import", handler: handleRepoImport, requiresAuth: false)
+  server.routes.add ApiRoute(meth: "GET", path: "/api/v1/repo/export", handler: handleRepoExport, requiresAuth: true)
+  server.routes.add ApiRoute(meth: "POST", path: "/api/v1/repo/import", handler: handleRepoImport, requiresAuth: true)
 
 # --- Server ---
 

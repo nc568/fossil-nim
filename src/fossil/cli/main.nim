@@ -509,9 +509,27 @@ proc cmdAdd(args: seq[string], cfg: FossilConfig): int =
     if not normFull.startsWith(normRoot & DirSep) and normFull != normRoot:
       echo "Forbidden: path outside checkout: ", f
       continue
+    if symlinkExists(full):
+      try:
+        let target = expandSymlink(full)
+        let normTarget = normalizedPath(if isAbsolute(target): target else: parentDir(full) / target)
+        if not normTarget.startsWith(normRoot & DirSep) and normTarget != normRoot:
+          echo "Forbidden: symlink targets outside checkout: ", f
+          continue
+      except:
+        echo "Forbidden: cannot resolve symlink: ", f
+        continue
     if dirExists(full):
       for entry in walkDirRec(full):
         if not entry.contains(".git") and not entry.contains("_FOSSIL_") and not entry.endsWith(".fossil") and not entry.contains("build/cgen") and not entry.contains("nimcache"):
+          if symlinkExists(entry):
+            try:
+              let target = expandSymlink(entry)
+              let normTarget = normalizedPath(if isAbsolute(target): target else: parentDir(entry) / target)
+              if not normTarget.startsWith(normRoot & DirSep) and normTarget != normRoot:
+                continue
+            except:
+              continue
           fileTargets.add entry
     elif fileExists(full):
       fileTargets.add full

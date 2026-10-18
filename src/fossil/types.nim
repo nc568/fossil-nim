@@ -40,6 +40,7 @@ type
     feConflict = 9
     feAuth = 10
     feInvalidArg = 11
+    feSecurityError = 12
 
   FossilError* = object
     code*: FossilErrorCode

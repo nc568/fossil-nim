@@ -271,7 +271,10 @@ proc materializeFile*(data: Blob, destPath: string, perm: string): FossilResult[
     writeFile(destPath, data.data)
     if perm == "755" or perm == "x":
       when not defined(windows):
-        discard execShellCmd("chmod +x " & quoteShell(destPath))
+        try:
+          setFilePermissions(destPath, {fpUserExec, fpUserRead, fpUserWrite, fpGroupRead, fpGroupExec, fpOthersRead, fpOthersExec})
+        except:
+          discard
     okVoid()
   except:
     errVoid(feIoError, "cannot write file", destPath & ": " & getCurrentExceptionMsg())
@@ -286,8 +289,14 @@ proc materializeCheckout*[T: StorageBackend](repoBackend: var T, checkout: Check
   defer: checkoutDb.close()
   discard checkoutDb.clearVFiles()
 
+  let normRoot = normalizedPath(absolutePath(checkout.rootPath))
+
   for fe in manifest.files:
-    let destPath = checkout.rootPath / fe.name
+    if fe.name.len == 0 or fe.name.contains("..") or fe.name.startsWith("/") or fe.name.startsWith("\\"):
+      return errVoid(feSecurityError, "unsafe file path in manifest: path traversal blocked", fe.name)
+    let destPath = normalizedPath(absolutePath(checkout.rootPath / fe.name))
+    if not destPath.startsWith(normRoot & DirSep) and destPath != normRoot:
+      return errVoid(feSecurityError, "file path escapes checkout root", fe.name)
     let blobRes = repoBackend.getBlobByUuid(fe.uuid)
     if blobRes.isErr:
       continue

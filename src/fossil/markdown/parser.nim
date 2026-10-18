@@ -9,7 +9,36 @@ type
     enableTables*: bool
 
 proc escapeHtml(s: string): string =
-  result = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;")
+  result = s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;").replace("'", "&#39;")
+
+proc sanitizeUrl*(rawUrl: string): string =
+  let trimmed = rawUrl.strip()
+  var clean = ""
+  for c in trimmed:
+    if ord(c) >= 32 and ord(c) != 127:
+      clean.add c
+  let lower = clean.toLowerAscii()
+  var noSpace = ""
+  for c in lower:
+    if not c.isSpaceAscii():
+      noSpace.add c
+  if noSpace.startsWith("javascript:") or noSpace.startsWith("vbscript:") or
+     noSpace.startsWith("data:") or noSpace.startsWith("file:"):
+    return "#unsafe-link"
+  let colonPos = lower.find(':')
+  if colonPos != -1:
+    let slashPos = lower.find('/')
+    let queryPos = lower.find('?')
+    let hashPos = lower.find('#')
+    var firstSep = int.high
+    if slashPos != -1 and slashPos < firstSep: firstSep = slashPos
+    if queryPos != -1 and queryPos < firstSep: firstSep = queryPos
+    if hashPos != -1 and hashPos < firstSep: firstSep = hashPos
+    if colonPos < firstSep:
+      let scheme = lower[0..<colonPos]
+      if scheme notin ["http", "https", "mailto", "ftp", "irc"]:
+        return "#unsafe-link"
+  escapeHtml(clean)
 
 proc parseInline*(text: string): string {.gcsafe.} =
   ## Inline parsing: **bold**, *italic*, `code`, [link](url), ![alt](url)
@@ -46,7 +75,7 @@ proc parseInline*(text: string): string {.gcsafe.} =
         if urlEnd != -1:
           let alt = text[i+2..<altEnd]
           let url = text[altEnd+2..<urlEnd]
-          res.add "<img src=\"" & escapeHtml(url) & "\" alt=\"" & escapeHtml(alt) & "\">"
+          res.add "<img src=\"" & sanitizeUrl(url) & "\" alt=\"" & escapeHtml(alt) & "\">"
           i=urlEnd+1
         else:
           res.add escapeHtml($text[i]); inc i
@@ -59,7 +88,7 @@ proc parseInline*(text: string): string {.gcsafe.} =
         if urlEnd != -1:
           let label = text[i+1..<labelEnd]
           let url = text[labelEnd+2..<urlEnd]
-          res.add "<a href=\"" & escapeHtml(url) & "\">" & parseInline(label) & "</a>"
+          res.add "<a href=\"" & sanitizeUrl(url) & "\">" & parseInline(label) & "</a>"
           i=urlEnd+1
         else:
           res.add escapeHtml($text[i]); inc i
