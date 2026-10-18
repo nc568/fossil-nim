@@ -30,6 +30,7 @@ type
     capacity: int
     nPages*: int                    ## logical page count (excluding page 0)
     freeHead*: int                  ## first page of the freelist, 0 = none
+    root*: int                      ## B+tree root page, 0 = no tree yet
     hits*, misses*, evictions*, flushes*: int
 
   PagerStats* = object
@@ -59,12 +60,13 @@ proc writeI32(s: var string; at: int; v: int32) =
   s[at + 2] = char((u shr 8) and 0xFF)
   s[at + 3] = char(u and 0xFF)
 
-proc makeHeader(nPages, freeHead: int): string =
+proc makeHeader(nPages, freeHead, root: int): string =
   result = blankPage()
   for i in 0 ..< DbMagic.len: result[i] = DbMagic[i]
   writeI32(result, 8, DbVersion)
   writeI32(result, 12, int32(nPages))
   writeI32(result, 16, int32(freeHead))
+  writeI32(result, 20, int32(root))
 
 proc parseHeader(p: Pager; hdr: string): bool =
   for i in 0 ..< DbMagic.len:
@@ -72,7 +74,8 @@ proc parseHeader(p: Pager; hdr: string): bool =
   if readI32(hdr, 8) != DbVersion: return false
   p.nPages = int(readI32(hdr, 12))
   p.freeHead = int(readI32(hdr, 16))
-  if p.nPages < 0 or p.freeHead < 0: return false
+  p.root = int(readI32(hdr, 20))
+  if p.nPages < 0 or p.freeHead < 0 or p.root < 0: return false
   true
 
 # ---------------------------------------------------------------------------
@@ -153,7 +156,7 @@ proc flush*(p: Pager) =
     if not p.vfs.writeAt(pid * PageSize, p.pages[pid]):
       failf(ioErr, "write failed on page $1", pid)
   p.dirty.clear()
-  let hdr = makeHeader(p.nPages, p.freeHead)
+  let hdr = makeHeader(p.nPages, p.freeHead, p.root)
   if not p.vfs.writeAt(0, hdr):
     fail(ioErr, "cannot write header")
   p.vfs.sync()
@@ -213,7 +216,7 @@ proc openPager*(vfs: Vfs; cachePages = DefaultCachePages): Pager =
     # Brand new store. Page 0 is the header, so the first data page is 1.
     result.nPages = 1
     result.freeHead = 0
-    discard vfs.writeAt(0, makeHeader(0, 0))
+    discard vfs.writeAt(0, makeHeader(0, 0, 0))
     return
   var hdr = ""
   if not vfs.readAt(0, hdr, PageSize) or hdr.len != PageSize:
