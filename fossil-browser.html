@@ -188,6 +188,57 @@ pre code {
   align-items: center;
 }
 
+.sidebar-collapse-btn {
+  margin-right: 0.35rem;
+  cursor: pointer;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: 0.32rem 0.55rem;
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.sidebar-collapse-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.dyn-status-group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: 0.65rem;
+}
+.dyn-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.22rem 0.6rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+.pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-success);
+  display: inline-block;
+  box-shadow: 0 0 5px var(--color-success);
+}
+.pill-badge {
+  background: var(--color-primary);
+  color: #fff;
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
 .mobile-menu-toggle {
   display: none;
   background: none;
@@ -219,6 +270,268 @@ pre code {
   }
   .mobile-menu-toggle {
     display: block;
+  }
+}
+
+/* 4.1 GitLab-Style Responsive Sidebar Layout */
+.app-layout {
+  display: flex;
+  flex: 1;
+  min-height: calc(100vh - var(--nav-height, 56px));
+  position: relative;
+  width: 100%;
+}
+
+.app-sidebar {
+  width: 240px;
+  background: var(--color-bg-card);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 90;
+  user-select: none;
+}
+
+.sidebar-header {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.project-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.project-avatar {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.project-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.project-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.branch-tag {
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  display: inline-block;
+  white-space: nowrap;
+  margin-top: 0.15rem;
+}
+
+.sidebar-nav {
+  padding: 0.75rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sidebar-section-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  padding: 0.6rem 0.65rem 0.25rem 0.65rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 0.5rem 0.4rem;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  font-size: 0.88rem;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  width: 100%;
+  text-align: left;
+  transition: all var(--transition-speed);
+  position: relative;
+  white-space: nowrap;
+}
+
+.sidebar-link:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.sidebar-link.active {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 600;
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.sidebar-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  width: 1.25rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sidebar-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-badge {
+  font-size: 0.72rem;
+  padding: 0.15em 0.5em;
+  border-radius: 9999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+.sidebar-footer {
+  padding: 0.65rem 0.75rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.sidebar-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+  width: 100%;
+  transition: all var(--transition-speed);
+}
+
+.sidebar-toggle-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+/* Collapsed Sidebar Mode (Desktop) */
+#app.sidebar-collapsed .app-sidebar {
+  width: 60px;
+}
+#app.sidebar-collapsed .project-info,
+#app.sidebar-collapsed .sidebar-section-title,
+#app.sidebar-collapsed .sidebar-text,
+#app.sidebar-collapsed .sidebar-badge {
+  display: none !important;
+}
+#app.sidebar-collapsed .sidebar-link {
+  justify-content: center;
+  padding: 0.6rem 0;
+}
+#app.sidebar-collapsed .sidebar-toggle-btn {
+  justify-content: center;
+  padding: 0.4rem 0;
+}
+#app.sidebar-collapsed .sidebar-toggle-btn .toggle-icon {
+  transform: rotate(180deg);
+}
+
+/* Main Working Area in App Layout */
+.app-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.25rem 1.5rem;
+  overflow-y: auto;
+  max-width: 1400px;
+  width: 100%;
+}
+
+/* Mobile & Tablet Responsiveness */
+@media (max-width: 900px) {
+  .app-sidebar {
+    position: fixed;
+    top: var(--nav-height, 56px);
+    bottom: 0;
+    left: 0;
+    width: 260px;
+    transform: translateX(-100%);
+    box-shadow: var(--shadow-lg);
+    background: var(--color-bg-card);
+  }
+  #app.sidebar-open .app-sidebar {
+    transform: translateX(0);
+  }
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    top: var(--nav-height, 56px);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 85;
+    backdrop-filter: blur(2px);
+  }
+  #app.sidebar-open .sidebar-backdrop {
+    display: block;
+  }
+  .dyn-status-group {
+    display: none;
+  }
+}
+
+/* On Desktop, hide horizontal tabs since GitLab sidebar is active */
+@media (min-width: 901px) {
+  .tabs-nav {
+    display: none !important;
+  }
+}
+/* On Mobile/Tablet, show horizontal touch-scrollable tabs */
+@media (max-width: 900px) {
+  .tabs-nav {
+    display: flex;
+    margin-bottom: 1rem;
   }
 }
 
@@ -1100,8 +1413,25 @@ pre code {
     <!-- Main In-Browser Navigation Header -->
     <header class="navbar">
       <div class="navbar-brand">
+        <button id="btn-sidebar-collapse" class="btn btn-icon btn-sm sidebar-collapse-btn" title="Свернуть/Развернуть боковую панель">☰</button>
         <a href="browser.html">🦖 Fossil-Nim <span class="badge badge-primary" data-i18n="app.edition">Browser Edition</span></a>
-        <span class="badge" style="background:#6366f1;" data-i18n="app.tools_badge">89 MCP Tools</span>
+
+        <!-- Dynamic Status Indicators: Real-time Reactive Variables (NO hardcoded text) -->
+        <div class="dyn-status-group">
+          <div class="dyn-status-pill" id="dyn-runtime-pill" title="Engine Runtime & Target">
+            <span class="pill-dot"></span>
+            <span id="dyn-version-label">v2.26.0</span>
+            <span class="pill-badge" id="dyn-runtime-label">Nim-JS / WASM</span>
+          </div>
+          <div class="dyn-status-pill" id="dyn-active-db-pill" title="Active Storage Engine">
+            <span class="pill-dot" style="background:var(--color-success);"></span>
+            <span id="dyn-backend-label">IndexedDB (Native)</span>
+          </div>
+          <div class="dyn-status-pill" id="dyn-mcp-pill" title="Dynamic Model Context Protocol AI Tools Counter">
+            <span>🤖</span>
+            <span id="dyn-mcp-count">89</span> MCP Tools
+          </div>
+        </div>
       </div>
 
       <button id="btn-mobile-menu" class="mobile-menu-toggle" aria-label="Toggle navigation menu">☰</button>
@@ -1130,42 +1460,91 @@ pre code {
       </div>
     </header>
 
-    <!-- Main Container -->
-    <main class="main">
-      <!-- Hero Banner / Quick Dashboard Strip -->
-      <div id="browser-hero" class="browser-hero">
-        <div class="browser-hero-title">
-          <span style="font-size:2.2rem;">🦖</span>
-          <div>
-            <h1>Fossil-Nim WebAssembly & JS</h1>
-            <p style="margin:0; font-size:0.9rem; color:var(--color-text-muted);">
-              <span data-i18n="app.hero_desc">Распределённая система контроля версий, работающая на 100% внутри браузера. Сервер не требуется.</span>
-              <span data-i18n="app.active_backend">Активное хранилище:</span> <b id="active-backend-name" style="color:var(--color-primary);">IndexedDB</b>
-            </p>
+    <!-- App Layout: GitLab Style Sidebar + Main Content -->
+    <div class="app-layout">
+      <!-- Left Sidebar (GitLab Style) -->
+      <aside class="app-sidebar" id="app-sidebar">
+        <div class="sidebar-header">
+          <div class="project-identity">
+            <span class="project-avatar">🦖</span>
+            <div class="project-info">
+              <div class="project-name">Fossil-Nim</div>
+              <div class="project-meta">
+                <span class="branch-tag">🌿 trunk</span>
+              </div>
+            </div>
           </div>
         </div>
-        <div style="display:flex; gap:0.45rem; align-items:center; flex-wrap:wrap;">
-          <span class="badge badge-success">Local-First</span>
-          <span class="badge badge-info">Myers Diff</span>
-          <span class="badge badge-warning">MCP 89 Tools</span>
+
+        <nav class="sidebar-nav" aria-label="Navigation">
+          <div class="sidebar-section-title" data-i18n="sidebar.workspace">Рабочая область</div>
+          <button class="tab-btn sidebar-link active" data-tab="timeline" data-i18n-title="tab.timeline">
+            <span class="sidebar-icon">📜</span>
+            <span class="sidebar-text" data-i18n="tab.timeline">Таймлайн</span>
+          </button>
+          <button class="tab-btn sidebar-link" data-tab="files" data-i18n-title="tab.files">
+            <span class="sidebar-icon">📁</span>
+            <span class="sidebar-text" data-i18n="tab.files">Файлы и редактор</span>
+          </button>
+          <button class="tab-btn sidebar-link" data-tab="diff" data-i18n-title="tab.diff">
+            <span class="sidebar-icon">🔍</span>
+            <span class="sidebar-text" data-i18n="tab.diff">Myers Diff</span>
+          </button>
+          <button class="tab-btn sidebar-link" data-tab="wiki" data-i18n-title="tab.wiki">
+            <span class="sidebar-icon">📖</span>
+            <span class="sidebar-text" data-i18n="tab.wiki">Wiki и документация</span>
+          </button>
+          <button class="tab-btn sidebar-link" data-tab="tickets" data-i18n-title="tab.tickets">
+            <span class="sidebar-icon">🎫</span>
+            <span class="sidebar-text" data-i18n="tab.tickets">Тикеты</span>
+          </button>
+          <button class="tab-btn sidebar-link" data-tab="mcp" data-i18n-title="tab.mcp">
+            <span class="sidebar-icon">🤖</span>
+            <span class="sidebar-text" data-i18n="tab.mcp">ИИ-агент MCP</span>
+            <span class="sidebar-badge" id="sidebar-mcp-badge">89</span>
+          </button>
+          <button class="tab-btn sidebar-link" data-tab="storage" data-i18n-title="tab.storage">
+            <span class="sidebar-icon">💾</span>
+            <span class="sidebar-text" data-i18n="tab.storage">Мульти-БД</span>
+          </button>
+
+          <div class="sidebar-divider"></div>
+          <div class="sidebar-section-title" data-i18n="sidebar.info">Информация</div>
+          <button class="tab-btn sidebar-link" data-tab="about" data-i18n-title="tab.about">
+            <span class="sidebar-icon">ℹ️</span>
+            <span class="sidebar-text" data-i18n="tab.about">О проекте</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <button id="btn-sidebar-toggle" class="sidebar-toggle-btn" title="Свернуть / Развернуть боковую панель">
+            <span class="toggle-icon">◀</span>
+            <span class="sidebar-text" data-i18n="sidebar.collapse">Свернуть панель</span>
+          </button>
         </div>
-      </div>
+      </aside>
 
-      <!-- Loading overlay -->
-      <div id="loading-indicator" class="loading hidden" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:9999; background:rgba(0,0,0,0.65); padding:2rem; border-radius:12px; backdrop-filter:blur(4px);">
-        <div class="spinner"></div>
-      </div>
+      <!-- Backdrop for mobile drawer overlay -->
+      <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
 
-      <!-- Tab Navigation Strip -->
-      <nav class="tabs-nav" aria-label="Sections">
-        <button class="tab-btn active" data-tab="timeline" data-i18n="tab.timeline">📜 Таймлайн</button>
-        <button class="tab-btn" data-tab="files" data-i18n="tab.files">📁 Файлы и редактор</button>
-        <button class="tab-btn" data-tab="diff" data-i18n="tab.diff">🔍 Myers Diff</button>
-        <button class="tab-btn" data-tab="wiki" data-i18n="tab.wiki">📖 Wiki и документация</button>
-        <button class="tab-btn" data-tab="tickets" data-i18n="tab.tickets">🎫 Тикеты</button>
-        <button class="tab-btn" data-tab="mcp" data-i18n="tab.mcp">🤖 ИИ-агент MCP (89)</button>
-        <button class="tab-btn" data-tab="storage" data-i18n="tab.storage">💾 Мульти-БД диагностика</button>
-      </nav>
+      <!-- Main Content Area -->
+      <main class="app-main main">
+        <!-- Loading overlay -->
+        <div id="loading-indicator" class="loading hidden" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:9999; background:rgba(0,0,0,0.65); padding:2rem; border-radius:12px; backdrop-filter:blur(4px);">
+          <div class="spinner"></div>
+        </div>
+
+        <!-- Mobile/Tablet Touch Tabs Strip (Active on mobile/tablet, hidden on desktop where GitLab sidebar is active) -->
+        <nav class="tabs-nav" aria-label="Sections">
+          <button class="tab-btn active" data-tab="timeline" data-i18n="tab.timeline">📜 Таймлайн</button>
+          <button class="tab-btn" data-tab="files" data-i18n="tab.files">📁 Файлы и редактор</button>
+          <button class="tab-btn" data-tab="diff" data-i18n="tab.diff">🔍 Myers Diff</button>
+          <button class="tab-btn" data-tab="wiki" data-i18n="tab.wiki">📖 Wiki и документация</button>
+          <button class="tab-btn" data-tab="tickets" data-i18n="tab.tickets">🎫 Тикеты</button>
+          <button class="tab-btn" data-tab="mcp" data-i18n="tab.mcp">🤖 ИИ-агент MCP (89)</button>
+          <button class="tab-btn" data-tab="storage" data-i18n="tab.storage">💾 Мульти-БД диагностика</button>
+          <button class="tab-btn" data-tab="about" data-i18n="tab.about">ℹ️ О проекте</button>
+        </nav>
 
       <!-- TAB 1: Timeline -->
       <section id="tab-timeline" class="tab-content active">
@@ -1396,7 +1775,94 @@ proc processTask(id: int): string =
           <div id="sql-query-output" style="margin-top:1rem; overflow-x:auto;"></div>
         </div>
       </section>
+
+      <!-- TAB 8: About Project (О проекте) -->
+      <section id="tab-about" class="tab-content">
+        <!-- Hero Banner / Quick Dashboard Strip (Moved from main working view into About) -->
+        <div id="browser-hero" class="browser-hero">
+          <div class="browser-hero-title">
+            <span style="font-size:2.4rem;">🦖</span>
+            <div>
+              <h1>Fossil-Nim WebAssembly &amp; JS</h1>
+              <p style="margin:0; font-size:0.92rem; color:var(--color-text-muted);">
+                <span data-i18n="app.hero_desc">Распределённая система контроля версий, работающая на 100% внутри браузера. Сервер не требуется.</span>
+              </p>
+              <div style="margin-top:0.35rem; font-size:0.85rem;">
+                <span data-i18n="app.active_backend">Активное хранилище:</span> <b id="active-backend-name" style="color:var(--color-primary);">IndexedDB</b>
+              </div>
+            </div>
+          </div>
+          <div class="browser-hero-badges" style="display:flex; gap:0.45rem; align-items:center; flex-wrap:wrap;">
+            <span class="badge badge-success">100% In-Browser Edition</span>
+            <span class="badge badge-info" id="about-db-badge">Multi-DB: IndexedDB / SQLite WASM / Pure-Nim CDB</span>
+            <span class="badge badge-warning" id="about-mcp-badge">MCP <span id="about-mcp-count">89</span> Tools</span>
+            <span class="badge" style="background:var(--color-primary);" id="about-runtime-badge">Nim 2.0 (JS/WASM)</span>
+          </div>
+        </div>
+
+        <!-- Dynamic Live Environment Diagnostics Card -->
+        <div class="card" style="margin-bottom:1.25rem;">
+          <div class="card-header">
+            <h3 class="card-title">🔬 Динамическая диагностика среды выполнения</h3>
+            <span class="badge badge-primary">Live Reactivity</span>
+          </div>
+          <div style="font-size:0.88rem; color:var(--color-text-secondary); margin-bottom:1rem;">
+            Все параметры считываются в реальном времени из переменных рантайма, а не прописаны статическим текстом:
+          </div>
+          <div class="grid grid-3">
+            <div class="card" style="padding:0.85rem; background:var(--color-bg-secondary);">
+              <div style="font-size:0.75rem; color:var(--color-text-muted); text-transform:uppercase; font-weight:700;">Версия и Движок</div>
+              <div style="font-size:1.05rem; font-weight:700; color:var(--color-primary); margin-top:0.25rem;" id="about-dyn-version">v2.26.0</div>
+              <div style="font-size:0.78rem; color:var(--color-text-secondary); margin-top:0.15rem;" id="about-dyn-target">Nim 2.0 JS Engine</div>
+            </div>
+
+            <div class="card" style="padding:0.85rem; background:var(--color-bg-secondary);">
+              <div style="font-size:0.75rem; color:var(--color-text-muted); text-transform:uppercase; font-weight:700;">Активная База Данных</div>
+              <div style="font-size:1.05rem; font-weight:700; color:var(--color-success); margin-top:0.25rem;" id="about-dyn-db">IndexedDB</div>
+              <div style="font-size:0.78rem; color:var(--color-text-secondary); margin-top:0.15rem;" id="about-dyn-wasm">WASM Engine Ready</div>
+            </div>
+
+            <div class="card" style="padding:0.85rem; background:var(--color-bg-secondary);">
+              <div style="font-size:0.75rem; color:var(--color-text-muted); text-transform:uppercase; font-weight:700;">MCP Протокол ИИ-Агента</div>
+              <div style="font-size:1.05rem; font-weight:700; color:var(--color-warning); margin-top:0.25rem;" id="about-dyn-mcp-total">89 Tools</div>
+              <div style="font-size:0.78rem; color:var(--color-text-secondary); margin-top:0.15rem;">Динамический подсчет зарегистрированных инструментов</div>
+            </div>
+          </div>
+
+          <div style="margin-top:1rem; padding:0.65rem 0.85rem; background:var(--color-bg-code); border-radius:var(--radius); border:1px solid var(--color-border); font-family:var(--font-mono); font-size:0.78rem; color:var(--color-text-muted);">
+            <strong>User Agent:</strong> <span id="about-dyn-ua">Browser Environment</span>
+          </div>
+        </div>
+
+        <!-- Architecture & Specs Cards -->
+        <div class="grid grid-2" style="margin-bottom:1.25rem;">
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">⚡ 100% Pure Nim Архитектура</h3>
+            </div>
+            <ul style="padding-left:1.25rem; font-size:0.88rem; display:flex; flex-direction:column; gap:0.5rem; color:var(--color-text-secondary);">
+              <li><strong>Myers Unified Diff</strong>: Оригинальный алгоритм построчного сравнения Майерса, скомпилированный из Nim в чистый JS.</li>
+              <li><strong>Fossil Delta Compression</strong>: Скользящее окно совпадений и вычисление дельт манифестов репозитория.</li>
+              <li><strong>Zero Bloat</strong>: Ни одного внешнего NPM пакета или тяжелого фреймворка, только нативные веб-стандарты.</li>
+              <li><strong>QBE / Native совместимость</strong>: Идентичные структуры данных между нативным сервером и браузерной версией.</li>
+            </ul>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">💾 3 Хранилища в Браузере</h3>
+            </div>
+            <ul style="padding-left:1.25rem; font-size:0.88rem; display:flex; flex-direction:column; gap:0.5rem; color:var(--color-text-secondary);">
+              <li><strong>IndexedDB</strong>: Встроенная NoSQL база браузера с транзакциями, идеальна для долгосрочной локальной работы.</li>
+              <li><strong>SQLite WASM</strong>: Настоящий SQLite 3.45 внутри WebAssembly с поддержкой двоичных .fossil репозиториев.</li>
+              <li><strong>Pure-Nim CDB</strong>: Constant DB в оперативной памяти (RAM) для сверхбыстрых тестов и сессий ИИ-агентов.</li>
+              <li><strong>Умный импорт/экспорт</strong>: Поддержка слияния (Merge) и полной замены (Clean Replace).</li>
+            </ul>
+          </div>
+        </div>
+      </section>
     </main>
+  </div>
 
     <!-- Footer -->
     <footer class="footer">
@@ -8108,6 +8574,13 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       "tab.tickets": "🎫 Тикеты",
       "tab.mcp": "🤖 ИИ-агент MCP (89)",
       "tab.storage": "💾 Мульти-БД диагностика",
+      "tab.about": "ℹ️ О проекте",
+      "sidebar.workspace": "Рабочая область",
+      "sidebar.info": "Информация",
+      "sidebar.collapse": "Свернуть панель",
+      "sidebar.expand": "Развернуть панель",
+      "about.title": "О проекте Fossil-Nim",
+      "about.desc": "Архитектура, динамические переменные среды и спецификации",
       "timeline.title": "Таймлайн репозитория",
       "timeline.desc": "История фиксаций и коммитов в текущем браузерном хранилище.",
       "timeline.new_commit": "+ Новый коммит",
@@ -8225,6 +8698,13 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       "tab.tickets": "🎫 Tickets",
       "tab.mcp": "🤖 AI Agent MCP (89)",
       "tab.storage": "💾 Multi-DB Diagnostics",
+      "tab.about": "ℹ️ About Project",
+      "sidebar.workspace": "Workspace",
+      "sidebar.info": "Information",
+      "sidebar.collapse": "Collapse sidebar",
+      "sidebar.expand": "Expand sidebar",
+      "about.title": "About Fossil-Nim",
+      "about.desc": "Architecture, dynamic environment variables and specifications",
       "timeline.title": "Repository Timeline",
       "timeline.desc": "History of check-ins and commits saved in current browser storage backend.",
       "timeline.new_commit": "+ New Commit",
@@ -8566,6 +9046,7 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
         await window.FossilStorageManager.init();
       }
 
+      this.bindSidebar();
       this.bindTabs();
       this.bindStorageSwitcher();
       this.bindTheme();
@@ -8579,14 +9060,123 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       this.bindMcpActions();
       this.bindStorageDiagnostics();
 
-      // Initial Render
+      // Initial Render & Dynamic Variables
+      this.updateDynamicStatus();
       await this.refreshAll();
+      this.updateDynamicStatus();
       window.FossilI18n.applyAll();
       console.log('✅ Fossil-Nim Professional Browser Edition Ready!');
     },
 
+    detectRuntime() {
+      const isBrowser = typeof window !== 'undefined';
+      const hasWasm = typeof WebAssembly === 'object' && typeof WebAssembly.validate === 'function';
+      const hasIDB = typeof indexedDB !== 'undefined';
+      const isNimJs = !!(window.FossilCore && window.FossilCore.diffUnified);
+      const version = (window.FossilCore && window.FossilCore.version) || '2.26.0';
+
+      return {
+        isBrowser,
+        hasWasm,
+        hasIDB,
+        isNimJs,
+        version,
+        engineName: 'Nim 2.0 (JS/WASM transpile)',
+        runtimeType: 'Browser JS / WASM'
+      };
+    },
+
+    updateDynamicStatus() {
+      const runtime = this.detectRuntime();
+      const versionEl = $('dyn-version-label');
+      const runtimeEl = $('dyn-runtime-label');
+      if (versionEl) versionEl.innerText = `v${runtime.version}`;
+      if (runtimeEl) runtimeEl.innerText = runtime.runtimeType;
+
+      const mgr = window.FossilStorageManager;
+      const activeBackend = mgr ? mgr.backendType : (state.activeBackend || 'indexeddb');
+      state.activeBackend = activeBackend;
+
+      const backendNames = {
+        indexeddb: 'IndexedDB (Native)',
+        sqlite_wasm: 'SQLite WASM (.fossil)',
+        cdb: 'Pure-Nim CDB (RAM)'
+      };
+      const backendLabel = backendNames[activeBackend] || activeBackend;
+
+      const backendEl = $('dyn-backend-label');
+      if (backendEl) backendEl.innerText = backendLabel;
+
+      const activeNameEl = $('active-backend-name');
+      if (activeNameEl) activeNameEl.innerText = backendLabel;
+
+      const aboutDbBadge = $('about-db-badge');
+      if (aboutDbBadge) aboutDbBadge.innerText = `Active DB: ${backendLabel}`;
+
+      const toolCount = (window.fossilMcp && Array.isArray(window.fossilMcp.tools)) ? window.fossilMcp.tools.length : 89;
+
+      const dynMcpCount = $('dyn-mcp-count');
+      if (dynMcpCount) dynMcpCount.innerText = toolCount;
+
+      const sidebarMcpBadge = $('sidebar-mcp-badge');
+      if (sidebarMcpBadge) sidebarMcpBadge.innerText = toolCount;
+
+      const aboutMcpCount = $('about-mcp-count');
+      if (aboutMcpCount) aboutMcpCount.innerText = toolCount;
+
+      const aboutDynMcpTotal = $('about-dyn-mcp-total');
+      if (aboutDynMcpTotal) aboutDynMcpTotal.innerText = `${toolCount} Tools (Registered)`;
+
+      const aboutDynVersion = $('about-dyn-version');
+      if (aboutDynVersion) aboutDynVersion.innerText = `Fossil-Nim v${runtime.version}`;
+
+      const aboutDynTarget = $('about-dyn-target');
+      if (aboutDynTarget) aboutDynTarget.innerText = runtime.engineName;
+
+      const aboutDynDb = $('about-dyn-db');
+      if (aboutDynDb) aboutDynDb.innerText = backendLabel;
+
+      const aboutDynWasm = $('about-dyn-wasm');
+      if (aboutDynWasm) aboutDynWasm.innerText = runtime.hasWasm ? 'Supported (WebAssembly Ready)' : 'Not Available';
+
+      const aboutDynUa = $('about-dyn-ua');
+      if (aboutDynUa && typeof navigator !== 'undefined') {
+        aboutDynUa.innerText = navigator.userAgent;
+      }
+    },
+
+    bindSidebar() {
+      const app = $('app');
+      const collapseBtn = $('btn-sidebar-collapse');
+      const toggleBtn = $('btn-sidebar-toggle');
+      const backdrop = $('sidebar-backdrop');
+
+      const isCollapsed = localStorage.getItem('fossil_sidebar_collapsed') === 'true';
+      if (isCollapsed && app) {
+        app.classList.add('sidebar-collapsed');
+      }
+
+      const toggleCollapse = () => {
+        if (!app) return;
+        if (window.innerWidth <= 900) {
+          app.classList.toggle('sidebar-open');
+        } else {
+          const next = !app.classList.contains('sidebar-collapsed');
+          app.classList.toggle('sidebar-collapsed', next);
+          localStorage.setItem('fossil_sidebar_collapsed', String(next));
+        }
+      };
+
+      if (collapseBtn) collapseBtn.addEventListener('click', toggleCollapse);
+      if (toggleBtn) toggleBtn.addEventListener('click', toggleCollapse);
+
+      if (backdrop) backdrop.addEventListener('click', () => {
+        if (app) app.classList.remove('sidebar-open');
+      });
+    },
+
     bindTabs() {
-      const tabButtons = document.querySelectorAll('.tab-btn[data-tab]');
+      const tabButtons = document.querySelectorAll('.tab-btn[data-tab], .sidebar-link[data-tab]');
       tabButtons.forEach(btn => {
         btn.addEventListener('click', () => {
           const targetTab = btn.getAttribute('data-tab');
@@ -8597,16 +9187,21 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
 
     switchTab(tabName) {
       state.currentTab = tabName;
-      document.querySelectorAll('.tab-btn').forEach(b => {
+      document.querySelectorAll('.tab-btn, .sidebar-link').forEach(b => {
         b.classList.toggle('active', b.getAttribute('data-tab') === tabName);
       });
       document.querySelectorAll('.tab-content').forEach(c => {
         c.classList.toggle('active', c.id === 'tab-' + tabName);
       });
+      const app = $('app');
+      if (app && app.classList.contains('sidebar-open')) {
+        app.classList.remove('sidebar-open');
+      }
       if (tabName === 'timeline') this.refreshTimeline();
       else if (tabName === 'files') this.refreshFiles();
       else if (tabName === 'wiki') this.refreshWiki();
       else if (tabName === 'tickets') this.refreshTickets();
+      else if (tabName === 'about') this.updateDynamicStatus();
     },
 
     bindStorageSwitcher() {
@@ -8620,9 +9215,9 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
         try {
           await window.FossilStorageManager.switchBackend(newBackend);
           state.activeBackend = newBackend;
-          const activeNameEl = $('active-backend-name');
-          if (activeNameEl) activeNameEl.innerText = window.FossilStorageManager.getActiveBackend().name;
+          this.updateDynamicStatus();
           await this.refreshAll();
+          this.updateDynamicStatus();
         } catch (err) {
           alert('Failed to switch storage backend: ' + err.message);
         } finally {

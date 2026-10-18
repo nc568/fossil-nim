@@ -180,6 +180,57 @@ pre code {
   align-items: center;
 }
 
+.sidebar-collapse-btn {
+  margin-right: 0.35rem;
+  cursor: pointer;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  padding: 0.32rem 0.55rem;
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  line-height: 1;
+}
+.sidebar-collapse-btn:hover {
+  background: var(--color-bg-hover);
+}
+
+.dyn-status-group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: 0.65rem;
+}
+.dyn-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.22rem 0.6rem;
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+}
+.pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-success);
+  display: inline-block;
+  box-shadow: 0 0 5px var(--color-success);
+}
+.pill-badge {
+  background: var(--color-primary);
+  color: #fff;
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
 .mobile-menu-toggle {
   display: none;
   background: none;
@@ -211,6 +262,268 @@ pre code {
   }
   .mobile-menu-toggle {
     display: block;
+  }
+}
+
+/* 4.1 GitLab-Style Responsive Sidebar Layout */
+.app-layout {
+  display: flex;
+  flex: 1;
+  min-height: calc(100vh - var(--nav-height, 56px));
+  position: relative;
+  width: 100%;
+}
+
+.app-sidebar {
+  width: 240px;
+  background: var(--color-bg-card);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 90;
+  user-select: none;
+}
+
+.sidebar-header {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.project-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.project-avatar {
+  font-size: 1.4rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.project-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.project-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.branch-tag {
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  display: inline-block;
+  white-space: nowrap;
+  margin-top: 0.15rem;
+}
+
+.sidebar-nav {
+  padding: 0.75rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sidebar-section-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  font-weight: 700;
+  padding: 0.6rem 0.65rem 0.25rem 0.65rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar-divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 0.5rem 0.4rem;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: var(--radius);
+  color: var(--color-text-secondary);
+  font-weight: 500;
+  font-size: 0.88rem;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  width: 100%;
+  text-align: left;
+  transition: all var(--transition-speed);
+  position: relative;
+  white-space: nowrap;
+}
+
+.sidebar-link:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+.sidebar-link.active {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 600;
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.sidebar-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  width: 1.25rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sidebar-text {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-badge {
+  font-size: 0.72rem;
+  padding: 0.15em 0.5em;
+  border-radius: 9999px;
+  background: var(--color-primary);
+  color: #fff;
+  font-weight: 700;
+  margin-left: auto;
+}
+
+.sidebar-footer {
+  padding: 0.65rem 0.75rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.sidebar-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+  width: 100%;
+  transition: all var(--transition-speed);
+}
+
+.sidebar-toggle-btn:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+/* Collapsed Sidebar Mode (Desktop) */
+#app.sidebar-collapsed .app-sidebar {
+  width: 60px;
+}
+#app.sidebar-collapsed .project-info,
+#app.sidebar-collapsed .sidebar-section-title,
+#app.sidebar-collapsed .sidebar-text,
+#app.sidebar-collapsed .sidebar-badge {
+  display: none !important;
+}
+#app.sidebar-collapsed .sidebar-link {
+  justify-content: center;
+  padding: 0.6rem 0;
+}
+#app.sidebar-collapsed .sidebar-toggle-btn {
+  justify-content: center;
+  padding: 0.4rem 0;
+}
+#app.sidebar-collapsed .sidebar-toggle-btn .toggle-icon {
+  transform: rotate(180deg);
+}
+
+/* Main Working Area in App Layout */
+.app-main {
+  flex: 1;
+  min-width: 0;
+  padding: 1.25rem 1.5rem;
+  overflow-y: auto;
+  max-width: 1400px;
+  width: 100%;
+}
+
+/* Mobile & Tablet Responsiveness */
+@media (max-width: 900px) {
+  .app-sidebar {
+    position: fixed;
+    top: var(--nav-height, 56px);
+    bottom: 0;
+    left: 0;
+    width: 260px;
+    transform: translateX(-100%);
+    box-shadow: var(--shadow-lg);
+    background: var(--color-bg-card);
+  }
+  #app.sidebar-open .app-sidebar {
+    transform: translateX(0);
+  }
+  .sidebar-backdrop {
+    display: none;
+    position: fixed;
+    top: var(--nav-height, 56px);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 85;
+    backdrop-filter: blur(2px);
+  }
+  #app.sidebar-open .sidebar-backdrop {
+    display: block;
+  }
+  .dyn-status-group {
+    display: none;
+  }
+}
+
+/* On Desktop, hide horizontal tabs since GitLab sidebar is active */
+@media (min-width: 901px) {
+  .tabs-nav {
+    display: none !important;
+  }
+}
+/* On Mobile/Tablet, show horizontal touch-scrollable tabs */
+@media (max-width: 900px) {
+  .tabs-nav {
+    display: flex;
+    margin-bottom: 1rem;
   }
 }
 

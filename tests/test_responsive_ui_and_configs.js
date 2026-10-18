@@ -108,8 +108,10 @@ function assert(condition, testName, details = "") {
   await page.click("#btn-mobile-menu");
   await new Promise(r => setTimeout(r, 200));
 
-  // Test Mobile Files Tree Toggle in editor
-  await page.click(".tab-btn[data-tab='files']");
+  // Test Mobile Files Tree Toggle in editor (navigate via mobile sidebar)
+  await page.click("#btn-sidebar-collapse");
+  await new Promise(r => setTimeout(r, 200));
+  await page.click("#app-sidebar .sidebar-link[data-tab='files']");
   await new Promise(r => setTimeout(r, 300));
 
   const toggleTreeBtn = await page.$("#btn-toggle-file-tree");

@@ -36,6 +36,13 @@
       "tab.tickets": "🎫 Тикеты",
       "tab.mcp": "🤖 ИИ-агент MCP (89)",
       "tab.storage": "💾 Мульти-БД диагностика",
+      "tab.about": "ℹ️ О проекте",
+      "sidebar.workspace": "Рабочая область",
+      "sidebar.info": "Информация",
+      "sidebar.collapse": "Свернуть панель",
+      "sidebar.expand": "Развернуть панель",
+      "about.title": "О проекте Fossil-Nim",
+      "about.desc": "Архитектура, динамические переменные среды и спецификации",
       "timeline.title": "Таймлайн репозитория",
       "timeline.desc": "История фиксаций и коммитов в текущем браузерном хранилище.",
       "timeline.new_commit": "+ Новый коммит",
@@ -153,6 +160,13 @@
       "tab.tickets": "🎫 Tickets",
       "tab.mcp": "🤖 AI Agent MCP (89)",
       "tab.storage": "💾 Multi-DB Diagnostics",
+      "tab.about": "ℹ️ About Project",
+      "sidebar.workspace": "Workspace",
+      "sidebar.info": "Information",
+      "sidebar.collapse": "Collapse sidebar",
+      "sidebar.expand": "Expand sidebar",
+      "about.title": "About Fossil-Nim",
+      "about.desc": "Architecture, dynamic environment variables and specifications",
       "timeline.title": "Repository Timeline",
       "timeline.desc": "History of check-ins and commits saved in current browser storage backend.",
       "timeline.new_commit": "+ New Commit",
@@ -494,6 +508,7 @@
         await window.FossilStorageManager.init();
       }
 
+      this.bindSidebar();
       this.bindTabs();
       this.bindStorageSwitcher();
       this.bindTheme();
@@ -507,14 +522,123 @@
       this.bindMcpActions();
       this.bindStorageDiagnostics();
 
-      // Initial Render
+      // Initial Render & Dynamic Variables
+      this.updateDynamicStatus();
       await this.refreshAll();
+      this.updateDynamicStatus();
       window.FossilI18n.applyAll();
       console.log('✅ Fossil-Nim Professional Browser Edition Ready!');
     },
 
+    detectRuntime() {
+      const isBrowser = typeof window !== 'undefined';
+      const hasWasm = typeof WebAssembly === 'object' && typeof WebAssembly.validate === 'function';
+      const hasIDB = typeof indexedDB !== 'undefined';
+      const isNimJs = !!(window.FossilCore && window.FossilCore.diffUnified);
+      const version = (window.FossilCore && window.FossilCore.version) || '2.26.0';
+
+      return {
+        isBrowser,
+        hasWasm,
+        hasIDB,
+        isNimJs,
+        version,
+        engineName: 'Nim 2.0 (JS/WASM transpile)',
+        runtimeType: 'Browser JS / WASM'
+      };
+    },
+
+    updateDynamicStatus() {
+      const runtime = this.detectRuntime();
+      const versionEl = $('dyn-version-label');
+      const runtimeEl = $('dyn-runtime-label');
+      if (versionEl) versionEl.innerText = `v${runtime.version}`;
+      if (runtimeEl) runtimeEl.innerText = runtime.runtimeType;
+
+      const mgr = window.FossilStorageManager;
+      const activeBackend = mgr ? mgr.backendType : (state.activeBackend || 'indexeddb');
+      state.activeBackend = activeBackend;
+
+      const backendNames = {
+        indexeddb: 'IndexedDB (Native)',
+        sqlite_wasm: 'SQLite WASM (.fossil)',
+        cdb: 'Pure-Nim CDB (RAM)'
+      };
+      const backendLabel = backendNames[activeBackend] || activeBackend;
+
+      const backendEl = $('dyn-backend-label');
+      if (backendEl) backendEl.innerText = backendLabel;
+
+      const activeNameEl = $('active-backend-name');
+      if (activeNameEl) activeNameEl.innerText = backendLabel;
+
+      const aboutDbBadge = $('about-db-badge');
+      if (aboutDbBadge) aboutDbBadge.innerText = `Active DB: ${backendLabel}`;
+
+      const toolCount = (window.fossilMcp && Array.isArray(window.fossilMcp.tools)) ? window.fossilMcp.tools.length : 89;
+
+      const dynMcpCount = $('dyn-mcp-count');
+      if (dynMcpCount) dynMcpCount.innerText = toolCount;
+
+      const sidebarMcpBadge = $('sidebar-mcp-badge');
+      if (sidebarMcpBadge) sidebarMcpBadge.innerText = toolCount;
+
+      const aboutMcpCount = $('about-mcp-count');
+      if (aboutMcpCount) aboutMcpCount.innerText = toolCount;
+
+      const aboutDynMcpTotal = $('about-dyn-mcp-total');
+      if (aboutDynMcpTotal) aboutDynMcpTotal.innerText = `${toolCount} Tools (Registered)`;
+
+      const aboutDynVersion = $('about-dyn-version');
+      if (aboutDynVersion) aboutDynVersion.innerText = `Fossil-Nim v${runtime.version}`;
+
+      const aboutDynTarget = $('about-dyn-target');
+      if (aboutDynTarget) aboutDynTarget.innerText = runtime.engineName;
+
+      const aboutDynDb = $('about-dyn-db');
+      if (aboutDynDb) aboutDynDb.innerText = backendLabel;
+
+      const aboutDynWasm = $('about-dyn-wasm');
+      if (aboutDynWasm) aboutDynWasm.innerText = runtime.hasWasm ? 'Supported (WebAssembly Ready)' : 'Not Available';
+
+      const aboutDynUa = $('about-dyn-ua');
+      if (aboutDynUa && typeof navigator !== 'undefined') {
+        aboutDynUa.innerText = navigator.userAgent;
+      }
+    },
+
+    bindSidebar() {
+      const app = $('app');
+      const collapseBtn = $('btn-sidebar-collapse');
+      const toggleBtn = $('btn-sidebar-toggle');
+      const backdrop = $('sidebar-backdrop');
+
+      const isCollapsed = localStorage.getItem('fossil_sidebar_collapsed') === 'true';
+      if (isCollapsed && app) {
+        app.classList.add('sidebar-collapsed');
+      }
+
+      const toggleCollapse = () => {
+        if (!app) return;
+        if (window.innerWidth <= 900) {
+          app.classList.toggle('sidebar-open');
+        } else {
+          const next = !app.classList.contains('sidebar-collapsed');
+          app.classList.toggle('sidebar-collapsed', next);
+          localStorage.setItem('fossil_sidebar_collapsed', String(next));
+        }
+      };
+
+      if (collapseBtn) collapseBtn.addEventListener('click', toggleCollapse);
+      if (toggleBtn) toggleBtn.addEventListener('click', toggleCollapse);
+
+      if (backdrop) backdrop.addEventListener('click', () => {
+        if (app) app.classList.remove('sidebar-open');
+      });
+    },
+
     bindTabs() {
-      const tabButtons = document.querySelectorAll('.tab-btn[data-tab]');
+      const tabButtons = document.querySelectorAll('.tab-btn[data-tab], .sidebar-link[data-tab]');
       tabButtons.forEach(btn => {
         btn.addEventListener('click', () => {
           const targetTab = btn.getAttribute('data-tab');
@@ -525,16 +649,21 @@
 
     switchTab(tabName) {
       state.currentTab = tabName;
-      document.querySelectorAll('.tab-btn').forEach(b => {
+      document.querySelectorAll('.tab-btn, .sidebar-link').forEach(b => {
         b.classList.toggle('active', b.getAttribute('data-tab') === tabName);
       });
       document.querySelectorAll('.tab-content').forEach(c => {
         c.classList.toggle('active', c.id === 'tab-' + tabName);
       });
+      const app = $('app');
+      if (app && app.classList.contains('sidebar-open')) {
+        app.classList.remove('sidebar-open');
+      }
       if (tabName === 'timeline') this.refreshTimeline();
       else if (tabName === 'files') this.refreshFiles();
       else if (tabName === 'wiki') this.refreshWiki();
       else if (tabName === 'tickets') this.refreshTickets();
+      else if (tabName === 'about') this.updateDynamicStatus();
     },
 
     bindStorageSwitcher() {
@@ -548,9 +677,9 @@
         try {
           await window.FossilStorageManager.switchBackend(newBackend);
           state.activeBackend = newBackend;
-          const activeNameEl = $('active-backend-name');
-          if (activeNameEl) activeNameEl.innerText = window.FossilStorageManager.getActiveBackend().name;
+          this.updateDynamicStatus();
           await this.refreshAll();
+          this.updateDynamicStatus();
         } catch (err) {
           alert('Failed to switch storage backend: ' + err.message);
         } finally {
