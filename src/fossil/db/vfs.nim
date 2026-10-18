@@ -32,6 +32,7 @@ type
     isOpen*: bool
     ioReads*: int            ## number of physical reads (energy proxy)
     ioWrites*: int           ## number of physical writes
+    syncs*: int              ## number of fsync calls (energy proxy)
     bytesMoved*: int
 
 proc openMemoryVfs*(): Vfs =
@@ -139,9 +140,11 @@ proc truncate*(v: Vfs; n: int) =
 proc sync*(v: Vfs) =
   ## Make previous writes durable. This is the only call that costs a real
   ## fsync, so the pager calls it once per flush, not once per page.
+  if not v.isOpen: return
   when not defined(js):
-    if v.isOpen and v.kind == vfsFile:
+    if v.kind == vfsFile:
       flushFile(v.f)
+  inc v.syncs
 
 proc kindName*(v: Vfs): string =
   case v.kind
