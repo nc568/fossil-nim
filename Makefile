@@ -75,7 +75,7 @@ qbe: build-qbe-c
 	@echo "Compiling with cproc (QBE)..."
 	@mkdir -p bin
 	@if command -v $(CPROC) >/dev/null 2>&1; then \
-		$(CPROC) -O2 -std=c11 -D_GNU_SOURCE -D_XOPEN_SOURCE=700 -DQBE_COMPAT=1 -I$(CGEN_DIR) -I$(CINTEROP) -Icinterop/sha3 -Icinterop/sqlite -Icinterop/lmdb -I$(NIM_LIB) -o bin/fossil-qbe $(CGEN_DIR)/*.c cinterop/sha3/sha3.c cinterop/sha3/sh3_wrapper.c -lsqlite3 -lz -lm -lcrypto -lssl && \
+		$(CPROC) -O2 -std=c11 -D_GNU_SOURCE -D_XOPEN_SOURCE=700 -DQBE_COMPAT=1 -I$(CGEN_DIR) -I$(CINTEROP) -Icinterop/sha3 -Icinterop/sqlite -Icinterop/lmdb -I$(NIM_LIB) -L/usr/lib/gcc/x86_64-pc-linux-gnu/16 -L/usr/lib/gcc/x86_64-linux-gnu/16 -o bin/fossil-qbe $(CGEN_DIR)/*.c cinterop/sha3/sha3.c cinterop/sha3/sh3_wrapper.c -lsqlite3 -lz -lm -lcrypto -lssl && \
 		echo "Built bin/fossil-qbe" && ./bin/fossil-qbe version && ./bin/fossil-qbe help | head -n 20 || true; \
 	else \
 		echo "cproc not found, trying gcc as fallback for QBE compat test"; \

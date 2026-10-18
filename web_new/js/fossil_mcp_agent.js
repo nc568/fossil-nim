@@ -181,6 +181,9 @@ class BrowserMcpServer {
           if (mgr.backendType === "indexeddb") {
             const page = await backend.get("wiki", params.name);
             return page || { name: params.name, text: "# Not Found" };
+          } else if (mgr.backendType === "cdb") {
+            const val = backend.get("wiki:" + params.name);
+            return { name: params.name, text: val || DEFAULT_WIKI_DOCS[params.name] || "# Empty page" };
           }
           return { name: params.name, text: DEFAULT_WIKI_DOCS[params.name] || "# Empty page" };
         }
@@ -194,6 +197,8 @@ class BrowserMcpServer {
               author: "ai-agent",
               mtime: Date.now()
             });
+          } else if (mgr.backendType === "cdb") {
+            backend.put("wiki:" + params.name, params.content || "");
           }
           return { success: true, name: params.name, bytes: (params.content || "").length };
         }

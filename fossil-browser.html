@@ -7186,6 +7186,9 @@ class BrowserMcpServer {
           if (mgr.backendType === "indexeddb") {
             const page = await backend.get("wiki", params.name);
             return page || { name: params.name, text: "# Not Found" };
+          } else if (mgr.backendType === "cdb") {
+            const val = backend.get("wiki:" + params.name);
+            return { name: params.name, text: val || DEFAULT_WIKI_DOCS[params.name] || "# Empty page" };
           }
           return { name: params.name, text: DEFAULT_WIKI_DOCS[params.name] || "# Empty page" };
         }
@@ -7199,6 +7202,8 @@ class BrowserMcpServer {
               author: "ai-agent",
               mtime: Date.now()
             });
+          } else if (mgr.backendType === "cdb") {
+            backend.put("wiki:" + params.name, params.content || "");
           }
           return { success: true, name: params.name, bytes: (params.content || "").length };
         }
@@ -7510,6 +7515,9 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       if (files.length === 0) {
         files = ['README.md'];
       }
+      if (!files.includes(state.activeFile)) {
+        state.activeFile = files[0];
+      }
 
       let treeHtml = '';
       for (const filePath of files) {
@@ -7683,6 +7691,9 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
 
       const res = await window.fossilMcp.callTool('wiki_list');
       const pages = res.pages || [];
+      if (pages.length > 0 && !pages.some(p => p.name === state.activeWiki)) {
+        state.activeWiki = pages[0].name;
+      }
 
       let listHtml = '';
       for (const p of pages) {

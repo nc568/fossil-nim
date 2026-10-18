@@ -243,6 +243,9 @@
       if (files.length === 0) {
         files = ['README.md'];
       }
+      if (!files.includes(state.activeFile)) {
+        state.activeFile = files[0];
+      }
 
       let treeHtml = '';
       for (const filePath of files) {
@@ -416,6 +419,9 @@
 
       const res = await window.fossilMcp.callTool('wiki_list');
       const pages = res.pages || [];
+      if (pages.length > 0 && !pages.some(p => p.name === state.activeWiki)) {
+        state.activeWiki = pages[0].name;
+      }
 
       let listHtml = '';
       for (const p of pages) {
