@@ -500,6 +500,7 @@ proc cmdAdd(args: seq[string], cfg: FossilConfig): int =
     echo "Cannot open checkout db"
     return 1
   defer: db.close()
+  var fileTargets: seq[string] = @[]
   for f in args:
     let full = if isAbsolute(f): f else: root / f
     # SEC-03: path traversal check for add
@@ -508,30 +509,37 @@ proc cmdAdd(args: seq[string], cfg: FossilConfig): int =
     if not normFull.startsWith(normRoot & DirSep) and normFull != normRoot:
       echo "Forbidden: path outside checkout: ", f
       continue
-    if fileExists(full):
-      let rel = relativePath(full, root)
-      let mtime = getFileInfo(full).lastWriteTime.toUnix()
-      let putRes = db.putVFile(rel, invalidRid(), invalidRid(), mtime, false, false)
-      if putRes.isOk:
-        # SEC-07: use bind
-        {.push header: "<sqlite3.h>".}
-        type sqlite3_stmt_add {.importc: "sqlite3_stmt", incompleteStruct.} = object
-        proc sqlite3_prepare_v2_add(db: pointer, zSql: cstring, nByte: cint, ppStmt: ptr ptr sqlite3_stmt_add, pzTail: pointer): cint {.importc: "sqlite3_prepare_v2".}
-        proc sqlite3_finalize_add(pStmt: ptr sqlite3_stmt_add): cint {.importc: "sqlite3_finalize".}
-        proc sqlite3_step_add(pStmt: ptr sqlite3_stmt_add): cint {.importc: "sqlite3_step".}
-        proc sqlite3_bind_text_add(pStmt: ptr sqlite3_stmt_add, i: cint, zData: cstring, n: cint, xDel: pointer): cint {.importc: "sqlite3_bind_text".}
-        {.pop.}
-        var stmtAdd: ptr sqlite3_stmt_add
-        let sqlAdd = "UPDATE vfile SET chnged=1 WHERE pathname=?1"
-        if sqlite3_prepare_v2_add(db.db, sqlAdd.cstring, -1, addr stmtAdd, nil)==0:
-          discard sqlite3_bind_text_add(stmtAdd, 1, rel.cstring, -1, nil)
-          discard sqlite3_step_add(stmtAdd)
-          discard sqlite3_finalize_add(stmtAdd)
-        echo "Added ", f
-      else:
-        echo "Failed to add ", f, ": ", putRes.error.msg
+    if dirExists(full):
+      for entry in walkDirRec(full):
+        if not entry.contains(".git") and not entry.contains("_FOSSIL_") and not entry.endsWith(".fossil") and not entry.contains("build/cgen") and not entry.contains("nimcache"):
+          fileTargets.add entry
+    elif fileExists(full):
+      fileTargets.add full
     else:
       echo "Not found: ", f
+
+  {.push header: "<sqlite3.h>".}
+  type sqlite3_stmt_add {.importc: "sqlite3_stmt", incompleteStruct.} = object
+  proc sqlite3_prepare_v2_add(db: pointer, zSql: cstring, nByte: cint, ppStmt: ptr ptr sqlite3_stmt_add, pzTail: pointer): cint {.importc: "sqlite3_prepare_v2".}
+  proc sqlite3_finalize_add(pStmt: ptr sqlite3_stmt_add): cint {.importc: "sqlite3_finalize".}
+  proc sqlite3_step_add(pStmt: ptr sqlite3_stmt_add): cint {.importc: "sqlite3_step".}
+  proc sqlite3_bind_text_add(pStmt: ptr sqlite3_stmt_add, i: cint, zData: cstring, n: cint, xDel: pointer): cint {.importc: "sqlite3_bind_text".}
+  {.pop.}
+
+  for full in fileTargets:
+    let rel = relativePath(full, root)
+    let mtime = getFileInfo(full).lastWriteTime.toUnix()
+    let putRes = db.putVFile(rel, invalidRid(), invalidRid(), mtime, false, false)
+    if putRes.isOk:
+      var stmtAdd: ptr sqlite3_stmt_add
+      let sqlAdd = "UPDATE vfile SET chnged=1 WHERE pathname=?1"
+      if sqlite3_prepare_v2_add(db.db, sqlAdd.cstring, -1, addr stmtAdd, nil)==0:
+        discard sqlite3_bind_text_add(stmtAdd, 1, rel.cstring, -1, nil)
+        discard sqlite3_step_add(stmtAdd)
+        discard sqlite3_finalize_add(stmtAdd)
+      echo "Added ", rel
+    else:
+      echo "Failed to add ", rel, ": ", putRes.error.msg
   0
 
 proc cmdDiff(args: seq[string], cfg: FossilConfig): int =

@@ -17,6 +17,120 @@ const DEFAULT_WIKI_DOCS = {
   "Storage-Backends": `# 💾 Storage Backends in the Browser\n\nFossil-Nim in the browser supports **3 distinct storage backends**:\n\n### 1. IndexedDB (Browser Native)\n- **How it works**: Uses the browser's built-in structured NoSQL storage.\n- **Pros**: Persistent, fast, works out of the box without any external downloads or WASM binaries.\n- **Best for**: Default local-first web workspaces and long-term project editing.\n\n### 2. SQLite WASM (.fossil file compatible)\n- **How it works**: Runs the real SQLite 3 engine inside WebAssembly.\n- **Pros**: 100% binary compatibility with desktop Fossil \`.fossil\` files. Drag & Drop an existing repository or export a real SQLite database anytime.\n- **Best for**: Interoperating with desktop Fossil installations and archiving.\n\n### 3. Pure-Nim CDB (RAM In-Memory)\n- **How it works**: Uses Nim's pure Constant Database engine compiled into JavaScript memory.\n- **Pros**: Extreme speed, instant O(1) key-value hash lookups, zero dependencies.\n- **Best for**: Ephemeral AI coding sessions, testing, and quick diff reviews.`
 };
 
+const NOW = Date.now();
+const ONE_DAY = 24 * 60 * 60 * 1000;
+
+const DEFAULT_TICKETS_SEED = [
+  {
+    id: "tkt-101",
+    title: "Реализовать интерактивный таймлайн-календарь",
+    desc: "Добавить отображение дедлайнов задач на сетке месяца с визуализацией приоритетов и фильтрацией.",
+    priority: "Critical",
+    status: "Open",
+    reporter: "admin",
+    created: NOW - 3 * ONE_DAY,
+    mtime: NOW - 3 * ONE_DAY,
+    deadline: NOW + 4 * ONE_DAY,
+    history: [
+      { timestamp: NOW - 3 * ONE_DAY, user: "admin", action: "created", detail: "Тикет создан с приоритетом Critical" },
+      { timestamp: NOW - 2 * ONE_DAY, user: "admin", action: "pr_linked", detail: "Привязан Pull Request pr-101" }
+    ],
+    linkedPrs: ["pr-101"]
+  },
+  {
+    id: "tkt-102",
+    title: "Оптимизация Myers diff для больших файлов",
+    desc: "Улучшить скорость вычисления разницы в WebAssembly до субмиллисекундного времени для файлов 10K+ строк.",
+    priority: "High",
+    status: "Open",
+    reporter: "lead_dev",
+    created: NOW - 10 * ONE_DAY,
+    mtime: NOW - 2 * ONE_DAY,
+    deadline: NOW - 2 * ONE_DAY, // Overdue!
+    history: [
+      { timestamp: NOW - 10 * ONE_DAY, user: "lead_dev", action: "created", detail: "Тикет создан с приоритетом High" }
+    ],
+    linkedPrs: []
+  },
+  {
+    id: "tkt-103",
+    title: "Полная документация и примеры 89 MCP инструментов",
+    desc: "Сформировать полную интерактивную документацию и тестовые вызовы для каждого MCP инструмента.",
+    priority: "Medium",
+    status: "Closed",
+    reporter: "ai_pair",
+    created: NOW - 12 * ONE_DAY,
+    mtime: NOW - 5 * ONE_DAY,
+    deadline: NOW - 5 * ONE_DAY,
+    history: [
+      { timestamp: NOW - 12 * ONE_DAY, user: "ai_pair", action: "created", detail: "Тикет создан" },
+      { timestamp: NOW - 5 * ONE_DAY, user: "ai_pair", action: "status_change", detail: "Завершено: документация обновлена и Pull Request pr-102 смерджен" }
+    ],
+    linkedPrs: ["pr-102"]
+  },
+  {
+    id: "tkt-104",
+    title: "Рефакторинг цветовой палитры в Surf и текстовых браузерах",
+    desc: "Проверить читаемость шрифтов и контрастность на темных и светлых мониторах.",
+    priority: "Low",
+    status: "Open",
+    reporter: "designer",
+    created: NOW - 1 * ONE_DAY,
+    mtime: NOW - 1 * ONE_DAY,
+    deadline: 0, // No deadline - Backlog!
+    history: [
+      { timestamp: NOW - 1 * ONE_DAY, user: "designer", action: "created", detail: "Тикет добавлен в бэклог" }
+    ],
+    linkedPrs: []
+  },
+  {
+    id: "tkt-105",
+    title: "Поддержка tarball архивирования без сжатия zip",
+    desc: "Добавить альтернативный экспорт дерева репозитория в формате tar.",
+    priority: "Medium",
+    status: "Open",
+    reporter: "core_dev",
+    created: NOW - 2 * ONE_DAY,
+    mtime: NOW - 2 * ONE_DAY,
+    deadline: 0, // No deadline - Backlog!
+    history: [
+      { timestamp: NOW - 2 * ONE_DAY, user: "core_dev", action: "created", detail: "Тикет добавлен в бэклог" }
+    ],
+    linkedPrs: []
+  }
+];
+
+const DEFAULT_PRS_SEED = [
+  {
+    id: "pr-101",
+    title: "Feat: Add Roadmap Timeline-Calendar Tab",
+    sourceBranch: "feature/calendar-timeline",
+    targetBranch: "trunk",
+    description: "Adds timeline calendar with month view, overdue detection, and ticket linking.",
+    author: "frontend_dev",
+    status: "open",
+    ticketId: "tkt-101",
+    created: NOW - 2 * ONE_DAY,
+    modified: NOW - 2 * ONE_DAY,
+    mergedAt: 0,
+    mergeCommit: ""
+  },
+  {
+    id: "pr-102",
+    title: "Docs: Complete 89 MCP Tools Reference and Interactive Console",
+    sourceBranch: "docs/mcp-spec",
+    targetBranch: "trunk",
+    description: "Rich schema metadata, parameter tables, and samples for all MCP tools.",
+    author: "ai_pair",
+    status: "merged",
+    ticketId: "tkt-103",
+    created: NOW - 6 * ONE_DAY,
+    modified: NOW - 5 * ONE_DAY,
+    mergedAt: NOW - 5 * ONE_DAY,
+    mergeCommit: "ci-mcp-docs-v2"
+  }
+];
+
 // =========================================================================
 // Backend 1: IndexedDB Storage
 // =========================================================================
@@ -29,7 +143,7 @@ class IndexedDbStorage {
 
   async init() {
     return new Promise((resolve, reject) => {
-      const req = indexedDB.open(this.dbName, 1);
+      const req = indexedDB.open(this.dbName, 2);
       req.onupgradeneeded = (e) => {
         const db = e.target.result;
         if (!db.objectStoreNames.contains("artifacts")) db.createObjectStore("artifacts", { keyPath: "uuid" });
@@ -37,6 +151,7 @@ class IndexedDbStorage {
         if (!db.objectStoreNames.contains("files")) db.createObjectStore("files", { keyPath: "path" });
         if (!db.objectStoreNames.contains("wiki")) db.createObjectStore("wiki", { keyPath: "name" });
         if (!db.objectStoreNames.contains("tickets")) db.createObjectStore("tickets", { keyPath: "id" });
+        if (!db.objectStoreNames.contains("pull_requests")) db.createObjectStore("pull_requests", { keyPath: "id" });
         if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", { keyPath: "key" });
       };
       req.onsuccess = async (e) => {
@@ -70,6 +185,26 @@ class IndexedDbStorage {
         uuid: "init-" + Math.random().toString(16).substring(2, 10)
       });
     }
+
+    // Seed tickets if empty
+    try {
+      const tktCount = await this.count("tickets");
+      if (tktCount === 0) {
+        for (const t of DEFAULT_TICKETS_SEED) {
+          await this.put("tickets", t);
+        }
+      }
+    } catch (_) {}
+
+    // Seed pull requests if empty
+    try {
+      const prCount = await this.count("pull_requests");
+      if (prCount === 0) {
+        for (const pr of DEFAULT_PRS_SEED) {
+          await this.put("pull_requests", pr);
+        }
+      }
+    } catch (_) {}
   }
 
   async get(storeName, key) {
@@ -243,7 +378,8 @@ class SqliteWasmStorage {
       CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, content TEXT, mtime REAL);
       CREATE TABLE IF NOT EXISTS mlink (mid INTEGER, fid INTEGER, fnid INTEGER, pid INTEGER, mperm INTEGER);
       CREATE TABLE IF NOT EXISTS wiki (name TEXT PRIMARY KEY, text TEXT, author TEXT, mtime REAL);
-      CREATE TABLE IF NOT EXISTS ticket (tkt_uuid TEXT PRIMARY KEY, title TEXT, desc TEXT, status TEXT, type TEXT, priority TEXT, reporter TEXT, mtime REAL);
+      CREATE TABLE IF NOT EXISTS ticket (tkt_uuid TEXT PRIMARY KEY, title TEXT, desc TEXT, status TEXT, type TEXT, priority TEXT, reporter TEXT, mtime REAL, deadline REAL, history TEXT, linked_prs TEXT);
+      CREATE TABLE IF NOT EXISTS pull_request (id TEXT PRIMARY KEY, title TEXT, description TEXT, source_branch TEXT, target_branch TEXT, author TEXT, status TEXT, ticket_id TEXT, created REAL, modified REAL, merged_at REAL, merge_commit TEXT);
     `);
   }
 
@@ -255,6 +391,28 @@ class SqliteWasmStorage {
     this.db.run("INSERT OR REPLACE INTO event(objid, type, mtime, user, comment, branch, uuid) VALUES(1, 'ci', ?, 'admin', 'Initial check-in (SQLite WASM)', 'trunk', 'ci-init-sqlite')", [Date.now() / 1000]);
     this.db.run("INSERT OR REPLACE INTO files(path, content, mtime) VALUES('README.md', '# My Fossil-Nim Project (SQLite WASM)\n\nRunning on SQLite in WebAssembly!\n', ?)", [Date.now() / 1000]);
     this.db.run("INSERT OR IGNORE INTO filename(name) VALUES('README.md')");
+
+    // Seed tickets
+    try {
+      const rows = this.exec("SELECT count(*) as cnt FROM ticket");
+      if (!rows || rows.length === 0 || rows[0].cnt === 0) {
+        for (const t of DEFAULT_TICKETS_SEED) {
+          this.db.run("INSERT OR REPLACE INTO ticket(tkt_uuid, title, desc, status, type, priority, reporter, mtime, deadline, history, linked_prs) VALUES(?, ?, ?, ?, 'code', ?, ?, ?, ?, ?, ?)",
+            [t.id, t.title, t.desc, t.status, t.priority, t.reporter, t.mtime / 1000, (t.deadline || 0) / 1000, JSON.stringify(t.history || []), JSON.stringify(t.linkedPrs || [])]);
+        }
+      }
+    } catch (_) {}
+
+    // Seed PRs
+    try {
+      const prRows = this.exec("SELECT count(*) as cnt FROM pull_request");
+      if (!prRows || prRows.length === 0 || prRows[0].cnt === 0) {
+        for (const pr of DEFAULT_PRS_SEED) {
+          this.db.run("INSERT OR REPLACE INTO pull_request(id, title, description, source_branch, target_branch, author, status, ticket_id, created, modified, merged_at, merge_commit) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [pr.id, pr.title, pr.description, pr.sourceBranch, pr.targetBranch, pr.author, pr.status, pr.ticketId, pr.created / 1000, pr.modified / 1000, (pr.mergedAt || 0) / 1000, pr.mergeCommit || ""]);
+        }
+      }
+    } catch (_) {}
   }
 
   exec(sql, params = []) {
@@ -425,7 +583,8 @@ class CdbMemoryStorage {
       mtime: Date.now(),
       uuid: "ci-init-cdb"
     }];
-    this.ticketList = [];
+    this.ticketList = JSON.parse(JSON.stringify(DEFAULT_TICKETS_SEED));
+    this.prList = JSON.parse(JSON.stringify(DEFAULT_PRS_SEED));
     this.syncMeta();
   }
 
@@ -447,6 +606,43 @@ class CdbMemoryStorage {
     this.syncMeta();
   }
 
+  updateTicket(id, updates) {
+    const idx = this.ticketList.findIndex(t => t.id === id);
+    if (idx !== -1) {
+      Object.assign(this.ticketList[idx], updates);
+      this.syncMeta();
+      return this.ticketList[idx];
+    }
+    return null;
+  }
+
+  deleteTicket(id) {
+    this.ticketList = this.ticketList.filter(t => t.id !== id);
+    this.syncMeta();
+    return true;
+  }
+
+  getPullRequests() {
+    return this.prList || [];
+  }
+
+  addPullRequest(pr) {
+    if (!this.prList) this.prList = [];
+    this.prList.push(pr);
+    this.syncMeta();
+  }
+
+  updatePullRequest(id, updates) {
+    if (!this.prList) this.prList = [];
+    const idx = this.prList.findIndex(p => p.id === id);
+    if (idx !== -1) {
+      Object.assign(this.prList[idx], updates);
+      this.syncMeta();
+      return this.prList[idx];
+    }
+    return null;
+  }
+
   getEvents() {
     return this.eventsList;
   }
@@ -460,6 +656,7 @@ class CdbMemoryStorage {
     if (this.handle && window.FossilCore) {
       window.FossilCore.cdbPut(this.handle, "meta:file_list", JSON.stringify(Array.from(this.fileList)));
       window.FossilCore.cdbPut(this.handle, "meta:ticket_list", JSON.stringify(this.ticketList));
+      window.FossilCore.cdbPut(this.handle, "meta:pr_list", JSON.stringify(this.prList || []));
       window.FossilCore.cdbPut(this.handle, "meta:event_list", JSON.stringify(this.eventsList));
     }
   }

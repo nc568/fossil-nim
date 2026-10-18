@@ -28,6 +28,12 @@ type
     content*: string
     format*: string
 
+  TicketHistoryEntry* = object
+    timestamp*: int64
+    user*: string
+    action*: string
+    detail*: string
+
   Ticket* = object
     id*: string
     title*: string
@@ -39,9 +45,12 @@ type
     reporter*: string
     created*: int64
     modified*: int64
+    deadline*: int64
     uuid*: Uuid
     rid*: Rid
     comments*: seq[TicketComment]
+    history*: seq[TicketHistoryEntry]
+    linkedPrs*: seq[string]
     tags*: seq[string]
 
 proc listTicketsSqlite*(backend: SqliteBackend, status: TicketStatus = tsOpen, limit: int = 50): FossilResult[seq[Ticket]] =
@@ -365,6 +374,16 @@ proc ticketToJson*(ticket: Ticket): JsonNode {.gcsafe.} =
     obj["content"] = newJString(c.content)
     obj["html"] = newJString(mdParser.markdownToHtml(c.content))
     commentsArr.add obj
+  var historyArr = newJArray()
+  for h in ticket.history:
+    var obj = newJObject()
+    obj["timestamp"] = newJInt(h.timestamp)
+    obj["user"] = newJString(h.user)
+    obj["action"] = newJString(h.action)
+    obj["detail"] = newJString(h.detail)
+    historyArr.add obj
+  var prsArr = newJArray()
+  for pr in ticket.linkedPrs: prsArr.add newJString(pr)
   var res = newJObject()
   res["id"] = newJString(ticket.id)
   res["title"] = newJString(ticket.title)
@@ -377,10 +396,13 @@ proc ticketToJson*(ticket: Ticket): JsonNode {.gcsafe.} =
   res["reporter"] = newJString(ticket.reporter)
   res["created"] = newJInt(ticket.created)
   res["modified"] = newJInt(ticket.modified)
+  res["deadline"] = newJInt(ticket.deadline)
   var tagsArr = newJArray()
   for t in ticket.tags: tagsArr.add newJString(t)
   res["tags"] = tagsArr
   res["comments"] = commentsArr
+  res["history"] = historyArr
+  res["linkedPrs"] = prsArr
   res
 
 proc renderTicketWithTh1*(ticket: Ticket, th1Script: string, vars: Table[string, string] = initTable[string, string]()): string =
@@ -392,3 +414,49 @@ proc renderTicketWithTh1*(ticket: Ticket, th1Script: string, vars: Table[string,
   interp.setVar("ticketStatus", $ticket.status)
   discard interp.evalScript(th1Script)
   interp.output & renderTicket(ticket)
+
+proc closeTicketSqlite*(backend: var SqliteBackend, id: string, user: string = "admin", resolution: string = "closed"): FossilResult[Ticket] =
+  var updates = initTable[string, string]()
+  updates["status"] = "closed"
+  let res = updateTicketSqlite(backend, id, updates)
+  if res.isErr: return res
+  var tkt = res.value
+  let now = getTime().toUnix()
+  tkt.history.add TicketHistoryEntry(timestamp: now, user: user, action: "status_change", detail: "Ticket closed: " & resolution)
+  ok(tkt)
+
+proc reopenTicketSqlite*(backend: var SqliteBackend, id: string, user: string = "admin"): FossilResult[Ticket] =
+  var updates = initTable[string, string]()
+  updates["status"] = "open"
+  let res = updateTicketSqlite(backend, id, updates)
+  if res.isErr: return res
+  var tkt = res.value
+  let now = getTime().toUnix()
+  tkt.history.add TicketHistoryEntry(timestamp: now, user: user, action: "status_change", detail: "Ticket reopened")
+  ok(tkt)
+
+proc deleteTicketSqlite*(backend: var SqliteBackend, id: string): FossilResult[bool] =
+  {.push header: "<sqlite3.h>".}
+  type sqlite3_stmt_del {.importc: "sqlite3_stmt", incompleteStruct.} = object
+  proc sqlite3_prepare_v2_del(db: pointer, zSql: cstring, nByte: cint, ppStmt: ptr ptr sqlite3_stmt_del, pzTail: pointer): cint {.importc: "sqlite3_prepare_v2".}
+  proc sqlite3_finalize_del(pStmt: ptr sqlite3_stmt_del): cint {.importc: "sqlite3_finalize".}
+  proc sqlite3_step_del(pStmt: ptr sqlite3_stmt_del): cint {.importc: "sqlite3_step".}
+  proc sqlite3_bind_text_del(pStmt: ptr sqlite3_stmt_del, i: cint, zData: cstring, n: cint, xDel: pointer): cint {.importc: "sqlite3_bind_text".}
+  {.pop.}
+  var stmt: ptr sqlite3_stmt_del
+  let sql = "DELETE FROM ticket WHERE tkt_uuid=?1;"
+  if sqlite3_prepare_v2_del(backend.db, sql.cstring, -1, addr stmt, nil) == 0:
+    discard sqlite3_bind_text_del(stmt, 1, id.cstring, -1, nil)
+    discard sqlite3_step_del(stmt)
+    discard sqlite3_finalize_del(stmt)
+  ok(true)
+
+proc listCalendarTicketsSqlite*(backend: SqliteBackend, status: string = "all"): FossilResult[seq[Ticket]] =
+  let st = if status == "closed": tsClosed else: tsOpen
+  let res = listTicketsSqlite(backend, st, 200)
+  if res.isErr: return res
+  var filtered: seq[Ticket] = @[]
+  for t in res.value:
+    if t.deadline > 0:
+      filtered.add t
+  ok(filtered)

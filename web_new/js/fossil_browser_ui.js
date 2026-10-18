@@ -436,8 +436,14 @@
     activeFile: 'README.md',
     activeWiki: 'Home',
     activeMcpTool: 'vcs_status',
+    mcpCategoryFilter: 'all',
     wikiEditMode: false,
-    fileOriginalContent: ''
+    fileOriginalContent: '',
+    ticketFilter: 'all',
+    ticketPriorityFilter: 'all',
+    calendarMonth: new Date().getMonth(),
+    calendarYear: new Date().getFullYear(),
+    calendarDate: new Date()
   };
 
   // Helper functions
@@ -550,6 +556,8 @@
       this.bindDiffTool();
       this.bindWikiActions();
       this.bindTicketActions();
+      this.bindCalendarActions();
+      this.bindPullRequestActions();
       this.bindMcpActions();
       this.bindStorageDiagnostics();
 
@@ -695,6 +703,7 @@
       else if (tabName === 'files') this.refreshFiles();
       else if (tabName === 'wiki') this.refreshWiki();
       else if (tabName === 'tickets') this.refreshTickets();
+      else if (tabName === 'calendar') this.refreshCalendar();
       else if (tabName === 'about') this.updateDynamicStatus();
     },
 
@@ -1004,7 +1013,9 @@
         this.refreshTimeline(),
         this.refreshFiles(),
         this.refreshWiki(),
-        this.refreshTickets()
+        this.refreshTickets(),
+        this.refreshCalendar(),
+        this.refreshMcpList()
       ]);
     },
 
@@ -1347,7 +1358,7 @@
       }
     },
 
-    // --- Tickets ---
+    // --- Tickets Overhaul & Actions ---
     bindTicketActions() {
       const newTktBtn = $('btn-new-ticket-modal');
       const modal = $('modal-ticket');
@@ -1365,60 +1376,809 @@
           e.preventDefault();
           const title = $('ticket-title').value.trim();
           const priority = $('ticket-priority').value;
+          const deadline = $('ticket-deadline') ? $('ticket-deadline').value : '';
           const desc = $('ticket-desc').value.trim();
           if (!title) return;
 
-          const res = await window.fossilMcp.callTool('ticket_create', { title, priority, desc });
+          const res = await window.fossilMcp.callTool('ticket_create', { title, priority, deadline, desc });
           if (res.success) {
             $('ticket-title').value = '';
             $('ticket-desc').value = '';
+            if ($('ticket-deadline')) $('ticket-deadline').value = '';
             modal.classList.add('hidden');
             await this.refreshTickets();
-            showToast('Ticket created successfully!');
+            await this.refreshCalendar();
+            showToast('Тикет успешно создан!');
           }
         });
       }
+
+      // Filter bar buttons
+      document.querySelectorAll('.ticket-filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.ticket-filter-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          state.ticketFilter = btn.getAttribute('data-filter') || 'all';
+          this.refreshTickets();
+        });
+      });
+
+      // Priority filter dropdown
+      const prioritySelect = $('select-ticket-priority-filter');
+      if (prioritySelect) {
+        prioritySelect.addEventListener('change', (e) => {
+          state.ticketPriorityFilter = e.target.value;
+          this.refreshTickets();
+        });
+      }
+
+      // Edit Modal Actions
+      const editModal = $('modal-ticket-edit');
+      const editCloseBtn = $('btn-modal-ticket-edit-close');
+      const editCancelBtn = $('btn-modal-ticket-edit-cancel');
+      const editForm = $('form-ticket-edit');
+      const deleteBtn = $('btn-ticket-delete-action');
+
+      if (editCloseBtn && editModal) editCloseBtn.addEventListener('click', () => editModal.classList.add('hidden'));
+      if (editCancelBtn && editModal) editCancelBtn.addEventListener('click', () => editModal.classList.add('hidden'));
+
+      if (editForm) {
+        editForm.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const id = $('ticket-edit-id').value;
+          const title = $('ticket-edit-title').value.trim();
+          const priority = $('ticket-edit-priority').value;
+          const status = $('ticket-edit-status').value;
+          const deadline = $('ticket-edit-deadline').value;
+          const desc = $('ticket-edit-desc').value.trim();
+
+          const res = await window.fossilMcp.callTool('ticket_update', { id, title, priority, status, deadline, desc });
+          if (res.success) {
+            editModal.classList.add('hidden');
+            await this.refreshTickets();
+            await this.refreshCalendar();
+            showToast('Изменения сохранены!');
+          }
+        });
+      }
+
+      if (deleteBtn) {
+        deleteBtn.addEventListener('click', async () => {
+          const id = $('ticket-edit-id').value;
+          if (confirm(`Вы уверены, что хотите удалить тикет #${id}?`)) {
+            await window.fossilMcp.callTool('ticket_delete', { id });
+            if (editModal) editModal.classList.add('hidden');
+            await this.refreshTickets();
+            await this.refreshCalendar();
+            showToast('Тикет удален!');
+          }
+        });
+      }
+
+      // Link PR button inside Edit Modal
+      const linkPrBtn = $('btn-ticket-link-new-pr');
+      if (linkPrBtn) {
+        linkPrBtn.addEventListener('click', () => {
+          const id = $('ticket-edit-id').value;
+          if (editModal) editModal.classList.add('hidden');
+          this.openPrModal(id);
+        });
+      }
+
+      // History Modal Close Actions
+      const histModal = $('modal-ticket-history');
+      const histCloseBtn = $('btn-modal-ticket-history-close');
+      const histOkBtn = $('btn-modal-ticket-history-ok');
+      if (histCloseBtn && histModal) histCloseBtn.addEventListener('click', () => histModal.classList.add('hidden'));
+      if (histOkBtn && histModal) histOkBtn.addEventListener('click', () => histModal.classList.add('hidden'));
+    },
+
+    async openTicketEditModal(id) {
+      const modal = $('modal-ticket-edit');
+      if (!modal) return;
+      const res = await window.fossilMcp.callTool('ticket_get', { id });
+      const t = res.ticket;
+      if (!t) return;
+
+      $('ticket-edit-id').value = t.id;
+      const idBadge = $('ticket-edit-id-badge');
+      if (idBadge) idBadge.innerText = t.id;
+      $('ticket-edit-title').value = t.title || '';
+      $('ticket-edit-priority').value = t.priority || 'Medium';
+      $('ticket-edit-status').value = t.status || 'Open';
+      $('ticket-edit-desc').value = t.desc || '';
+
+      const deadlineInput = $('ticket-edit-deadline');
+      if (deadlineInput) {
+        if (t.deadline && Number(t.deadline) > 0) {
+          const d = new Date(Number(t.deadline));
+          const yyyy = d.getFullYear();
+          const mm = String(d.getMonth() + 1).padStart(2, '0');
+          const dd = String(d.getDate()).padStart(2, '0');
+          deadlineInput.value = `${yyyy}-${mm}-${dd}`;
+        } else {
+          deadlineInput.value = '';
+        }
+      }
+
+      // Render Linked PRs
+      const prsContainer = $('ticket-edit-linked-prs');
+      if (prsContainer) {
+        const prListRes = await window.fossilMcp.callTool('pr_list', { ticketId: t.id });
+        const prs = prListRes.pullRequests || [];
+        if (prs.length === 0) {
+          prsContainer.innerHTML = '<span style="font-size:0.82rem; color:var(--color-text-muted);">Нет привязанных Pull Requests.</span>';
+        } else {
+          let prHtml = '';
+          for (const pr of prs) {
+            const isMerged = (pr.status || '').toLowerCase() === 'merged';
+            prHtml += `
+              <div style="display:flex; justify-content:space-between; align-items:center; padding:0.4rem 0.6rem; background:var(--color-bg); border:1px solid var(--color-border); border-radius:4px; font-size:0.82rem;">
+                <div style="display:flex; gap:0.4rem; align-items:center;">
+                  <span class="badge ${isMerged ? 'badge-primary' : 'badge-success'}">${escapeHtml(pr.id)}</span>
+                  <b>${escapeHtml(pr.title)}</b>
+                  <span style="color:var(--color-text-muted); font-family:var(--font-mono); font-size:0.75rem;">(${escapeHtml(pr.sourceBranch)} ➔ ${escapeHtml(pr.targetBranch)})</span>
+                </div>
+                ${!isMerged ? `<button type="button" class="btn btn-primary btn-sm btn-merge-pr" data-pr="${escapeHtml(pr.id)}" style="font-size:0.75rem; padding:0.15rem 0.45rem;">🔀 Merge</button>` : '<span class="badge badge-secondary">Merged ✓</span>'}
+              </div>
+            `;
+          }
+          prsContainer.innerHTML = prHtml;
+          prsContainer.querySelectorAll('.btn-merge-pr').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const prId = btn.getAttribute('data-pr');
+              await window.fossilMcp.callTool('pr_merge', { id: prId });
+              showToast(`Pull Request ${prId} смерджен в ветку trunk!`);
+              this.openTicketEditModal(t.id);
+              await this.refreshTickets();
+              await this.refreshCalendar();
+            });
+          });
+        }
+      }
+
+      modal.classList.remove('hidden');
+    },
+
+    async openTicketHistoryModal(id) {
+      const modal = $('modal-ticket-history');
+      if (!modal) return;
+      const res = await window.fossilMcp.callTool('ticket_get', { id });
+      const t = res.ticket;
+      if (!t) return;
+
+      const badge = $('ticket-history-id-badge');
+      if (badge) badge.innerText = t.id;
+      const titleRow = $('ticket-history-title-row');
+      if (titleRow) titleRow.innerText = t.title;
+
+      const list = $('ticket-history-list');
+      if (list) {
+        const history = t.history || [];
+        if (history.length === 0) {
+          list.innerHTML = '<div style="color:var(--color-text-muted); font-size:0.85rem;">Нет записей в истории изменений.</div>';
+        } else {
+          let html = '';
+          for (const item of history) {
+            const timeStr = item.timestamp ? new Date(item.timestamp).toLocaleString() : '';
+            html += `
+              <div class="history-item">
+                <div class="history-dot"></div>
+                <div class="history-time">${escapeHtml(timeStr)} • <b>${escapeHtml(item.user || 'system')}</b></div>
+                <div class="history-action">${escapeHtml(item.action || 'update')}</div>
+                <div class="history-detail">${escapeHtml(item.detail || '')}</div>
+              </div>
+            `;
+          }
+          list.innerHTML = html;
+        }
+      }
+      modal.classList.remove('hidden');
     },
 
     async refreshTickets() {
       const list = $('tickets-list');
       if (!list) return;
-      const res = await window.fossilMcp.callTool('ticket_list', {});
-      const tickets = res.tickets || [];
-      if (tickets.length === 0) {
-        list.innerHTML = `<div class="empty">${window.FossilI18n.t('tickets.empty')}</div>`;
+
+      const allRes = await window.fossilMcp.callTool('ticket_list', { status: 'all' });
+      const allTickets = allRes.tickets || [];
+
+      // Update counters
+      const cntAll = $('tkt-cnt-all');
+      const cntOpen = $('tkt-cnt-open');
+      const cntClosed = $('tkt-cnt-closed');
+      const openCount = allTickets.filter(t => (t.status || 'Open').toLowerCase() !== 'closed').length;
+      const closedCount = allTickets.filter(t => (t.status || 'Open').toLowerCase() === 'closed').length;
+      if (cntAll) cntAll.innerText = allTickets.length;
+      if (cntOpen) cntOpen.innerText = openCount;
+      if (cntClosed) cntClosed.innerText = closedCount;
+
+      // Filter tickets
+      let filtered = allTickets;
+      if (state.ticketFilter === 'open') {
+        filtered = filtered.filter(t => (t.status || 'Open').toLowerCase() !== 'closed');
+      } else if (state.ticketFilter === 'closed') {
+        filtered = filtered.filter(t => (t.status || 'Open').toLowerCase() === 'closed');
+      }
+
+      if (state.ticketPriorityFilter && state.ticketPriorityFilter !== 'all') {
+        filtered = filtered.filter(t => (t.priority || '').toLowerCase() === state.ticketPriorityFilter.toLowerCase());
+      }
+
+      if (filtered.length === 0) {
+        list.innerHTML = `<div class="empty">${window.FossilI18n.t('tickets.empty', 'No tickets found matching the selected filter.')}</div>`;
         return;
       }
+
+      const now = Date.now();
       let html = '<div style="display:flex; flex-direction:column; gap:0.75rem;">';
-      for (const t of tickets) {
-        const badgeClass = t.priority === 'Critical' ? 'badge-danger' : (t.priority === 'High' ? 'badge-warning' : 'badge-info');
+
+      for (const t of filtered) {
+        const priority = t.priority || 'Medium';
+        const priorityClass = `priority-${priority.toLowerCase()}`;
+        const isClosed = (t.status || 'Open').toLowerCase() === 'closed';
+
+        // Deadline computation
+        let deadlineHtml = '';
+        if (t.deadline && Number(t.deadline) > 0) {
+          const d = new Date(Number(t.deadline));
+          const diffDays = Math.ceil((Number(t.deadline) - now) / (24 * 60 * 60 * 1000));
+          if (diffDays < 0 && !isClosed) {
+            deadlineHtml = `<span class="badge-overdue">⚠️ Просрочено на ${Math.abs(diffDays)} дн. (${d.toLocaleDateString()})</span>`;
+          } else {
+            deadlineHtml = `<span class="badge badge-secondary" style="font-size:0.75rem;">📅 Дедлайн: ${d.toLocaleDateString()} (${diffDays >= 0 ? 'осталось ' + diffDays + ' дн.' : 'завершено'})</span>`;
+          }
+        } else {
+          deadlineHtml = `<span class="badge badge-secondary" style="opacity:0.7; font-size:0.75rem;">📋 В бэклоге (без дедлайна)</span>`;
+        }
+
+        // Linked PRs badges
+        let prsHtml = '';
+        if (t.linkedPrs && t.linkedPrs.length > 0) {
+          prsHtml = t.linkedPrs.map(prId => `<span class="pr-badge" data-pr="${escapeHtml(prId)}">🔀 ${escapeHtml(prId)}</span>`).join(' ');
+        }
+
         html += `
-          <div class="card" style="padding:1rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
-              <div style="display:flex; gap:0.5rem; align-items:center;">
-                <span class="badge ${badgeClass}">${escapeHtml(t.priority || 'Medium')}</span>
-                <b style="font-size:1rem;">${escapeHtml(t.title)}</b>
+          <div class="ticket-card ${priorityClass}" data-id="${escapeHtml(t.id)}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.4rem; flex-wrap:wrap; gap:0.5rem;">
+              <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+                <span class="badge ${priorityClass}">${escapeHtml(priority)}</span>
+                <b style="font-size:1.02rem; color:var(--color-text);">${escapeHtml(t.title)}</b>
+                <span style="font-size:0.78rem; font-family:var(--font-mono); color:var(--color-text-muted);">#${escapeHtml(t.id)}</span>
               </div>
-              <span class="badge badge-secondary">${escapeHtml(t.status || 'Open')}</span>
+              <div style="display:flex; gap:0.4rem; align-items:center; flex-wrap:wrap;">
+                ${deadlineHtml}
+                <span class="badge ${isClosed ? 'badge-secondary' : 'badge-primary'}">${escapeHtml(t.status || 'Open')}</span>
+              </div>
             </div>
-            <p style="margin:0; font-size:0.88rem; color:var(--color-text-secondary);">${escapeHtml(t.desc || 'No description provided')}</p>
+
+            <p style="margin:0 0 0.5rem 0; font-size:0.88rem; color:var(--color-text-secondary); line-height:1.5;">
+              ${escapeHtml(t.desc || 'Описание отсутствует')}
+            </p>
+
+            ${prsHtml ? `<div style="margin-bottom:0.5rem; display:flex; gap:0.35rem; align-items:center; flex-wrap:wrap;"><span style="font-size:0.78rem; color:var(--color-text-muted);">Pull Requests:</span> ${prsHtml}</div>` : ''}
+
+            <div class="ticket-actions-row">
+              <button class="btn btn-secondary btn-sm btn-ticket-action" data-action="edit" data-id="${escapeHtml(t.id)}">✏️ Редактировать</button>
+              ${!isClosed ?
+                `<button class="btn btn-secondary btn-sm btn-ticket-action" data-action="close" data-id="${escapeHtml(t.id)}">✓ Завершить</button>` :
+                `<button class="btn btn-secondary btn-sm btn-ticket-action" data-action="reopen" data-id="${escapeHtml(t.id)}">🔄 Открыть снова</button>`
+              }
+              <button class="btn btn-secondary btn-sm btn-ticket-action" data-action="history" data-id="${escapeHtml(t.id)}">📜 История (${(t.history || []).length})</button>
+              <button class="btn btn-secondary btn-sm btn-ticket-action" data-action="pr" data-id="${escapeHtml(t.id)}">🔀 Pull Request</button>
+              <button class="btn btn-secondary btn-sm btn-ticket-action" data-action="delete" data-id="${escapeHtml(t.id)}" style="margin-left:auto; color:var(--color-danger);">🗑️ Удалить</button>
+            </div>
           </div>
         `;
       }
       html += '</div>';
       list.innerHTML = html;
+
+      // Event delegation for actions
+      list.querySelectorAll('.btn-ticket-action').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const action = btn.getAttribute('data-action');
+          const id = btn.getAttribute('data-id');
+
+          if (action === 'edit') {
+            this.openTicketEditModal(id);
+          } else if (action === 'close') {
+            await window.fossilMcp.callTool('ticket_close', { id });
+            showToast(`Тикет #${id} закрыт!`);
+            await this.refreshTickets();
+            await this.refreshCalendar();
+          } else if (action === 'reopen') {
+            await window.fossilMcp.callTool('ticket_reopen', { id });
+            showToast(`Тикет #${id} открыт снова!`);
+            await this.refreshTickets();
+            await this.refreshCalendar();
+          } else if (action === 'history') {
+            this.openTicketHistoryModal(id);
+          } else if (action === 'pr') {
+            this.openPrModal(id);
+          } else if (action === 'delete') {
+            if (confirm(`Удалить тикет #${id}?`)) {
+              await window.fossilMcp.callTool('ticket_delete', { id });
+              showToast(`Тикет #${id} удален!`);
+              await this.refreshTickets();
+              await this.refreshCalendar();
+            }
+          }
+        });
+      });
     },
 
-    // --- MCP Tools Console ---
-    bindMcpActions() {
-      const list = $('mcp-tools-list');
-      if (!list) return;
+    // --- Timeline Calendar & Roadmap Actions ---
+    bindCalendarActions() {
+      const prevBtn = $('btn-calendar-prev');
+      const nextBtn = $('btn-calendar-next');
+      const todayBtn = $('btn-calendar-today');
+      const addBtn = $('btn-calendar-add-ticket');
 
-      const serverInfo = window.fossilMcp.listTools();
-      const tools = serverInfo.tools;
+      if (prevBtn) {
+        prevBtn.addEventListener('click', () => {
+          state.calendarMonth--;
+          if (state.calendarMonth < 0) {
+            state.calendarMonth = 11;
+            state.calendarYear--;
+          }
+          this.refreshCalendar();
+        });
+      }
+
+      if (nextBtn) {
+        nextBtn.addEventListener('click', () => {
+          state.calendarMonth++;
+          if (state.calendarMonth > 11) {
+            state.calendarMonth = 0;
+            state.calendarYear++;
+          }
+          this.refreshCalendar();
+        });
+      }
+
+      if (todayBtn) {
+        todayBtn.addEventListener('click', () => {
+          const now = new Date();
+          state.calendarMonth = now.getMonth();
+          state.calendarYear = now.getFullYear();
+          this.refreshCalendar();
+        });
+      }
+
+      if (addBtn) {
+        addBtn.addEventListener('click', () => {
+          const modal = $('modal-ticket');
+          if (modal) {
+            const todayStr = new Date().toISOString().split('T')[0];
+            if ($('ticket-deadline')) $('ticket-deadline').value = todayStr;
+            modal.classList.remove('hidden');
+          }
+        });
+      }
+    },
+
+    async refreshCalendar() {
+      const grid = $('calendar-days-grid');
+      const monthLabel = $('calendar-month-label');
+      if (!grid) return;
+
+      const monthNamesRu = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+      const monthNamesEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const curLang = (window.FossilI18n && window.FossilI18n.currentLang) || 'ru';
+      const mName = curLang === 'ru' ? monthNamesRu[state.calendarMonth] : monthNamesEn[state.calendarMonth];
+      if (monthLabel) monthLabel.innerText = `${mName} ${state.calendarYear}`;
+
+      // Fetch all tickets
+      const allRes = await window.fossilMcp.callTool('ticket_list', { status: 'all' });
+      const tickets = allRes.tickets || [];
+      const now = new Date();
+      const isCurrentMonth = now.getFullYear() === state.calendarYear && now.getMonth() === state.calendarMonth;
+
+      // Filter tickets with and without deadlines
+      const scheduled = tickets.filter(t => t.deadline && Number(t.deadline) > 0);
+      const backlog = tickets.filter(t => !t.deadline || Number(t.deadline) === 0);
+
+      // Overdue tickets
+      const nowTs = Date.now();
+      const overdue = scheduled.filter(t => Number(t.deadline) < nowTs && (t.status || 'Open').toLowerCase() !== 'closed');
+
+      // Update counters & badges
+      const totalScheduledEl = $('cal-total-scheduled');
+      const totalOverdueEl = $('cal-total-overdue');
+      const backlogCountEl = $('cal-backlog-count');
+      const upcomingCountEl = $('cal-upcoming-count');
+      const sidebarCalBadge = $('sidebar-calendar-badge');
+
+      if (totalScheduledEl) totalScheduledEl.innerText = `${scheduled.length} с дедлайном`;
+      if (totalOverdueEl) {
+        if (overdue.length > 0) {
+          totalOverdueEl.style.display = 'inline-block';
+          totalOverdueEl.innerText = `⚠️ ${overdue.length} просрочено`;
+        } else {
+          totalOverdueEl.style.display = 'none';
+        }
+      }
+      if (backlogCountEl) backlogCountEl.innerText = backlog.length;
+      if (upcomingCountEl) upcomingCountEl.innerText = scheduled.length;
+      if (sidebarCalBadge) {
+        if (overdue.length > 0) {
+          sidebarCalBadge.style.display = 'inline-block';
+          sidebarCalBadge.innerText = overdue.length;
+        } else {
+          sidebarCalBadge.style.display = 'none';
+        }
+      }
+
+      // Render Backlog side panel
+      const backlogList = $('calendar-backlog-list');
+      if (backlogList) {
+        if (backlog.length === 0) {
+          backlogList.innerHTML = '<div style="font-size:0.8rem; color:var(--color-text-muted);">Все задачи имеют назначенные дедлайны!</div>';
+        } else {
+          let bHtml = '';
+          for (const t of backlog) {
+            const pClass = `priority-${(t.priority || 'Medium').toLowerCase()}`;
+            bHtml += `
+              <div class="ticket-card ${pClass}" style="padding:0.6rem 0.75rem; cursor:pointer;" data-id="${escapeHtml(t.id)}">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.2rem;">
+                  <span class="badge ${pClass}" style="font-size:0.7rem; padding:0.1rem 0.35rem;">${escapeHtml(t.priority || 'Medium')}</span>
+                  <span style="font-size:0.72rem; color:var(--color-text-muted);">#${escapeHtml(t.id)}</span>
+                </div>
+                <div style="font-weight:600; font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.title)}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.35rem; font-size:0.72rem;">
+                  <span style="color:var(--color-text-secondary);">${escapeHtml(t.status || 'Open')}</span>
+                  <span style="color:var(--color-primary); font-weight:600;">+ Дедлайн</span>
+                </div>
+              </div>
+            `;
+          }
+          backlogList.innerHTML = bHtml;
+          backlogList.querySelectorAll('.ticket-card').forEach(el => {
+            el.addEventListener('click', () => this.openTicketEditModal(el.getAttribute('data-id')));
+          });
+        }
+      }
+
+      // Render Upcoming side panel
+      const upcomingList = $('calendar-upcoming-list');
+      if (upcomingList) {
+        if (scheduled.length === 0) {
+          upcomingList.innerHTML = '<div style="font-size:0.8rem; color:var(--color-text-muted);">Нет запланированных задач.</div>';
+        } else {
+          let uHtml = '';
+          for (const t of scheduled) {
+            const pClass = `priority-${(t.priority || 'Medium').toLowerCase()}`;
+            const diffDays = Math.ceil((Number(t.deadline) - nowTs) / (24 * 60 * 60 * 1000));
+            const isClosed = (t.status || 'Open').toLowerCase() === 'closed';
+            const isOverdue = diffDays < 0 && !isClosed;
+            const d = new Date(Number(t.deadline));
+
+            uHtml += `
+              <div class="ticket-card ${pClass}" style="padding:0.6rem 0.75rem; cursor:pointer;" data-id="${escapeHtml(t.id)}">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.2rem;">
+                  <span class="badge ${pClass}" style="font-size:0.7rem; padding:0.1rem 0.35rem;">${escapeHtml(t.priority || 'Medium')}</span>
+                  ${isOverdue ? '<span class="badge-overdue">ПРОСРОЧЕНО</span>' : `<span style="font-size:0.72rem; color:var(--color-text-muted);">${d.toLocaleDateString()}</span>`}
+                </div>
+                <div style="font-weight:600; font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.title)}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.35rem; font-size:0.72rem;">
+                  <span style="color:var(--color-text-secondary);">${escapeHtml(t.status || 'Open')}</span>
+                  <span style="color:var(--color-text-muted);">${isClosed ? 'Завершено ✓' : (diffDays >= 0 ? diffDays + ' дн. осталось' : Math.abs(diffDays) + ' дн. назад')}</span>
+                </div>
+              </div>
+            `;
+          }
+          upcomingList.innerHTML = uHtml;
+          upcomingList.querySelectorAll('.ticket-card').forEach(el => {
+            el.addEventListener('click', () => this.openTicketEditModal(el.getAttribute('data-id')));
+          });
+        }
+      }
+
+      // Compute calendar matrix
+      const year = state.calendarYear;
+      const month = state.calendarMonth;
+      const firstDayOfMonth = new Date(year, month, 1);
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+      // In Russia/Europe, week starts on Monday (0=Mon ... 6=Sun)
+      let startDayOfWeek = firstDayOfMonth.getDay() - 1;
+      if (startDayOfWeek === -1) startDayOfWeek = 6;
+
+      let cellsHtml = '';
+
+      // Previous month padding cells
+      for (let i = startDayOfWeek - 1; i >= 0; i--) {
+        const dayNum = daysInPrevMonth - i;
+        cellsHtml += `
+          <div class="calendar-cell other-month">
+            <div class="calendar-day-header">
+              <span class="calendar-day-num">${dayNum}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      // Current month day cells
+      for (let day = 1; day <= daysInMonth; day++) {
+        const isToday = isCurrentMonth && day === now.getDate();
+        const currentCellDate = new Date(year, month, day);
+        const yyyy = year;
+        const mm = String(month + 1).padStart(2, '0');
+        const dd = String(day).padStart(2, '0');
+        const dateIso = `${yyyy}-${mm}-${dd}`;
+
+        // Find tickets matching this day
+        const dayTickets = scheduled.filter(t => {
+          const tDate = new Date(Number(t.deadline));
+          return tDate.getFullYear() === year && tDate.getMonth() === month && tDate.getDate() === day;
+        });
+
+        let eventsHtml = '';
+        for (const t of dayTickets) {
+          const pClass = `priority-${(t.priority || 'Medium').toLowerCase()}`;
+          const isClosed = (t.status || 'Open').toLowerCase() === 'closed';
+          const isOverdue = Number(t.deadline) < nowTs && !isClosed;
+
+          eventsHtml += `
+            <div class="calendar-event-pill ${pClass}" data-id="${escapeHtml(t.id)}" title="${escapeHtml(t.title)} (${t.priority})">
+              ${isOverdue ? '⚠️ ' : (isClosed ? '✓ ' : '')}${escapeHtml(t.title)}
+            </div>
+          `;
+        }
+
+        cellsHtml += `
+          <div class="calendar-cell ${isToday ? 'today calendar-day-today' : ''}" data-date="${dateIso}">
+            <div class="calendar-day-header">
+              <span class="calendar-day-num">${day}</span>
+              ${isToday ? '<span style="font-size:0.68rem; font-weight:700; color:var(--color-primary);">Сегодня</span>' : ''}
+            </div>
+            <div style="display:flex; flex-direction:column; gap:0.25rem; overflow-y:auto; flex:1;">
+              ${eventsHtml}
+            </div>
+          </div>
+        `;
+      }
+
+      // Next month padding cells to complete 35 or 42 grid
+      const totalCells = startDayOfWeek + daysInMonth;
+      const targetTotal = totalCells > 35 ? 42 : 35;
+      const remainingCells = targetTotal - totalCells;
+      for (let day = 1; day <= remainingCells; day++) {
+        cellsHtml += `
+          <div class="calendar-cell other-month">
+            <div class="calendar-day-header">
+              <span class="calendar-day-num">${day}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      grid.innerHTML = cellsHtml;
+
+      // Event click on event pill
+      grid.querySelectorAll('.calendar-event-pill').forEach(pill => {
+        pill.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const tktId = pill.getAttribute('data-id');
+          this.openTicketEditModal(tktId);
+        });
+      });
+
+      // Click on day cell to quickly create a ticket on that date
+      grid.querySelectorAll('.calendar-cell:not(.other-month)').forEach(cell => {
+        cell.addEventListener('click', () => {
+          const dateStr = cell.getAttribute('data-date');
+          const modal = $('modal-ticket');
+          if (modal) {
+            if ($('ticket-deadline')) $('ticket-deadline').value = dateStr;
+            modal.classList.remove('hidden');
+          }
+        });
+      });
+    },
+
+    // --- Pull Request Actions ---
+    bindPullRequestActions() {
+      const openPrBtn = $('btn-open-pr-modal');
+      const prModal = $('modal-pr');
+      const closeBtn = $('btn-modal-pr-close');
+      const form = $('form-pr');
+
+      if (openPrBtn && prModal) {
+        openPrBtn.addEventListener('click', () => this.openPrModal());
+      }
+      if (closeBtn && prModal) {
+        closeBtn.addEventListener('click', () => prModal.classList.add('hidden'));
+      }
+      if (form) {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const title = $('pr-title').value.trim();
+          const sourceBranch = $('pr-source-branch').value.trim();
+          const targetBranch = $('pr-target-branch').value.trim() || 'trunk';
+          const ticketId = $('pr-target-ticket-select').value;
+          const description = $('pr-description').value.trim();
+          if (!title || !sourceBranch) return;
+
+          const res = await window.fossilMcp.callTool('pr_create', {
+            title,
+            sourceBranch,
+            targetBranch,
+            description,
+            ticketId
+          });
+
+          if (res.success) {
+            $('pr-title').value = '';
+            $('pr-description').value = '';
+            prModal.classList.add('hidden');
+            await this.refreshTickets();
+            await this.refreshCalendar();
+            await this.refreshTimeline();
+            showToast(`Pull Request ${res.pullRequest.id} успешно создан!`);
+          }
+        });
+      }
+    },
+
+    async openPrModal(targetTicketId = '') {
+      const modal = $('modal-pr');
+      if (!modal) return;
+
+      const select = $('pr-target-ticket-select');
+      if (select) {
+        const tktRes = await window.fossilMcp.callTool('ticket_list', { status: 'all' });
+        const tickets = tktRes.tickets || [];
+        let optHtml = '<option value="">-- Без привязки к тикету --</option>';
+        for (const t of tickets) {
+          const isSelected = t.id === targetTicketId ? 'selected' : '';
+          optHtml += `<option value="${escapeHtml(t.id)}" ${isSelected}>#${escapeHtml(t.id)}: ${escapeHtml(t.title)} (${escapeHtml(t.priority || 'Medium')})</option>`;
+        }
+        select.innerHTML = optHtml;
+      }
+
+      modal.classList.remove('hidden');
+    },
+
+    // --- Rich MCP Tools Console ---
+    bindMcpActions() {
+      const runBtn = $('btn-mcp-invoke');
+      const copyPromptBtn = $('btn-copy-mcp-prompt');
+      const loadSampleBtn = $('btn-mcp-load-sample');
+
+      this.renderMcpCategoryFilterBar();
+      this.refreshMcpList();
+      this.selectMcpTool(state.activeMcpTool);
+
+      if (loadSampleBtn) {
+        loadSampleBtn.addEventListener('click', () => {
+          const tool = window.fossilMcp.getToolInfo(state.activeMcpTool);
+          const paramsEl = $('mcp-params-input');
+          if (paramsEl) {
+            paramsEl.value = JSON.stringify(tool.sampleParams || {}, null, 2);
+          }
+        });
+      }
+
+      if (runBtn) {
+        runBtn.addEventListener('click', async () => {
+          const outputEl = $('mcp-output-json');
+          const statusPill = $('mcp-status-pill');
+          const latencyPill = $('mcp-latency-pill');
+          if (!outputEl) return;
+
+          outputEl.innerText = '// Executing MCP tool in active storage backend...';
+          const toolName = state.activeMcpTool;
+          let params = {};
+          try {
+            params = JSON.parse($('mcp-params-input').value || '{}');
+          } catch (e) {
+            outputEl.innerText = 'JSON Parse Error: ' + e.message;
+            if (statusPill) {
+              statusPill.className = 'badge badge-danger';
+              statusPill.innerText = '400 Bad JSON';
+            }
+            return;
+          }
+
+          const t0 = performance.now();
+          const res = await window.fossilMcp.callTool(toolName, params);
+          const elapsed = (performance.now() - t0).toFixed(1);
+
+          if (latencyPill) {
+            latencyPill.style.display = 'inline-block';
+            latencyPill.innerText = `⏱️ ${elapsed}ms`;
+          }
+
+          if (res.error) {
+            if (statusPill) {
+              statusPill.className = 'badge badge-danger';
+              statusPill.innerText = 'Error';
+            }
+          } else {
+            if (statusPill) {
+              statusPill.className = 'badge badge-success';
+              statusPill.innerText = '200 OK';
+            }
+          }
+
+          outputEl.innerText = JSON.stringify(res, null, 2);
+
+          // Auto-refresh tabs if tool modified state
+          if (toolName.startsWith('ticket_')) {
+            this.refreshTickets();
+            this.refreshCalendar();
+          } else if (toolName.startsWith('pr_')) {
+            this.refreshTickets();
+            this.refreshCalendar();
+          } else if (toolName.startsWith('vcs_file_')) {
+            this.refreshFiles();
+          } else if (toolName.startsWith('vcs_commit')) {
+            this.refreshTimeline();
+          }
+        });
+      }
+
+      if (copyPromptBtn) {
+        copyPromptBtn.addEventListener('click', () => {
+          const promptText = `You are connected to Fossil-Nim In-Browser Distributed VCS via Model Context Protocol.\nAvailable MCP Tools: 89.\nActive Storage Backend: ${window.FossilStorageManager.backendType}.\nSupported Endpoints: window.fossilMcp.callTool(name, params).\nCategories: VCS Core, File System, Wiki & Docs, Issues & Tickets, Roadmap & Calendar, Pull Requests, Multi-DB Storage.`;
+          navigator.clipboard.writeText(promptText).then(() => {
+            showToast('Системный промпт ИИ скопирован в буфер!');
+          });
+        });
+      }
+    },
+
+    renderMcpCategoryFilterBar() {
+      const bar = $('mcp-category-filter-bar');
+      if (!bar) return;
+
+      const cats = [
+        { id: 'all', name: 'Все (89)' },
+        { id: 'vcs', name: '🌿 VCS Core' },
+        { id: 'files', name: '📁 Files' },
+        { id: 'wiki', name: '📖 Wiki' },
+        { id: 'tickets', name: '🎫 Tickets' },
+        { id: 'calendar', name: '📅 Calendar' },
+        { id: 'prs', name: '🔀 Pull Requests' },
+        { id: 'storage', name: '💾 Storage' },
+        { id: 'search', name: '🔍 Diagnostics' }
+      ];
 
       let html = '';
-      for (const tool of tools) {
+      for (const c of cats) {
+        const isActive = c.id === state.mcpCategoryFilter;
+        html += `<button class="btn btn-secondary btn-sm mcp-cat-btn ${isActive ? 'btn-primary' : ''}" data-cat="${c.id}" style="font-size:0.78rem; padding:0.25rem 0.65rem;">${escapeHtml(c.name)}</button>`;
+      }
+      bar.innerHTML = html;
+
+      bar.querySelectorAll('.mcp-cat-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          state.mcpCategoryFilter = btn.getAttribute('data-cat') || 'all';
+          this.renderMcpCategoryFilterBar();
+          this.refreshMcpList();
+        });
+      });
+    },
+
+    refreshMcpList() {
+      const list = $('mcp-tools-list');
+      const countEl = $('mcp-filtered-count');
+      if (!list) return;
+
+      const allTools = window.fossilMcp.listTools().tools;
+      let filtered = allTools;
+      if (state.mcpCategoryFilter && state.mcpCategoryFilter !== 'all') {
+        filtered = filtered.filter(t => t.category === state.mcpCategoryFilter);
+      }
+
+      if (countEl) countEl.innerText = filtered.length;
+
+      let html = '';
+      for (const tool of filtered) {
         const isActive = tool.name === state.activeMcpTool;
         html += `
           <div class="mcp-tool-item ${isActive ? 'active' : ''}" data-tool="${escapeHtml(tool.name)}">
@@ -1434,37 +2194,6 @@
           this.selectMcpTool(toolName);
         });
       });
-
-      this.selectMcpTool(state.activeMcpTool);
-
-      const runBtn = $('btn-mcp-invoke');
-      const outputEl = $('mcp-output-json');
-      const copyPromptBtn = $('btn-copy-mcp-prompt');
-
-      if (runBtn && outputEl) {
-        runBtn.addEventListener('click', async () => {
-          outputEl.innerText = 'Calling tool...';
-          const toolName = state.activeMcpTool;
-          let params = {};
-          try {
-            params = JSON.parse($('mcp-params-input').value || '{}');
-          } catch (e) {
-            outputEl.innerText = 'JSON Parse Error: ' + e.message;
-            return;
-          }
-          const res = await window.fossilMcp.callTool(toolName, params);
-          outputEl.innerText = JSON.stringify(res, null, 2);
-        });
-      }
-
-      if (copyPromptBtn) {
-        copyPromptBtn.addEventListener('click', () => {
-          const promptText = `You are connected to Fossil-Nim In-Browser Distributed VCS via Model Context Protocol.\nAvailable MCP Tools: 89.\nActive Storage Backend: ${window.FossilStorageManager.backendType}.\nSupported Endpoints: window.fossilMcp.callTool(name, params).`;
-          navigator.clipboard.writeText(promptText).then(() => {
-            showToast('Agent prompt copied to clipboard!');
-          });
-        });
-      }
     },
 
     selectMcpTool(toolName) {
@@ -1473,29 +2202,67 @@
         el.classList.toggle('active', el.getAttribute('data-tool') === toolName);
       });
 
-      const serverInfo = window.fossilMcp.listTools();
-      const tool = serverInfo.tools.find(t => t.name === toolName) || { name: toolName, description: 'Tool' };
-
+      const tool = window.fossilMcp.getToolInfo(toolName);
       const nameEl = $('mcp-active-tool-name');
+      const catBadge = $('mcp-active-tool-cat-badge');
       const descEl = $('mcp-active-tool-desc');
-      const paramsEl = $('mcp-params-input');
+      const paramsTableContainer = $('mcp-params-table-container');
+      const paramsInput = $('mcp-params-input');
 
       if (nameEl) nameEl.innerText = tool.name;
-      if (descEl) descEl.innerText = tool.description || 'No description';
 
-      let sampleParams = {};
-      if (tool.parameters) {
-        for (const [key, type] of Object.entries(tool.parameters)) {
-          if (key === 'path') sampleParams[key] = 'README.md';
-          else if (key === 'message' || key === 'comment') sampleParams[key] = 'Commit message';
-          else if (key === 'limit') sampleParams[key] = 10;
-          else if (key === 'name') sampleParams[key] = 'Home';
-          else if (key === 'backend') sampleParams[key] = 'indexeddb';
-          else sampleParams[key] = 'value';
+      if (catBadge) {
+        const catInfo = window.MCP_CATEGORIES && window.MCP_CATEGORIES[tool.category];
+        catBadge.innerText = catInfo ? catInfo.name : (tool.category || 'MCP');
+        catBadge.className = `badge ${catInfo ? catInfo.badgeClass : 'badge-primary'}`;
+      }
+
+      if (descEl) {
+        descEl.innerText = tool.description || 'Описание инструмента.';
+      }
+
+      // Render Parameters Schema Table
+      if (paramsTableContainer) {
+        const params = tool.parameters || {};
+        const paramKeys = Object.keys(params);
+        if (paramKeys.length === 0) {
+          paramsTableContainer.innerHTML = '<span style="font-size:0.82rem; color:var(--color-text-muted); font-style:italic;">Инструмент не требует параметров (вызывается без аргументов {}).</span>';
+        } else {
+          let tableHtml = `
+            <table class="mcp-params-table">
+              <thead>
+                <tr>
+                  <th>Параметр</th>
+                  <th>Тип</th>
+                  <th>Статус</th>
+                  <th>Описание</th>
+                  <th>По умолчанию</th>
+                </tr>
+              </thead>
+              <tbody>
+          `;
+          for (const [key, spec] of Object.entries(params)) {
+            const isReq = spec.required;
+            tableHtml += `
+              <tr>
+                <td><code>${escapeHtml(key)}</code></td>
+                <td><span style="color:var(--color-text-secondary);">${escapeHtml(spec.type || 'string')}</span></td>
+                <td>${isReq ? '<span class="badge badge-danger" style="font-size:0.7rem; padding:0.1rem 0.35rem;">Обязательный</span>' : '<span class="badge badge-secondary" style="font-size:0.7rem; padding:0.1rem 0.35rem;">Опционально</span>'}</td>
+                <td>${escapeHtml(spec.description || '')}</td>
+                <td><span style="color:var(--color-text-muted);">${escapeHtml(spec.default !== undefined ? String(spec.default) : '-')}</span></td>
+              </tr>
+            `;
+          }
+          tableHtml += '</tbody></table>';
+          paramsTableContainer.innerHTML = tableHtml;
         }
       }
-      if (paramsEl) paramsEl.value = JSON.stringify(sampleParams, null, 2);
+
+      if (paramsInput) {
+        paramsInput.value = JSON.stringify(tool.sampleParams || {}, null, 2);
+      }
     },
+
 
     // --- Storage Diagnostics & Snapshot Import/Export ---
     bindStorageDiagnostics() {

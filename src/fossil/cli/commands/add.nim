@@ -27,10 +27,17 @@ proc cmdAdd*(args: seq[string], checkoutRoot: string = ""): FossilResult[seq[str
   defer: db.close()
 
   var added: seq[string] = @[]
+  var fileTargets: seq[string] = @[]
   for f in args:
     let full = if isAbsolute(f): f else: root / f
-    if not fileExists(full):
-      continue
+    if dirExists(full):
+      for entry in walkDirRec(full):
+        if not entry.contains(".git") and not entry.contains("_FOSSIL_") and not entry.endsWith(".fossil") and not entry.contains("build/cgen") and not entry.contains("nimcache"):
+          fileTargets.add entry
+    elif fileExists(full):
+      fileTargets.add full
+
+  for full in fileTargets:
     let rel = relativePath(full, root)
     # Insert into vfile as added (rid 0, mrid 0, chnged true)
     let mtime = getFileInfo(full).lastWriteTime.toUnix()

@@ -1149,3 +1149,302 @@ pre code {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
 }
+
+/* 16. Timeline-Calendar & Roadmap Component */
+.calendar-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 992px) {
+  .calendar-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.calendar-side-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.calendar-main {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  overflow: hidden;
+}
+
+.calendar-nav-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 1px;
+  background: var(--color-border);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.calendar-weekday {
+  background: var(--color-bg-secondary);
+  padding: 0.6rem 0.35rem;
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.calendar-cell {
+  background: var(--color-bg);
+  min-height: 95px;
+  padding: 0.45rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  transition: background 0.15s ease;
+  position: relative;
+}
+.calendar-cell:hover {
+  background: var(--color-bg-hover);
+}
+.calendar-cell.other-month {
+  opacity: 0.35;
+  background: var(--color-bg-secondary);
+}
+.calendar-cell.today {
+  background: var(--color-primary-light);
+  box-shadow: inset 0 0 0 1px var(--color-primary);
+}
+
+.calendar-day-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.calendar-day-num {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+.calendar-cell.today .calendar-day-num {
+  color: var(--color-primary);
+}
+
+.calendar-event-pill {
+  display: block;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-decoration: none;
+  line-height: 1.25;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.calendar-event-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+/* Priority color variants */
+.priority-critical {
+  border-left: 3px solid var(--color-danger, #ef4444) !important;
+  background: rgba(239, 68, 68, 0.15) !important;
+  color: var(--color-danger, #ef4444) !important;
+}
+.priority-high {
+  border-left: 3px solid var(--color-warning, #f97316) !important;
+  background: rgba(249, 115, 22, 0.15) !important;
+  color: var(--color-warning, #f97316) !important;
+}
+.priority-medium {
+  border-left: 3px solid #eab308 !important;
+  background: rgba(234, 179, 8, 0.15) !important;
+  color: #ca8a04 !important;
+}
+.priority-low {
+  border-left: 3px solid var(--color-success, #10b981) !important;
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: var(--color-success, #10b981) !important;
+}
+
+/* Overdue Badge */
+.badge-overdue {
+  background: var(--color-danger, #ef4444);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* 17. Tickets Overhaul & Filter Bar */
+.ticket-filter-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.ticket-filter-btn {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.ticket-filter-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+.ticket-filter-btn.active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+
+.ticket-card {
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-card);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.ticket-card:hover {
+  border-color: var(--color-border-light);
+  box-shadow: var(--shadow);
+}
+
+.ticket-actions-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* History Timeline */
+.history-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  position: relative;
+  padding-left: 1.25rem;
+  border-left: 2px solid var(--color-border);
+}
+.history-item {
+  position: relative;
+}
+.history-dot {
+  position: absolute;
+  left: calc(-1.25rem - 5px);
+  top: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2px solid var(--color-bg-card);
+}
+.history-time {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+}
+.history-action {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.history-detail {
+  font-size: 0.82rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.15rem;
+}
+
+/* Pull Request styling */
+.pr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(16, 185, 129, 0.12);
+  color: var(--color-success, #10b981);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  cursor: pointer;
+}
+.pr-badge.merged {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+  border-color: rgba(139, 92, 246, 0.25);
+}
+
+/* 18. Rich MCP Tools Documentation Console */
+.mcp-info-card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.mcp-params-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.75rem;
+  font-size: 0.82rem;
+}
+.mcp-params-table th,
+.mcp-params-table td {
+  padding: 0.45rem 0.6rem;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+.mcp-params-table th {
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+  font-weight: 700;
+}
+.mcp-params-table code {
+  font-family: var(--font-mono);
+  background: var(--color-bg);
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  color: var(--color-primary);
+}
+
+.mcp-result-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
