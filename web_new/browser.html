@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="ru" data-theme="dark" data-density="comfortable" data-font="system" data-font-size="15px" data-radius="8px">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🦖 Fossil-Nim - In-Browser VCS & MCP</title>
-  <meta name="description" content="Fossil-Nim Browser Edition: 100% in-browser distributed version control, 3 storage backends (IndexedDB, SQLite WASM, Pure-Nim CDB), and 89-tool MCP server for AI Agents.">
+  <meta name="description" content="Fossil-Nim Professional Browser Edition: 100% in-browser distributed version control, 3 storage backends (IndexedDB, SQLite WASM, Pure-Nim CDB), and 89-tool MCP server for AI Agents.">
   <link rel="stylesheet" href="css/app.css">
   <link rel="stylesheet" href="css/themes.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦖</text></svg>">
@@ -14,43 +14,51 @@
     <!-- Main In-Browser Navigation Header -->
     <header class="navbar">
       <div class="navbar-brand">
-        <a href="browser.html">🦖 Fossil-Nim <span class="badge badge-primary">Browser Edition</span></a>
-        <span class="badge" style="background:#6366f1;">89 MCP Tools</span>
+        <a href="browser.html">🦖 Fossil-Nim <span class="badge badge-primary" data-i18n="app.edition">Browser Edition</span></a>
+        <span class="badge" style="background:#6366f1;" data-i18n="app.tools_badge">89 MCP Tools</span>
       </div>
+
+      <button id="btn-mobile-menu" class="mobile-menu-toggle" aria-label="Toggle navigation menu">☰</button>
+
       <div class="navbar-actions">
         <!-- Storage Selector Dropdown -->
         <div class="storage-selector-group">
           <div class="status-dot" title="Storage Ready"></div>
-          <span style="font-size:0.82rem; font-weight:600; color:var(--color-text-secondary);">Storage:</span>
-          <select id="storage-backend-select" class="form-select" style="padding:0.25rem 2rem 0.25rem 0.65rem; font-size:0.85rem; width:auto; border-radius:12px; height:auto;">
+          <span style="font-size:0.82rem; font-weight:600; color:var(--color-text-secondary);" data-i18n="nav.storage">Storage:</span>
+          <select id="storage-backend-select" class="form-select" style="padding:0.25rem 2rem 0.25rem 0.65rem; font-size:0.85rem; width:auto; border-radius:9999px; height:auto;">
             <option value="indexeddb">🗄️ IndexedDB (Local-First)</option>
             <option value="sqlite_wasm">⚡ SQLite WASM (.fossil)</option>
             <option value="cdb">🚀 Pure-Nim CDB (RAM)</option>
           </select>
         </div>
-        <button id="btn-export-repo" class="btn btn-secondary btn-sm" title="Download repository snapshot">💾 Export</button>
-        <button id="btn-import-repo" class="btn btn-primary btn-sm" title="Import repository snapshot (.json, .fossil, .cdb)">📥 Import</button>
+
+        <button id="btn-export-repo" class="btn btn-secondary btn-sm" data-i18n="nav.export" data-i18n-title="nav.export">💾 Экспорт</button>
+        <button id="btn-import-repo" class="btn btn-primary btn-sm" data-i18n="nav.import" data-i18n-title="nav.import">📥 Импорт</button>
         <input type="file" id="file-import-input" accept=".fossil,.cdb,.json" style="display:none;">
-        <button id="theme-toggle-btn" class="btn btn-icon" title="Toggle Theme">🌙</button>
-        <a href="/" class="btn btn-secondary btn-sm" title="Go to Server UI">🖥️ Server UI</a>
+
+        <!-- Language Switcher & Settings -->
+        <button id="btn-lang-toggle" class="btn btn-secondary btn-sm" title="Переключить язык / Switch Language">🇷🇺 RU</button>
+        <button id="btn-ui-settings" class="btn btn-secondary btn-sm" data-i18n-title="nav.settings">⚙️ Настройки</button>
+        <button id="theme-toggle-btn" class="btn btn-icon" title="Быстрая смена темы (Dark/Light)">🌙</button>
+        <a href="/" class="btn btn-secondary btn-sm" data-i18n="nav.server_ui">🖥️ Серверный UI</a>
       </div>
     </header>
 
     <!-- Main Container -->
     <main class="main">
-      <!-- Hero Banner -->
-      <div class="browser-hero">
+      <!-- Hero Banner / Quick Dashboard Strip -->
+      <div id="browser-hero" class="browser-hero">
         <div class="browser-hero-title">
-          <span style="font-size:2.5rem;">🦖</span>
+          <span style="font-size:2.2rem;">🦖</span>
           <div>
             <h1>Fossil-Nim WebAssembly & JS</h1>
-            <p style="margin:0; font-size:0.92rem; color:var(--color-text-muted);">
-              Distributed Version Control running 100% inside your browser. No server required.
-              Active backend: <b id="active-backend-name" style="color:var(--color-primary);">IndexedDB</b>
+            <p style="margin:0; font-size:0.9rem; color:var(--color-text-muted);">
+              <span data-i18n="app.hero_desc">Распределённая система контроля версий, работающая на 100% внутри браузера. Сервер не требуется.</span>
+              <span data-i18n="app.active_backend">Активное хранилище:</span> <b id="active-backend-name" style="color:var(--color-primary);">IndexedDB</b>
             </p>
           </div>
         </div>
-        <div style="display:flex; gap:0.5rem; align-items:center;">
+        <div style="display:flex; gap:0.45rem; align-items:center; flex-wrap:wrap;">
           <span class="badge badge-success">Local-First</span>
           <span class="badge badge-info">Myers Diff</span>
           <span class="badge badge-warning">MCP 89 Tools</span>
@@ -58,29 +66,29 @@
       </div>
 
       <!-- Loading overlay -->
-      <div id="loading-indicator" class="loading hidden" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:9999; background:rgba(0,0,0,0.5); padding:2rem; border-radius:12px;">
+      <div id="loading-indicator" class="loading hidden" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:9999; background:rgba(0,0,0,0.65); padding:2rem; border-radius:12px; backdrop-filter:blur(4px);">
         <div class="spinner"></div>
       </div>
 
       <!-- Tab Navigation Strip -->
-      <div class="tabs-nav">
-        <button class="tab-btn active" data-tab="timeline">📜 Timeline</button>
-        <button class="tab-btn" data-tab="files">📁 Files & Editor</button>
-        <button class="tab-btn" data-tab="diff">🔍 Myers Diff</button>
-        <button class="tab-btn" data-tab="wiki">📖 Wiki & Docs</button>
-        <button class="tab-btn" data-tab="tickets">🎫 Tickets</button>
-        <button class="tab-btn" data-tab="mcp">🤖 AI Agent MCP (89)</button>
-        <button class="tab-btn" data-tab="storage">💾 Multi-DB Diagnostics</button>
-      </div>
+      <nav class="tabs-nav" aria-label="Sections">
+        <button class="tab-btn active" data-tab="timeline" data-i18n="tab.timeline">📜 Таймлайн</button>
+        <button class="tab-btn" data-tab="files" data-i18n="tab.files">📁 Файлы и редактор</button>
+        <button class="tab-btn" data-tab="diff" data-i18n="tab.diff">🔍 Myers Diff</button>
+        <button class="tab-btn" data-tab="wiki" data-i18n="tab.wiki">📖 Wiki и документация</button>
+        <button class="tab-btn" data-tab="tickets" data-i18n="tab.tickets">🎫 Тикеты</button>
+        <button class="tab-btn" data-tab="mcp" data-i18n="tab.mcp">🤖 ИИ-агент MCP (89)</button>
+        <button class="tab-btn" data-tab="storage" data-i18n="tab.storage">💾 Мульти-БД диагностика</button>
+      </nav>
 
       <!-- TAB 1: Timeline -->
       <section id="tab-timeline" class="tab-content active">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">Repository Timeline</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">History of check-ins and commits saved in current browser storage backend.</p>
+            <h2 style="margin:0;" data-i18n="timeline.title">Таймлайн репозитория</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="timeline.desc">История фиксаций и коммитов в текущем браузерном хранилище.</p>
           </div>
-          <button id="btn-new-commit-modal" class="btn btn-primary btn-sm">+ New Commit</button>
+          <button id="btn-new-commit-modal" class="btn btn-primary btn-sm" data-i18n="timeline.new_commit">+ Новый коммит</button>
         </div>
         <div id="timeline-list">
           <div class="loading"><div class="spinner"></div></div>
@@ -89,19 +97,22 @@
 
       <!-- TAB 2: Virtual Files & Editor -->
       <section id="tab-files" class="tab-content">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">In-Browser Virtual File System</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Edit repository files directly in browser with live Myers diff and commits.</p>
+            <h2 style="margin:0;" data-i18n="files.title">Виртуальная файловая система</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="files.desc">Редактируйте файлы репозитория в браузере с live-diff Myers и коммитами.</p>
           </div>
-          <button id="btn-new-file" class="btn btn-secondary btn-sm">+ New File</button>
+          <div style="display:flex; gap:0.4rem;">
+            <button id="btn-toggle-file-tree" class="btn btn-secondary btn-sm" data-i18n="files.toggle_tree">📁 Дерево файлов</button>
+            <button id="btn-new-file" class="btn btn-secondary btn-sm" data-i18n="files.new_file">+ Новый файл</button>
+          </div>
         </div>
 
         <div class="editor-container">
           <!-- Left: Files Tree -->
           <div class="file-tree">
-            <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.6rem; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;">
-              Repository Tree
+            <div style="font-weight:600; font-size:0.82rem; margin-bottom:0.6rem; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;" data-i18n="files.repo_tree">
+              Дерево репозитория
             </div>
             <div id="files-tree"></div>
           </div>
@@ -110,10 +121,10 @@
           <div class="code-area">
             <div class="editor-toolbar">
               <span id="active-file-label" style="font-family:var(--font-mono); font-weight:600; font-size:0.95rem;">README.md</span>
-              <div style="display:flex; gap:0.4rem;">
-                <button id="btn-editor-diff" class="btn btn-secondary btn-sm">⚡ Compare Diff</button>
-                <button id="btn-editor-save" class="btn btn-secondary btn-sm">💾 Save File</button>
-                <button id="btn-editor-commit" class="btn btn-primary btn-sm">🚀 Commit</button>
+              <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                <button id="btn-editor-diff" class="btn btn-secondary btn-sm" data-i18n="files.compare_diff">⚡ Сравнить Diff</button>
+                <button id="btn-editor-save" class="btn btn-secondary btn-sm" data-i18n="files.save">💾 Сохранить</button>
+                <button id="btn-editor-commit" class="btn btn-primary btn-sm" data-i18n="files.commit">🚀 Закоммитить</button>
               </div>
             </div>
 
@@ -127,23 +138,23 @@
 
       <!-- TAB 3: Myers Diff Engine Tool -->
       <section id="tab-diff" class="tab-content">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">Myers Diff Engine (Pure Nim in JS)</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Unified Myers diff algorithm compiled directly from Nim Lang to JavaScript.</p>
+            <h2 style="margin:0;" data-i18n="diff.title">Движок Myers Diff (Pure Nim в JS)</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="diff.desc">Алгоритм Myers diff, скомпилированный напрямую из Nim Lang в JavaScript.</p>
           </div>
           <div style="display:flex; align-items:center; gap:0.5rem;">
-            <span style="font-size:0.85rem; font-weight:600;">Sample:</span>
+            <span style="font-size:0.85rem; font-weight:600;" data-i18n="diff.sample">Пример:</span>
             <select id="diff-preset-select" class="form-select" style="padding:0.25rem 2rem 0.25rem 0.65rem; font-size:0.85rem; width:auto;">
-              <option value="code">Nim Code Diff</option>
-              <option value="doc">Markdown Doc Diff</option>
+              <option value="code" data-i18n="diff.preset_code">Nim Code Diff</option>
+              <option value="doc" data-i18n="diff.preset_doc">Markdown Doc Diff</option>
             </select>
           </div>
         </div>
 
         <div class="grid grid-2" style="margin-bottom:1rem;">
           <div>
-            <label class="form-label">Original Text (v1)</label>
+            <label class="form-label" data-i18n="diff.original">Исходный текст (v1)</label>
             <textarea id="diff-input-a" class="form-textarea" style="height:170px;" spellcheck="false">import std/[strutils, tables]
 
 proc processTask(id: int): string =
@@ -152,7 +163,7 @@ proc processTask(id: int): string =
 </textarea>
           </div>
           <div>
-            <label class="form-label">Modified Text (v2)</label>
+            <label class="form-label" data-i18n="diff.modified">Изменённый текст (v2)</label>
             <textarea id="diff-input-b" class="form-textarea" style="height:170px;" spellcheck="false">import std/[strutils, tables, os]
 
 proc processTask(id: int): string =
@@ -163,26 +174,26 @@ proc processTask(id: int): string =
           </div>
         </div>
 
-        <button id="btn-run-standalone-diff" class="btn btn-primary" style="margin-bottom:1rem;">⚡ Compute Myers Diff (via Nim)</button>
+        <button id="btn-run-standalone-diff" class="btn btn-primary" style="margin-bottom:1rem;" data-i18n="diff.compute">⚡ Рассчитать Myers Diff (через Nim)</button>
 
         <div id="standalone-diff-result"></div>
       </section>
 
       <!-- TAB 4: Wiki & Documentation -->
       <section id="tab-wiki" class="tab-content">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">Wiki & Built-in Documentation</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Shipped out-of-the-box with complete Fossil-Nim architecture and reference docs.</p>
+            <h2 style="margin:0;" data-i18n="wiki.title">Wiki и встроенная документация</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="wiki.desc">Поставляется из коробки с архитектурой Fossil-Nim и документацией.</p>
           </div>
-          <button id="btn-wiki-new" class="btn btn-secondary btn-sm">+ New Wiki Page</button>
+          <button id="btn-wiki-new" class="btn btn-secondary btn-sm" data-i18n="wiki.new_page">+ Новая страница</button>
         </div>
 
         <div class="editor-container" style="min-height:540px;">
           <!-- Left: Wiki Pages -->
           <div class="file-tree">
-            <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.6rem; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;">
-              Documentation Pages
+            <div style="font-weight:600; font-size:0.82rem; margin-bottom:0.6rem; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;" data-i18n="wiki.pages">
+              Страницы Wiki
             </div>
             <div id="wiki-pages-list"></div>
           </div>
@@ -193,7 +204,7 @@ proc processTask(id: int): string =
             <div id="wiki-reader-wrap">
               <div class="editor-toolbar">
                 <span id="wiki-view-title" style="font-weight:700; font-size:1.15rem;">Home</span>
-                <button id="btn-wiki-edit" class="btn btn-secondary btn-sm">✏️ Edit Page</button>
+                <button id="btn-wiki-edit" class="btn btn-secondary btn-sm" data-i18n="wiki.edit">✏️ Редактировать</button>
               </div>
               <div id="wiki-view-content" style="padding:1rem; line-height:1.7;"></div>
             </div>
@@ -201,10 +212,10 @@ proc processTask(id: int): string =
             <!-- Editor Mode (hidden by default) -->
             <div id="wiki-editor-wrap" class="hidden">
               <div class="editor-toolbar">
-                <span style="font-weight:600;">Editing Wiki Page</span>
+                <span style="font-weight:600;" data-i18n="wiki.edit">Редактирование Wiki страницы</span>
                 <div style="display:flex; gap:0.4rem;">
-                  <button id="btn-wiki-cancel" class="btn btn-secondary btn-sm">Cancel</button>
-                  <button id="btn-wiki-save" class="btn btn-primary btn-sm">💾 Save Page</button>
+                  <button id="btn-wiki-cancel" class="btn btn-secondary btn-sm" data-i18n="wiki.cancel">Отмена</button>
+                  <button id="btn-wiki-save" class="btn btn-primary btn-sm" data-i18n="wiki.save">💾 Сохранить страницу</button>
                 </div>
               </div>
               <div class="grid grid-2" style="min-height:360px;">
@@ -218,33 +229,33 @@ proc processTask(id: int): string =
 
       <!-- TAB 5: Tickets / Issue Tracker -->
       <section id="tab-tickets" class="tab-content">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">Issue & Task Tracker</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Manage bug reports, roadmap items, and feature requests directly in browser.</p>
+            <h2 style="margin:0;" data-i18n="tickets.title">Трекер задач и тикетов</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="tickets.desc">Встроенный баг-трекер с приоритетами, фильтрацией и локальным сохранением.</p>
           </div>
-          <button id="btn-ticket-modal" class="btn btn-primary btn-sm">+ New Ticket</button>
+          <button id="btn-new-ticket-modal" class="btn btn-primary btn-sm" data-i18n="tickets.new_ticket">+ Новый тикет</button>
         </div>
         <div id="tickets-list"></div>
       </section>
 
       <!-- TAB 6: 89-Tool MCP Agent Console -->
       <section id="tab-mcp" class="tab-content">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">In-Browser AI Agent MCP Server (89 Tools)</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">
-              Model Context Protocol server running directly in browser for Gemini, Claude, ChatGPT, WebLLM.
+            <h2 style="margin:0;" data-i18n="mcp.title">Консоль ИИ-агента (89 MCP Tools)</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="mcp.desc">
+              Полный набор инструментов Model Context Protocol для автономных агентов.
             </p>
           </div>
-          <button id="btn-copy-mcp-prompt" class="btn btn-secondary btn-sm">📋 Copy Prompt for AI Agent</button>
+          <button id="btn-copy-mcp-prompt" class="btn btn-secondary btn-sm" data-i18n="mcp.copy_prompt">📋 Скопировать системный промпт</button>
         </div>
 
         <div class="mcp-layout">
           <!-- Tools List -->
           <div>
-            <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.5rem; color:var(--color-text-secondary); text-transform:uppercase;">
-              Available Tools (89 Total)
+            <div style="font-weight:600; font-size:0.82rem; margin-bottom:0.5rem; color:var(--color-text-secondary); text-transform:uppercase;" data-i18n="mcp.tools_count">
+              Доступные инструменты (89)
             </div>
             <div id="mcp-tools-list" class="mcp-tools-list"></div>
           </div>
@@ -261,15 +272,15 @@ proc processTask(id: int): string =
               </p>
 
               <div class="form-group">
-                <label class="form-label">Parameters (JSON Schema)</label>
+                <label class="form-label" data-i18n="mcp.params">JSON параметры вызова:</label>
                 <textarea id="mcp-params-input" class="form-textarea" style="height:90px; font-family:var(--font-mono); font-size:0.85rem;" spellcheck="false">{}</textarea>
               </div>
 
-              <button id="btn-mcp-invoke" class="btn btn-primary">🚀 Invoke Tool (window.fossilMcp)</button>
+              <button id="btn-mcp-invoke" class="btn btn-primary" data-i18n="mcp.invoke">⚡ Вызвать инструмент</button>
             </div>
 
             <div>
-              <label class="form-label">Tool Execution Output (JSON-RPC Result)</label>
+              <label class="form-label" data-i18n="mcp.response">JSON ответ инструмента:</label>
               <pre id="mcp-output-json" class="mcp-response-box">// Select a tool and click "Invoke Tool" to inspect response...</pre>
             </div>
           </div>
@@ -278,23 +289,23 @@ proc processTask(id: int): string =
 
       <!-- TAB 7: Multi-DB Diagnostics & SQL Console -->
       <section id="tab-storage" class="tab-content">
-        <h2 style="margin-bottom:0.25rem;">Multi-Database Diagnostics</h2>
-        <p style="margin-bottom:1.5rem; font-size:0.85rem; color:var(--color-text-muted);">
-          Inspect and interact with the 3 supported browser database engines.
+        <h2 style="margin-bottom:0.25rem;" data-i18n="storage.title">Диагностика Мульти-БД и SQL</h2>
+        <p style="margin-bottom:1.25rem; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="storage.desc">
+          Инспекция 3 браузерных бэкендов: IndexedDB, SQLite WASM и Pure-Nim CDB.
         </p>
 
         <div id="storage-stats-container"></div>
 
         <!-- SQL Console for SQLite WASM -->
         <div class="card" style="margin-top:1.5rem;">
-          <h3 style="margin-bottom:0.5rem;">⚡ SQLite WASM Interactive Query Console</h3>
+          <h3 style="margin-bottom:0.5rem;" data-i18n="storage.sql_console">⚡ Интерактивная SQL-консоль (SQLite WASM)</h3>
           <p style="font-size:0.85rem; color:var(--color-text-muted); margin-bottom:1rem;">
             Run direct SQL statements against the WebAssembly SQLite database when SQLite WASM backend is active.
           </p>
           <div class="form-group">
             <textarea id="sql-query-input" class="form-textarea" style="height:70px; font-family:var(--font-mono);" spellcheck="false">SELECT name, author FROM wiki;</textarea>
           </div>
-          <button id="btn-run-sql" class="btn btn-primary btn-sm">▶ Run SQL Query</button>
+          <button id="btn-run-sql" class="btn btn-primary btn-sm" data-i18n="storage.run_query">▶ Выполнить SQL</button>
 
           <div id="sql-query-output" style="margin-top:1rem; overflow-x:auto;"></div>
         </div>
@@ -317,28 +328,28 @@ proc processTask(id: int): string =
   <div id="modal-commit" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>🚀 Create Check-in / Commit</h2>
-        <button class="btn btn-icon" id="btn-commit-cancel">✕</button>
+        <h2 data-i18n="modal.commit_title">🚀 Новый коммит репозитория</h2>
+        <button class="btn btn-icon" id="btn-modal-commit-close">✕</button>
       </div>
       <form id="form-commit">
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">Commit Message</label>
+            <label class="form-label" data-i18n="modal.commit_comment">Комментарий коммита:</label>
             <input type="text" id="commit-comment" class="form-input" placeholder="e.g. Implement browser-native storage engine" required>
           </div>
           <div class="grid grid-2">
             <div class="form-group">
-              <label class="form-label">Branch</label>
+              <label class="form-label" data-i18n="modal.commit_branch">Ветка:</label>
               <input type="text" id="commit-branch" class="form-input" value="trunk">
             </div>
             <div class="form-group">
-              <label class="form-label">Author / User</label>
+              <label class="form-label" data-i18n="modal.commit_user">Автор / Пользователь:</label>
               <input type="text" id="commit-user" class="form-input" value="developer">
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Commit to Storage</button>
+          <button type="submit" class="btn btn-primary" data-i18n="modal.commit_submit">Зафиксировать коммит</button>
         </div>
       </form>
     </div>
@@ -348,17 +359,17 @@ proc processTask(id: int): string =
   <div id="modal-ticket" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>🎫 Create New Ticket</h2>
-        <button class="btn btn-icon" id="btn-ticket-cancel">✕</button>
+        <h2 data-i18n="modal.ticket_title">🎫 Создать новый тикет</h2>
+        <button class="btn btn-icon" id="btn-modal-ticket-close">✕</button>
       </div>
       <form id="form-ticket">
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">Ticket Title</label>
+            <label class="form-label" data-i18n="modal.ticket_heading">Заголовок задачи:</label>
             <input type="text" id="ticket-title" class="form-input" placeholder="e.g. Add offline sync for mobile devices" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Priority</label>
+            <label class="form-label" data-i18n="modal.ticket_priority">Приоритет:</label>
             <select id="ticket-priority" class="form-select">
               <option value="Low">Low</option>
               <option value="Medium" selected>Medium</option>
@@ -367,22 +378,22 @@ proc processTask(id: int): string =
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Description</label>
+            <label class="form-label" data-i18n="modal.ticket_desc">Описание:</label>
             <textarea id="ticket-desc" class="form-textarea" placeholder="Detailed description of the issue or feature request..."></textarea>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Save Ticket</button>
+          <button type="submit" class="btn btn-primary" data-i18n="modal.ticket_submit">Создать тикет</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal: Import Repository & Conflict Resolution -->
+  <!-- Modal: Import Repository & Smart Conflict Resolution -->
   <div id="modal-import-confirm" class="modal hidden">
     <div class="modal-content" style="max-width:540px;">
       <div class="modal-header">
-        <h2>📥 Import Repository</h2>
+        <h2 data-i18n="modal.import_title">📥 Импорт репозитория</h2>
         <button class="btn btn-icon" id="btn-import-cancel">✕</button>
       </div>
       <div class="modal-body">
@@ -391,35 +402,183 @@ proc processTask(id: int): string =
           <div style="font-size:0.85rem; color:var(--color-text-muted);" id="import-meta-label">Detected bundle</div>
         </div>
 
-        <p style="font-size:0.9rem; margin-bottom:1rem;">
-          Your current repository already contains data. How would you like to handle the imported content?
+        <p style="font-size:0.9rem; margin-bottom:1rem;" data-i18n="modal.import_prompt">
+          Текущий репозиторий уже содержит данные. Выберите способ импорта:
         </p>
 
         <div style="display:flex; flex-direction:column; gap:0.75rem;">
-          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1.5px solid var(--color-border); border-radius:8px; cursor:pointer;">
+          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1px solid var(--color-border); border-radius:var(--radius); cursor:pointer;">
             <input type="radio" name="import-mode-choice" value="merge" checked style="margin-top:0.25rem;">
             <div>
-              <div style="font-weight:600; font-size:0.92rem;">🔄 Merge / Continue Project (Слияние / Дополнить)</div>
-              <div style="font-size:0.82rem; color:var(--color-text-muted);">
-                Preserves all existing check-ins and data. Appends new commits, updates modified files, and merges wiki & tickets without loss.
+              <div style="font-weight:600; font-size:0.92rem;" data-i18n="modal.merge_title">🔄 Merge / Continue Project (Слияние / Дополнить)</div>
+              <div style="font-size:0.82rem; color:var(--color-text-muted);" data-i18n="modal.merge_desc">
+                Сохраняет существующие коммиты и файлы. Дополняет новыми коммитами, обновляет файлы, объединяет wiki и тикеты без потерь.
               </div>
             </div>
           </label>
 
-          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1.5px solid var(--color-border); border-radius:8px; cursor:pointer;">
+          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1px solid var(--color-border); border-radius:var(--radius); cursor:pointer;">
             <input type="radio" name="import-mode-choice" value="replace" style="margin-top:0.25rem;">
             <div>
-              <div style="font-weight:600; font-size:0.92rem; color:var(--color-danger);">⚠️ Clean Overwrite (Заменить полностью)</div>
-              <div style="font-size:0.82rem; color:var(--color-text-muted);">
-                Wipes existing files, commits, wiki, and tickets in current storage, replacing everything with the imported snapshot.
+              <div style="font-weight:600; font-size:0.92rem; color:var(--color-danger);" data-i18n="modal.replace_title">⚠️ Clean Overwrite (Заменить полностью)</div>
+              <div style="font-size:0.82rem; color:var(--color-text-muted);" data-i18n="modal.replace_desc">
+                Очищает текущие коммиты, файлы, wiki и тикеты, полностью заменяя их содержимым снапшота.
               </div>
             </div>
           </label>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="btn-import-abort">Cancel</button>
-        <button class="btn btn-primary" id="btn-import-confirm-execute">Proceed with Import</button>
+        <button class="btn btn-secondary" id="btn-import-abort" data-i18n="modal.import_abort">Отмена</button>
+        <button class="btn btn-primary" id="btn-import-confirm-execute" data-i18n="modal.import_proceed">Продолжить импорт</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Comprehensive UI Settings & Customization -->
+  <div id="modal-ui-settings" class="modal hidden">
+    <div class="modal-content" style="max-width:680px;">
+      <div class="modal-header">
+        <h2 data-i18n="settings.title">⚙️ Настройки интерфейса</h2>
+        <button class="btn btn-icon" id="btn-settings-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Settings Tabs -->
+        <div class="settings-nav">
+          <button class="settings-tab-btn active" data-tab="themes" data-i18n="settings.theme_tab">🎨 Темы и цвета</button>
+          <button class="settings-tab-btn" data-tab="layout" data-i18n="settings.layout_tab">📐 Макет и плотность</button>
+          <button class="settings-tab-btn" data-tab="lang" data-i18n="settings.lang_tab">🌐 Язык (i18n)</button>
+          <button class="settings-tab-btn" data-tab="config" data-i18n="settings.config_tab">💾 Конфигурация</button>
+        </div>
+
+        <!-- Pane 1: Themes & Colors -->
+        <div id="settings-pane-themes" class="settings-tab-pane active">
+          <label class="form-label" data-i18n="settings.theme_preset">Готовые темы оформления:</label>
+          <div class="theme-chips-grid">
+            <div class="theme-chip" data-theme-name="dark">🌑 Obsidian Dark</div>
+            <div class="theme-chip" data-theme-name="light">☀️ GitHub Light</div>
+            <div class="theme-chip" data-theme-name="nord">❄️ Nord Frost</div>
+            <div class="theme-chip" data-theme-name="dracula">🧛 Dracula</div>
+            <div class="theme-chip" data-theme-name="gruvbox">🌲 Gruvbox</div>
+            <div class="theme-chip" data-theme-name="cyberpunk">⚡ Cyberpunk</div>
+            <div class="theme-chip" data-theme-name="monokai">🎨 Monokai</div>
+            <div class="theme-chip" data-theme-name="custom">🛠️ Custom User</div>
+          </div>
+
+          <div id="custom-colors-container" class="card" style="margin-top:1rem; padding:1rem; background:var(--color-bg-code);">
+            <div style="font-weight:600; font-size:0.9rem; margin-bottom:0.75rem;" data-i18n="settings.custom_palette">
+              Пользовательская цветовая палитра:
+            </div>
+            <div class="color-picker-row">
+              <label data-i18n="settings.primary_color">Основной цвет (Primary):</label>
+              <input type="color" id="picker-color-primary" value="#3b82f6">
+            </div>
+            <div class="color-picker-row">
+              <label data-i18n="settings.bg_color">Цвет фона (Background):</label>
+              <input type="color" id="picker-color-bg" value="#0b0f19">
+            </div>
+            <div class="color-picker-row">
+              <label data-i18n="settings.card_color">Цвет карточек (Card/Surface):</label>
+              <input type="color" id="picker-color-card" value="#151d2e">
+            </div>
+            <div class="color-picker-row">
+              <label data-i18n="settings.border_color">Цвет границ (Borders):</label>
+              <input type="color" id="picker-color-border" value="#1e293b">
+            </div>
+            <div class="color-picker-row">
+              <label data-i18n="settings.text_color">Цвет текста (Text):</label>
+              <input type="color" id="picker-color-text" value="#f1f5f9">
+            </div>
+          </div>
+        </div>
+
+        <!-- Pane 2: Layout & Density -->
+        <div id="settings-pane-layout" class="settings-tab-pane">
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings.density_label">Плотность интерфейса:</label>
+            <select id="select-ui-density" class="form-select">
+              <option value="comfortable" data-i18n="settings.density_comfortable">Комфортный (стандартный)</option>
+              <option value="compact" data-i18n="settings.density_compact">Компактный (высокая плотность для профи)</option>
+            </select>
+          </div>
+
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label class="form-label" data-i18n="settings.fontsize_label">Размер шрифта:</label>
+              <select id="select-ui-fontsize" class="form-select">
+                <option value="13px">13px - Ultra Compact</option>
+                <option value="14px">14px - Compact</option>
+                <option value="15px" selected>15px - Default</option>
+                <option value="16px">16px - Large</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" data-i18n="settings.fontfamily_label">Семейство шрифтов:</label>
+              <select id="select-ui-fontfamily" class="form-select">
+                <option value="system" selected>System Modern (San Francisco, Segoe UI)</option>
+                <option value="mono">Developer Mono (JetBrains, SF Mono)</option>
+                <option value="inter">Inter Display</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label class="form-label" data-i18n="settings.radius_label">Скругление углов (Border Radius):</label>
+              <select id="select-ui-radius" class="form-select">
+                <option value="0px">0px - Sharp / Brutalist</option>
+                <option value="4px">4px - Modern Compact</option>
+                <option value="8px" selected>8px - Sleek Rounded</option>
+                <option value="12px">12px - Smooth Soft</option>
+              </select>
+            </div>
+            <div class="form-group" style="display:flex; align-items:center; margin-top:1.5rem;">
+              <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                <input type="checkbox" id="checkbox-ui-hero" checked>
+                <span data-i18n="settings.show_hero_label">Показывать верхний баннер-дэшборд</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pane 3: Language & Localization -->
+        <div id="settings-pane-lang" class="settings-tab-pane">
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings.lang_select">Язык интерфейса:</label>
+            <select id="select-ui-lang" class="form-select">
+              <option value="ru">🇷🇺 Русский (Russian)</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="custom">🌐 Пользовательский (Custom JSON Pack)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings.custom_lang_pack">Пользовательский языковой пакет (JSON):</label>
+            <textarea id="textarea-custom-lang-pack" class="form-textarea" style="height:150px; font-family:var(--font-mono); font-size:0.82rem;" spellcheck="false"></textarea>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button id="btn-export-lang-pack" class="btn btn-secondary btn-sm" data-i18n="settings.export_lang">📥 Экспорт языкового пакета</button>
+            <button id="btn-import-lang-pack" class="btn btn-primary btn-sm" data-i18n="settings.import_lang">📤 Загрузить перевод (JSON)</button>
+          </div>
+        </div>
+
+        <!-- Pane 4: Full Config JSON -->
+        <div id="settings-pane-config" class="settings-tab-pane">
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings.full_config">Полный файл конфигурации UI (JSON):</label>
+            <textarea id="textarea-full-ui-config" class="form-textarea" style="height:170px; font-family:var(--font-mono); font-size:0.82rem;" spellcheck="false"></textarea>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button id="btn-export-ui-config" class="btn btn-secondary btn-sm" data-i18n="settings.export_config">💾 Экспорт конфигурации UI</button>
+            <button id="btn-import-ui-config" class="btn btn-primary btn-sm" data-i18n="settings.import_config">📂 Импорт конфигурации UI</button>
+            <button id="btn-reset-ui-config" class="btn btn-danger btn-sm" data-i18n="settings.reset_config">🔄 Сброс к умолчаниям</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-settings-apply" data-i18n="settings.apply">Применить и закрыть</button>
       </div>
     </div>
   </div>

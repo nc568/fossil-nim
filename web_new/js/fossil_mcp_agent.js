@@ -108,9 +108,15 @@ class BrowserMcpServer {
         case "vcs_file_list": {
           if (mgr.backendType === "indexeddb") {
             const files = await backend.getAll("files");
-            return { files: files.map(f => f.path) };
+            return {
+              files: files.map(f => typeof f === 'string' ? { path: f } : (f.path ? f : { path: f.name || String(f) })),
+              filePaths: files.map(f => typeof f === 'string' ? f : (f.path || f.name || String(f)))
+            };
           }
-          return { files: ["README.md", "src/main.nim", "tests/test.nim"] };
+          return {
+            files: [{ path: "README.md" }, { path: "src/main.nim" }, { path: "tests/test.nim" }],
+            filePaths: ["README.md", "src/main.nim", "tests/test.nim"]
+          };
         }
 
         case "vcs_diff": {
@@ -149,12 +155,15 @@ class BrowserMcpServer {
           const limit = params.limit || 20;
           if (mgr.backendType === "indexeddb") {
             const events = await backend.getAll("events");
-            return { count: events.length, events: events.slice(-limit).reverse() };
+            events.sort((a, b) => (Number(b.mtime) || 0) - (Number(a.mtime) || 0));
+            const list = events.slice(0, limit);
+            return { count: events.length, events: list, timeline: list };
           } else if (mgr.backendType === "sqlite_wasm") {
             const events = backend.exec("SELECT * FROM event ORDER BY mtime DESC LIMIT ?", [limit]);
-            return { count: events.length, events };
+            return { count: events.length, events, timeline: events };
           }
-          return { count: 1, events: [{ comment: "Timeline in CDB", branch: "trunk", user: "admin", mtime: Date.now() }] };
+          const defaultEvents = [{ comment: "Timeline in CDB", branch: "trunk", user: "admin", mtime: Date.now() }];
+          return { count: 1, events: defaultEvents, timeline: defaultEvents };
         }
 
         case "vcs_branch_list": {

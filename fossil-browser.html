@@ -1,131 +1,304 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="light">
+<html lang="ru" data-theme="dark" data-density="comfortable" data-font="system" data-font-size="15px" data-radius="8px">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🦖 Fossil-Nim - In-Browser VCS & MCP</title>
-  <meta name="description" content="Fossil-Nim Browser Edition: 100% in-browser distributed version control, 3 storage backends (IndexedDB, SQLite WASM, Pure-Nim CDB), and 89-tool MCP server for AI Agents.">
+  <meta name="description" content="Fossil-Nim Professional Browser Edition: 100% in-browser distributed version control, 3 storage backends (IndexedDB, SQLite WASM, Pure-Nim CDB), and 89-tool MCP server for AI Agents.">
   <style>
-/* Fossil-Nim Modern UI - Vanilla CSS, Modular, Themeable
-   Beautiful, modern, minimalistic
-   No frameworks, pure CSS with variables for easy theme editing
+/* Fossil-Nim Professional WebUI - Vanilla CSS
+   Designed for daily-driver developer workflow:
+   High information density, clean typography, responsive layout (mobile to ultrawide),
+   Vanilla JS philosophy: zero frameworks, pure CSS variables, maximum performance.
 */
 
-/* Reset & Base */
-*, *::before, *::after { box-sizing: border-box; }
-html { font-size: 16px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
-body {
-  font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
-  background: var(--color-bg, #f8f9fa);
-  color: var(--color-text, #212529);
-  line-height: 1.6;
+/* 1. Reset & Global Box Sizing */
+*, *::before, *::after {
+  box-sizing: border-box;
   margin: 0;
-  min-height: 100vh;
-  transition: background-color 0.3s, color 0.3s;
+  padding: 0;
 }
 
-/* Typography - modern, minimal */
-h1, h2, h3, h4, h5, h6 { font-weight: 600; line-height: 1.3; margin: 0 0 0.5em; color: var(--color-text); }
-h1 { font-size: 2rem; letter-spacing: -0.02em; }
-h2 { font-size: 1.5rem; }
-h3 { font-size: 1.25rem; }
-p { margin: 0 0 1em; }
-a { color: var(--color-primary, #0d6efd); text-decoration: none; transition: color 0.15s; }
-a:hover { color: var(--color-primary-hover, #0b5ed7); text-decoration: underline; }
-code { font-family: var(--font-mono, monospace); background: var(--color-bg-code, #f1f3f5); padding: 0.2em 0.4em; border-radius: 3px; font-size: 0.9em; }
-pre { background: var(--color-bg-code); padding: 1em; border-radius: var(--radius, 6px); overflow-x: auto; border: 1px solid var(--color-border); }
-pre code { background: none; padding: 0; }
+html {
+  font-size: var(--font-base, 15px);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
 
-/* Layout - modern grid */
-#app { min-height: 100vh; display: flex; flex-direction: column; }
-.main { flex: 1; max-width: 1200px; width: 100%; margin: 0 auto; padding: 2rem 1.5rem; }
-.container { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem; }
-.grid { display: grid; gap: 1.5rem; }
+body {
+  font-family: var(--font-sans);
+  background: var(--color-bg, #0b0f19);
+  color: var(--color-text, #f1f5f9);
+  line-height: 1.55;
+  min-height: 100vh;
+  overflow-x: hidden;
+  transition: background-color var(--transition-speed, 0.15s), color var(--transition-speed, 0.15s);
+}
+
+/* Custom Scrollbars (Lightweight & Modern) */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-border-light);
+}
+
+/* 2. Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--color-text);
+  letter-spacing: -0.015em;
+}
+
+h1 { font-size: clamp(1.4rem, 2.5vw, 1.85rem); }
+h2 { font-size: clamp(1.2rem, 2vw, 1.45rem); }
+h3 { font-size: 1.15rem; }
+h4 { font-size: 1rem; }
+p { margin-bottom: 0.75rem; }
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-speed);
+}
+a:hover {
+  color: var(--color-primary-hover);
+  text-decoration: underline;
+}
+
+code, kbd, samp {
+  font-family: var(--font-mono);
+  background: var(--color-bg-code);
+  color: var(--color-text);
+  padding: 0.18em 0.45em;
+  border-radius: 4px;
+  font-size: 0.88em;
+  border: 1px solid var(--color-border);
+}
+
+pre {
+  background: var(--color-bg-code);
+  padding: 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--color-border);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* 3. Main Layout Containers */
+#app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main {
+  flex: 1;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem;
+  overflow-x: hidden;
+}
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+  overflow-x: hidden;
+}
+
+.grid {
+  display: grid;
+  gap: 1.25rem;
+}
 .grid-2 { grid-template-columns: repeat(2, 1fr); }
 .grid-3 { grid-template-columns: repeat(3, 1fr); }
 .grid-4 { grid-template-columns: repeat(4, 1fr); }
-@media (max-width: 768px) {
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
-  .main { padding: 1rem; }
+
+@media (max-width: 860px) {
+  .grid-2, .grid-3, .grid-4 {
+    grid-template-columns: 1fr;
+  }
 }
 
-/* Navbar - modern, minimal */
+/* 4. Professional Navbar Header */
 .navbar {
-  background: var(--color-bg-card, #fff);
-  border-bottom: 1px solid var(--color-border, #dee2e6);
-  padding: 0.75rem 1.5rem;
+  background: var(--color-bg-card);
+  border-bottom: 1px solid var(--color-border);
+  padding: 0 1.25rem;
+  height: var(--nav-height, 56px);
   display: flex;
   align-items: center;
   justify-content: space-between;
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: var(--shadow, 0 1px 3px rgba(0,0,0,0.1));
+  box-shadow: var(--shadow);
   backdrop-filter: blur(8px);
-}
-.navbar-brand { display: flex; align-items: center; gap: 0.75rem; font-weight: 700; font-size: 1.25rem; }
-.navbar-brand a { color: var(--color-text); text-decoration: none; }
-.navbar-menu { display: flex; gap: 1.5rem; align-items: center; }
-.navbar-menu a { color: var(--color-text-secondary, #495057); font-weight: 500; font-size: 0.9rem; padding: 0.5rem 0; position: relative; }
-.navbar-menu a:hover, .navbar-menu a.active { color: var(--color-primary); text-decoration: none; }
-.navbar-menu a.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: var(--color-primary); }
-.navbar-actions { display: flex; gap: 0.5rem; align-items: center; }
-.navbar-burger { display: none; background: none; border: none; font-size: 1.5rem; cursor: pointer; }
-@media (max-width: 1024px) {
-  .navbar-menu { display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--color-bg-card); flex-direction: column; padding: 1rem; border-bottom: 1px solid var(--color-border); box-shadow: var(--shadow-lg); }
-  .navbar-menu.open { display: flex; }
-  .navbar-burger { display: block; }
+  overflow: hidden;
 }
 
-/* Buttons - modern, minimal */
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-weight: 700;
+  font-size: 1.15rem;
+  white-space: nowrap;
+}
+.navbar-brand a {
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+}
+
+@media (max-width: 600px) {
+  .navbar-brand {
+    font-size: 0.98rem;
+    gap: 0.35rem;
+  }
+  .navbar-brand .badge {
+    display: none;
+  }
+}
+
+.navbar-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.mobile-menu-toggle {
+  display: none;
+  background: none;
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 1.2rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+@media (max-width: 1100px) {
+  .navbar-actions {
+    display: none;
+  }
+  .navbar-actions.open {
+    display: flex;
+    position: fixed;
+    top: var(--nav-height, 56px);
+    left: 0;
+    right: 0;
+    background: var(--color-bg-card);
+    flex-direction: column;
+    padding: 1.25rem;
+    gap: 0.75rem;
+    border-bottom: 1px solid var(--color-border);
+    box-shadow: var(--shadow-lg);
+    z-index: 99;
+  }
+  .mobile-menu-toggle {
+    display: block;
+  }
+}
+
+/* 5. Buttons */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
+  gap: 0.45rem;
+  padding: var(--spacing-btn, 0.5rem 0.95rem);
   border: 1px solid transparent;
-  border-radius: var(--radius, 6px);
-  font-weight: 500;
-  font-size: 0.9rem;
+  border-radius: var(--radius);
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.88rem;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all var(--transition-speed) ease;
   text-decoration: none;
-  line-height: 1;
+  line-height: 1.2;
+  white-space: nowrap;
+  user-select: none;
 }
-.btn:hover { text-decoration: none; transform: translateY(-1px); box-shadow: var(--shadow); }
-.btn:active { transform: translateY(0); }
-.btn-primary { background: var(--color-primary); color: var(--color-text-inverse, #fff); border-color: var(--color-primary); }
-.btn-primary:hover { background: var(--color-primary-hover); color: var(--color-text-inverse); }
-.btn-secondary { background: var(--color-bg-secondary, #e9ecef); color: var(--color-text); border-color: var(--color-border); }
-.btn-secondary:hover { background: var(--color-bg-hover); }
-.btn-danger { background: var(--color-danger); color: #fff; }
-.btn-icon { padding: 0.5rem; width: 2.25rem; height: 2.25rem; border-radius: 50%; background: var(--color-bg-secondary); border: 1px solid var(--color-border); }
-.btn-icon:hover { background: var(--color-bg-hover); }
-.btn-sm { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
-.btn-lg { padding: 0.75rem 1.5rem; font-size: 1rem; }
-
-/* Cards - modern, minimal with subtle shadow */
-.card {
-  background: var(--color-bg-card, #fff);
-  border: 1px solid var(--color-border, #dee2e6);
-  border-radius: var(--radius, 6px);
-  padding: 1.5rem;
+.btn:hover {
+  text-decoration: none;
+  transform: translateY(-1px);
   box-shadow: var(--shadow);
-  transition: box-shadow 0.15s, transform 0.15s;
 }
-.card:hover { box-shadow: var(--shadow-lg); }
-.card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--color-border-light, #e9ecef); }
-.card-title { font-size: 1.25rem; font-weight: 600; margin: 0; }
-.card-body { }
-.card-footer { margin-top: 1rem; padding-top: 0.75rem; border-top: 1px solid var(--color-border-light); display: flex; gap: 0.5rem; justify-content: flex-end; }
+.btn:active {
+  transform: translateY(0);
+}
+.btn-primary {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+.btn-primary:hover {
+  background: var(--color-primary-hover);
+  border-color: var(--color-primary-hover);
+  color: #fff;
+}
+.btn-secondary {
+  background: var(--color-bg-secondary);
+  color: var(--color-text);
+  border-color: var(--color-border);
+}
+.btn-secondary:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border-light);
+}
+.btn-danger {
+  background: var(--color-danger);
+  color: #fff;
+}
+.btn-icon {
+  padding: 0.45rem;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: var(--radius);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+.btn-icon:hover {
+  background: var(--color-bg-hover);
+}
+.btn-sm {
+  padding: 0.28rem 0.6rem;
+  font-size: 0.82rem;
+}
+.btn-lg {
+  padding: 0.75rem 1.4rem;
+  font-size: 1rem;
+}
 
-/* Badges */
+/* 6. Badges */
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 0.2em 0.6em;
-  border-radius: 10px;
+  padding: 0.22em 0.65em;
+  border-radius: 9999px;
   font-size: 0.75rem;
   font-weight: 600;
   line-height: 1;
@@ -135,252 +308,156 @@ pre code { background: none; padding: 0; }
 .badge-primary { background: var(--color-primary); }
 .badge-success { background: var(--color-success); }
 .badge-danger { background: var(--color-danger); }
-.badge-warning { background: var(--color-warning); color: #212529; }
+.badge-warning { background: var(--color-warning); color: #111; }
 .badge-info { background: var(--color-info); }
 .badge-secondary { background: var(--color-secondary); }
 
-/* Forms - modern */
-.form-group { margin-bottom: 1.15rem; }
-.form-label { display: block; margin-bottom: 0.45rem; font-weight: 600; font-size: 0.88rem; color: var(--color-text-secondary); letter-spacing: -0.01em; }
+/* 7. Cards */
+.card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: var(--card-padding);
+  box-shadow: var(--shadow);
+  transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
+}
+.card:hover {
+  border-color: var(--color-border-light);
+  box-shadow: var(--shadow-lg);
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.65rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.card-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0;
+}
+.card-footer {
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* 8. Forms & Inputs */
+.form-group {
+  margin-bottom: 1rem;
+}
+.form-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+}
 .form-input, .form-textarea, .form-select {
   width: 100%;
-  padding: 0.65rem 0.85rem;
-  border: 1.5px solid var(--color-border);
-  border-radius: 8px;
-  background: var(--color-bg-card);
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-secondary);
   color: var(--color-text);
   font-family: inherit;
-  font-size: 0.92rem;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
-}
-.form-input::placeholder, .form-textarea::placeholder {
-  color: var(--color-text-muted, #94a3b8);
-  opacity: 0.8;
-}
-.form-input:hover, .form-textarea:hover, .form-select:hover {
-  border-color: var(--color-primary);
+  font-size: 0.9rem;
+  transition: border-color var(--transition-speed), box-shadow var(--transition-speed);
 }
 .form-input:focus, .form-textarea:focus, .form-select:focus {
   outline: none;
   border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
-  background: var(--color-bg-card);
+  box-shadow: 0 0 0 3px var(--color-primary-light);
 }
 .form-select {
   appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
   background-repeat: no-repeat;
-  background-position: right 0.85rem center;
+  background-position: right 0.75rem center;
   background-size: 1.1em;
-  padding-right: 2.6rem;
+  padding-right: 2.2rem;
   cursor: pointer;
 }
-.form-textarea { min-height: 110px; resize: vertical; font-family: var(--font-mono); line-height: 1.5; }
-.form-hint { font-size: 0.8rem; color: var(--color-text-muted); margin-top: 0.35rem; }
-
-/* Custom Checkboxes and Radios */
-input[type="checkbox"], input[type="radio"] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 1.25rem;
-  height: 1.25rem;
-  border: 1.5px solid var(--color-border);
-  border-radius: 5px;
-  background: var(--color-bg-card);
-  outline: none;
-  cursor: pointer;
-  vertical-align: middle;
-  position: relative;
-  transition: all 0.15s ease;
-  margin-right: 0.5rem;
-}
-input[type="radio"] { border-radius: 50%; }
-input[type="checkbox"]:hover, input[type="radio"]:hover {
-  border-color: var(--color-primary);
-}
-input[type="checkbox"]:checked, input[type="radio"]:checked {
-  background-color: var(--color-primary);
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
-}
-input[type="checkbox"]:checked::after {
-  content: '';
-  position: absolute;
-  left: 6px;
-  top: 2.5px;
-  width: 4px;
-  height: 8px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
-}
-input[type="radio"]:checked::after {
-  content: '';
-  position: absolute;
-  left: 4.5px;
-  top: 4.5px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: white;
+.form-textarea {
+  min-height: 100px;
+  resize: vertical;
+  font-family: var(--font-mono);
+  line-height: 1.5;
 }
 
-/* Range Slider */
-input[type="range"] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  height: 6px;
-  background: var(--color-border);
-  border-radius: 4px;
-  outline: none;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-input[type="range"]::-webkit-slider-thumb {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  background: var(--color-primary);
-  border: 2px solid #fff;
-  border-radius: 50%;
-  cursor: pointer;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-  transition: transform 0.15s;
-}
-input[type="range"]::-webkit-slider-thumb:hover {
-  transform: scale(1.2);
-}
-
-/* Lists */
-.list { list-style: none; padding: 0; margin: 0; }
-.list-item {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid var(--color-border-light);
+/* 9. Segmented Tab Navigation Strip */
+.tabs-nav {
   display: flex;
-  justify-content: space-between;
+  gap: 0.35rem;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 1.25rem;
+  overflow-x: auto;
+  max-width: 100%;
+  padding-bottom: 1px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.tabs-nav::-webkit-scrollbar {
+  display: none;
+}
+.tab-btn {
+  background: transparent;
+  border: none;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  border-radius: var(--radius) var(--radius) 0 0;
+  cursor: pointer;
+  transition: all var(--transition-speed);
+  display: inline-flex;
   align-items: center;
-  transition: background 0.15s;
+  gap: 0.45rem;
+  white-space: nowrap;
+  position: relative;
 }
-.list-item:hover { background: var(--color-bg-hover); }
-.list-item:last-child { border-bottom: none; }
-
-/* Timeline - modern */
-.timeline { position: relative; padding-left: 2rem; }
-.timeline::before { content: ''; position: absolute; left: 0.6rem; top: 0; bottom: 0; width: 2px; background: var(--color-border); }
-.timeline-item { position: relative; padding: 1rem; margin-bottom: 1rem; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius); box-shadow: var(--shadow); }
-.timeline-item::before {
-  content: ''; position: absolute; left: -1.7rem; top: 1.2rem;
-  width: 12px; height: 12px; border-radius: 50%;
-  background: var(--color-primary); border: 2px solid var(--color-bg-card); box-shadow: var(--shadow);
+.tab-btn:hover {
+  color: var(--color-text);
+  background: var(--color-primary-light);
 }
-.timeline-meta { font-size: 0.8rem; color: var(--color-text-muted); display: flex; gap: 0.75rem; margin-bottom: 0.5rem; }
-.timeline-comment { font-weight: 500; }
-
-/* Graph - modern */
-.graph-container { position: relative; width: 100%; min-height: 600px; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius); overflow: auto; }
-.graph-node { position: absolute; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--color-bg-card); box-shadow: var(--shadow); cursor: pointer; transition: transform 0.15s; }
-.graph-node:hover { transform: scale(1.3); }
-.graph-label { position: absolute; font-size: 0.75rem; background: var(--color-bg-card); padding: 0.2rem 0.5rem; border-radius: 3px; border: 1px solid var(--color-border); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; box-shadow: var(--shadow); cursor: pointer; }
-
-/* Editor - WYSIWYG modern */
-.editor { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-@media (max-width: 768px) { .editor { grid-template-columns: 1fr; } }
-.editor-pane { display: flex; flex-direction: column; }
-.editor-toolbar { display: flex; gap: 0.25rem; padding: 0.5rem; background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-bottom: none; border-radius: var(--radius) var(--radius) 0 0; }
-.editor-toolbar button { padding: 0.3rem 0.6rem; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: 3px; cursor: pointer; font-weight: bold; }
-.editor-toolbar button:hover { background: var(--color-bg-hover); }
-.editor-textarea { flex: 1; min-height: 300px; border-radius: 0 0 var(--radius) var(--radius); font-family: var(--font-mono); font-size: 0.9rem; }
-.editor-preview { flex: 1; min-height: 300px; padding: 1rem; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: 0 0 var(--radius) var(--radius); overflow-y: auto; }
-
-/* Chat - modern */
-.chat-container { display: flex; flex-direction: column; height: 70vh; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius); }
-.chat-messages { flex: 1; overflow-y: auto; padding: 1rem; display: flex; flex-direction: column; gap: 0.75rem; }
-.chat-message { display: flex; gap: 0.75rem; padding: 0.5rem; border-radius: var(--radius); }
-.chat-message:hover { background: var(--color-bg-hover); }
-.chat-avatar { width: 2rem; height: 2rem; border-radius: 50%; background: var(--color-primary); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.8rem; flex-shrink: 0; }
-.chat-content { flex: 1; }
-.chat-meta { font-size: 0.75rem; color: var(--color-text-muted); }
-.chat-input { display: flex; gap: 0.5rem; padding: 0.75rem; border-top: 1px solid var(--color-border); }
-.chat-input input { flex: 1; }
-
-/* Search - modern */
-.search-box { position: relative; }
-.search-input { width: 100%; padding: 0.75rem 1rem 0.75rem 2.5rem; font-size: 1rem; border-radius: var(--radius-lg); }
-.search-icon { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--color-text-muted); }
-.search-results { margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
-.search-result { padding: 1rem; background: var(--color-bg-card); border: 1px solid var(--color-border); border-radius: var(--radius); transition: box-shadow 0.15s; }
-.search-result:hover { box-shadow: var(--shadow); }
-.search-result b { background: var(--color-primary-light); padding: 0.1em 0.2em; border-radius: 2px; }
-
-/* Modal - modern */
-.modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(4px); }
-.modal.hidden { display: none; }
-.modal-content { background: var(--color-bg-card); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); max-width: 600px; width: 90%; max-height: 90vh; overflow-y: auto; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem; border-bottom: 1px solid var(--color-border); }
-.modal-body { padding: 1.5rem; }
-.modal-footer { padding: 1rem 1.5rem; border-top: 1px solid var(--color-border); display: flex; justify-content: flex-end; gap: 0.5rem; }
-
-/* Theme Editor */
-.theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.75rem; margin: 1rem 0; }
-.theme-preset { padding: 1rem; border: 2px solid var(--color-border); border-radius: var(--radius); cursor: pointer; text-align: center; transition: all 0.15s; }
-.theme-preset:hover { border-color: var(--color-primary); transform: translateY(-2px); box-shadow: var(--shadow); }
-.theme-preset.active { border-color: var(--color-primary); background: var(--color-primary-light); }
-.theme-preset-preview { width: 100%; height: 40px; border-radius: 4px; margin-bottom: 0.5rem; }
-.color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0; }
-.color-item { display: flex; flex-direction: column; gap: 0.5rem; }
-.color-item label { font-size: 0.8rem; font-weight: 500; color: var(--color-text-secondary); }
-.color-item input[type="color"] { width: 100%; height: 40px; border: 1px solid var(--color-border); border-radius: var(--radius); cursor: pointer; }
-
-/* Footer */
-.footer { background: var(--color-bg-card); border-top: 1px solid var(--color-border); padding: 1.5rem; margin-top: auto; }
-.footer-content { max-width: 1200px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--color-text-muted); }
-@media (max-width: 768px) { .footer-content { flex-direction: column; gap: 0.5rem; text-align: center; } }
-
-/* Utilities */
-.hidden { display: none !important; }
-.flex { display: flex; }
-.flex-col { flex-direction: column; }
-.items-center { align-items: center; }
-.justify-between { justify-content: space-between; }
-.gap-2 { gap: 0.5rem; }
-.gap-4 { gap: 1rem; }
-.mt-4 { margin-top: 1rem; }
-.mb-4 { margin-bottom: 1rem; }
-.text-center { text-align: center; }
-.text-muted { color: var(--color-text-muted); }
-.text-sm { font-size: 0.85rem; }
-.w-full { width: 100%; }
-.spinner {
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 3px solid rgba(37, 99, 235, 0.15);
-  border-top-color: var(--color-primary);
-  border-right-color: var(--color-primary);
-  border-radius: 50%;
-  animation: spin 0.75s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
-  box-shadow: 0 0 10px rgba(37, 99, 235, 0.1);
+.tab-btn.active {
+  color: var(--color-primary);
+  background: var(--color-bg-card);
+  border-bottom: 2px solid var(--color-primary);
+  margin-bottom: -1px;
 }
-@keyframes spin { to { transform: rotate(360deg); } }
-.empty { text-align: center; padding: 3rem 1rem; color: var(--color-text-muted); }
-.error { background: #f8d7da; color: #721c24; padding: 1rem; border-radius: var(--radius); border: 1px solid #f5c6cb; }
-.success { background: #d4edda; color: #155724; padding: 1rem; border-radius: var(--radius); border: 1px solid #c3e6cb; }
+.tab-content {
+  display: none;
+}
+.tab-content.active {
+  display: block;
+  animation: fadeIn 0.15s ease-in-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 
-/* In-Browser Edition & Dashboard Components */
+/* 10. In-Browser Hero / Dashboard Strip */
 .browser-hero {
-  background: linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(99,102,241,0.05) 100%);
+  background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg, 12px);
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  border-radius: var(--radius);
+  padding: 1.15rem 1.35rem;
+  margin-bottom: 1.25rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
   flex-wrap: wrap;
   gap: 1rem;
+}
+.browser-hero.hidden {
+  display: none !important;
 }
 .browser-hero-title {
   display: flex;
@@ -389,76 +466,121 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 .browser-hero-title h1 {
   margin: 0;
-  font-size: 1.6rem;
+  font-size: 1.45rem;
 }
+
 .storage-selector-group {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: var(--color-bg-card);
-  padding: 0.35rem 0.65rem;
-  border-radius: 20px;
-  border: 1.5px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  border: 1px solid var(--color-border);
 }
 .status-dot {
-  width: 9px;
-  height: 9px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: #10b981;
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25);
-  animation: pulse-dot 2s infinite;
+  animation: pulse-dot 2.5s infinite;
 }
 @keyframes pulse-dot {
-  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
-  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+  0% { transform: scale(0.95); opacity: 0.9; }
+  50% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.9; }
 }
 
-/* Nav Tabs */
-.tabs-nav {
-  display: flex;
-  gap: 0.5rem;
-  border-bottom: 2px solid var(--color-border);
-  margin-bottom: 1.5rem;
-  overflow-x: auto;
-  padding-bottom: 2px;
-}
-.tab-btn {
-  background: none;
-  border: none;
-  padding: 0.65rem 1.1rem;
-  font-size: 0.92rem;
-  font-weight: 600;
-  color: var(--color-text-secondary);
-  border-radius: 8px 8px 0 0;
-  cursor: pointer;
-  transition: all 0.15s;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  position: relative;
-  white-space: nowrap;
-}
-.tab-btn:hover {
-  color: var(--color-primary);
-  background: rgba(37,99,235,0.05);
-}
-.tab-btn.active {
-  color: var(--color-primary);
+/* 11. Code Editor & File Explorer (High Performance) */
+.editor-container {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
   background: var(--color-bg-card);
-  border-bottom: 2px solid var(--color-primary);
-  margin-bottom: -2px;
+  min-height: 520px;
+  overflow: hidden;
 }
-.tab-content {
-  display: none;
-}
-.tab-content.active {
-  display: block;
+@media (max-width: 768px) {
+  .editor-container {
+    grid-template-columns: 1fr;
+  }
 }
 
-/* Myers Diff View */
+.file-tree {
+  border-right: 1px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  padding: 0.75rem;
+  overflow-y: auto;
+  max-height: 580px;
+}
+@media (max-width: 768px) {
+  .file-tree {
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    max-height: 200px;
+  }
+  .file-tree.collapsed {
+    display: none;
+  }
+}
+
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-family: var(--font-mono);
+  transition: background var(--transition-speed);
+}
+.file-tree-item:hover {
+  background: var(--color-bg-hover);
+}
+.file-tree-item.active {
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.code-area {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem;
+  background: var(--color-bg-card);
+}
+.editor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 0.65rem;
+  margin-bottom: 0.65rem;
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.editor-textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 420px;
+  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  padding: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg-code);
+  color: var(--color-text);
+  resize: vertical;
+}
+
+/* 12. Myers Diff View */
 .diff-view {
-  font-family: var(--font-mono, monospace);
+  font-family: var(--font-mono);
   font-size: 0.86rem;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
@@ -467,102 +589,36 @@ input[type="range"]::-webkit-slider-thumb:hover {
   line-height: 1.45;
 }
 .diff-line {
-  padding: 0.2rem 0.8rem;
+  padding: 0.18rem 0.75rem;
   white-space: pre-wrap;
   word-break: break-all;
 }
 .diff-line-add {
-  background: rgba(46, 160, 67, 0.12);
-  color: #1a7f37;
-  border-left: 3px solid #2da44e;
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--color-success);
+  border-left: 3px solid var(--color-success);
 }
 .diff-line-del {
-  background: rgba(207, 34, 46, 0.12);
-  color: #cf222e;
-  border-left: 3px solid #cf222e;
+  background: rgba(244, 63, 94, 0.15);
+  color: var(--color-danger);
+  border-left: 3px solid var(--color-danger);
 }
 .diff-line-chunk {
-  background: rgba(9, 105, 218, 0.08);
-  color: #0969da;
-  font-weight: bold;
-}
-
-/* Split Code Editor */
-.editor-container {
-  display: grid;
-  grid-template-columns: 240px 1fr;
-  gap: 1rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-bg-card);
-  min-height: 480px;
-}
-@media (max-width: 768px) {
-  .editor-container { grid-template-columns: 1fr; }
-}
-.file-tree {
-  border-right: 1px solid var(--color-border);
-  padding: 0.75rem;
-  overflow-y: auto;
-  max-height: 520px;
-}
-.file-tree-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0.65rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.88rem;
-  font-family: var(--font-mono);
-  transition: background 0.12s;
-}
-.file-tree-item:hover {
-  background: var(--color-bg-hover, #f1f5f9);
-}
-.file-tree-item.active {
-  background: rgba(37, 99, 235, 0.12);
+  background: var(--color-primary-light);
   color: var(--color-primary);
-  font-weight: 600;
-}
-.code-area {
-  display: flex;
-  flex-direction: column;
-  padding: 0.75rem;
-}
-.editor-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 0.5rem;
-  margin-bottom: 0.5rem;
-  border-bottom: 1px solid var(--color-border-light);
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.editor-textarea {
-  flex: 1;
-  width: 100%;
-  min-height: 380px;
-  font-family: var(--font-mono);
-  font-size: 0.9rem;
-  line-height: 1.5;
-  padding: 0.75rem;
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  background: var(--color-bg);
-  color: var(--color-text);
-  resize: vertical;
+  font-weight: 700;
 }
 
-/* MCP Tool Inspector */
+/* 13. MCP Layout */
 .mcp-layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 300px 1fr;
   gap: 1.25rem;
 }
-@media (max-width: 840px) {
-  .mcp-layout { grid-template-columns: 1fr; }
+@media (max-width: 860px) {
+  .mcp-layout {
+    grid-template-columns: 1fr;
+  }
 }
 .mcp-tools-list {
   max-height: 600px;
@@ -573,12 +629,12 @@ input[type="range"]::-webkit-slider-thumb:hover {
   background: var(--color-bg-card);
 }
 .mcp-tool-item {
-  padding: 0.55rem 0.75rem;
-  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius);
   cursor: pointer;
   margin-bottom: 0.25rem;
   font-size: 0.88rem;
-  transition: all 0.12s;
+  transition: all var(--transition-speed);
 }
 .mcp-tool-item:hover {
   background: var(--color-bg-hover);
@@ -589,228 +645,452 @@ input[type="range"]::-webkit-slider-thumb:hover {
   font-weight: 600;
 }
 .mcp-response-box {
-  background: #1e1e2e;
-  color: #a6accd;
+  background: var(--color-bg-code);
+  color: var(--color-text);
   font-family: var(--font-mono);
   padding: 1rem;
-  border-radius: 8px;
-  max-height: 360px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  max-height: 380px;
   overflow: auto;
   font-size: 0.85rem;
   white-space: pre-wrap;
 }
 
+/* 14. Modals & Dialogs */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+  padding: 1rem;
+}
+.modal.hidden {
+  display: none !important;
+}
+.modal-content {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  max-width: 720px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  animation: scaleIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes scaleIn {
+  from { transform: scale(0.96); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.15rem 1.35rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.modal-body {
+  padding: 1.35rem;
+  overflow-y: auto;
+}
+.modal-footer {
+  padding: 0.85rem 1.35rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  background: var(--color-bg-secondary);
+}
+
+/* Settings Modal Specifics */
+.settings-nav {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 1rem;
+  overflow-x: auto;
+}
+.settings-tab-btn {
+  background: none;
+  border: none;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+}
+.settings-tab-btn.active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+.settings-tab-pane {
+  display: none;
+}
+.settings-tab-pane.active {
+  display: block;
+}
+
+.theme-chips-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.theme-chip {
+  padding: 0.75rem;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: all var(--transition-speed);
+  background: var(--color-bg-secondary);
+}
+.theme-chip:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+.theme-chip.active {
+  border-color: var(--color-primary);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.color-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.color-picker-row label {
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+.color-picker-row input[type="color"] {
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  width: 44px;
+  height: 32px;
+  cursor: pointer;
+  background: none;
+}
+
+/* 15. Utilities & Micro Components */
+.hidden { display: none !important; }
+.spinner {
+  width: 2rem;
+  height: 2rem;
+  border: 3px solid rgba(59, 130, 246, 0.2);
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Toast Notifications */
+#toast-container {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-left: 4px solid var(--color-primary);
+  padding: 0.75rem 1.15rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.88rem;
+  animation: slideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes slideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
 
 </style>
   <style>
-/* Fossil-Nim Themes - Modular, easy to edit palette
-   Generated from src/fossil/ui/theme.nim via tools/generate_themes.nim
-   Edit palette in theme.nim to change colors, then regenerate
-   Or edit directly here for quick tweaks
+/* Fossil-Nim Professional Themes & Layout Customization
+   Pure CSS Custom Properties (Variables)
+   Supports: Dark (Obsidian), Light (GitHub), Nord, Dracula, Gruvbox, Cyberpunk, Monokai, and Custom
+   Plus UI Density, Font scaling, and Radius modifiers
 */
 
-/* Theme: light - Light */
-/* Default light theme, clean and minimal */
-[data-theme="light"] {
-  --color-primary: #0d6efd;
-  --color-primary-hover: #0b5ed7;
-  --color-primary-light: #cfe2ff;
-  --color-secondary: #6c757d;
-  --color-success: #198754;
-  --color-danger: #dc3545;
-  --color-warning: #ffc107;
-  --color-info: #0dcaf0;
-  --color-bg: #f8f9fa;
-  --color-bg-secondary: #e9ecef;
-  --color-bg-card: #ffffff;
-  --color-bg-code: #f1f3f5;
-  --color-bg-hover: #e9ecef;
-  --color-text: #212529;
-  --color-text-secondary: #495057;
-  --color-text-muted: #6c757d;
-  --color-text-inverse: #ffffff;
-  --color-border: #dee2e6;
-  --color-border-light: #e9ecef;
-  --color-border-dark: #343a40;
-  --shadow: 0 1px 3px rgba(0,0,0,0.1);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.15);
-  --radius: 6px;
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Consolas, monospace;
+  --font-base: 15px;
+  --radius: 8px;
   --radius-lg: 12px;
+  --card-padding: 1.25rem;
+  --nav-height: 56px;
+  --transition-speed: 0.15s;
 }
 
-/* Theme: dark - Dark */
-/* Dark theme for low light */
+/* 1. Theme: Obsidian Dark (Default Dark - Pro Dev Daily Driver) */
 [data-theme="dark"] {
   --color-primary: #3b82f6;
-  --color-primary-hover: #2563eb;
-  --color-primary-light: #1e3a5f;
-  --color-secondary: #6b7280;
+  --color-primary-hover: #60a5fa;
+  --color-primary-light: rgba(59, 130, 246, 0.15);
+  --color-secondary: #94a3b8;
   --color-success: #10b981;
-  --color-danger: #ef4444;
+  --color-danger: #f43f5e;
   --color-warning: #f59e0b;
   --color-info: #06b6d4;
-  --color-bg: #111827;
-  --color-bg-secondary: #1f2937;
-  --color-bg-card: #1f2937;
-  --color-bg-code: #374151;
-  --color-bg-hover: #374151;
-  --color-text: #f9fafb;
-  --color-text-secondary: #d1d5db;
-  --color-text-muted: #9ca3af;
-  --color-text-inverse: #111827;
-  --color-border: #374151;
-  --color-border-light: #4b5563;
-  --color-border-dark: #6b7280;
-  --shadow: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.4);
-  --radius: 6px;
-  --radius-lg: 12px;
+  --color-bg: #0b0f19;
+  --color-bg-secondary: #111827;
+  --color-bg-card: #151d2e;
+  --color-bg-code: #0d1424;
+  --color-bg-hover: #1e293b;
+  --color-text: #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #64748b;
+  --color-text-inverse: #0b0f19;
+  --color-border: #1e293b;
+  --color-border-light: #334155;
+  --color-border-dark: #475569;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
-/* Theme: solarized-light - Solarized Light */
-/* Solarized light, easy on eyes */
-[data-theme="solarized-light"] {
-  --color-primary: #268bd2;
-  --color-primary-hover: #2075b5;
-  --color-primary-light: #d6e9f5;
-  --color-secondary: #93a1a1;
-  --color-success: #859900;
-  --color-danger: #dc322f;
-  --color-warning: #b58900;
-  --color-info: #2aa198;
-  --color-bg: #fdf6e3;
-  --color-bg-secondary: #eee8d5;
+/* 2. Theme: Light (Clean Minimalist GitHub Pro) */
+[data-theme="light"], [data-theme="github-light"] {
+  --color-primary: #0969da;
+  --color-primary-hover: #0550ae;
+  --color-primary-light: #ddf4ff;
+  --color-secondary: #57606a;
+  --color-success: #1a7f37;
+  --color-danger: #cf222e;
+  --color-warning: #9a6700;
+  --color-info: #0969da;
+  --color-bg: #f8fafc;
+  --color-bg-secondary: #f1f5f9;
   --color-bg-card: #ffffff;
-  --color-bg-code: #eee8d5;
-  --color-bg-hover: #eee8d5;
-  --color-text: #586e75;
-  --color-text-secondary: #657b83;
-  --color-text-muted: #93a1a1;
-  --color-text-inverse: #fdf6e3;
-  --color-border: #93a1a1;
-  --color-border-light: #eee8d5;
-  --color-border-dark: #586e75;
-  --shadow: 0 1px 3px rgba(88,110,117,0.1);
-  --shadow-lg: 0 4px 12px rgba(88,110,117,0.15);
-  --radius: 6px;
-  --radius-lg: 12px;
+  --color-bg-code: #f1f5f9;
+  --color-bg-hover: #e2e8f0;
+  --color-text: #0f172a;
+  --color-text-secondary: #334155;
+  --color-text-muted: #64748b;
+  --color-text-inverse: #ffffff;
+  --color-border: #e2e8f0;
+  --color-border-light: #cbd5e1;
+  --color-border-dark: #94a3b8;
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 8px 20px rgba(15, 23, 42, 0.08);
 }
 
-/* Theme: nord - Nord */
-/* Nord dark, arctic bluish */
+/* 3. Theme: Nord (Arctic Frost) */
 [data-theme="nord"] {
   --color-primary: #88c0d0;
   --color-primary-hover: #81a1c1;
-  --color-primary-light: #4c566a;
-  --color-secondary: #4c566a;
+  --color-primary-light: rgba(136, 192, 208, 0.2);
+  --color-secondary: #81a1c1;
   --color-success: #a3be8c;
   --color-danger: #bf616a;
   --color-warning: #ebcb8b;
-  --color-info: #88c0d0;
-  --color-bg: #2e3440;
-  --color-bg-secondary: #3b4252;
-  --color-bg-card: #3b4252;
-  --color-bg-code: #4c566a;
-  --color-bg-hover: #4c566a;
+  --color-info: #8fbcbb;
+  --color-bg: #242933;
+  --color-bg-secondary: #2e3440;
+  --color-bg-card: #2e3440;
+  --color-bg-code: #3b4252;
+  --color-bg-hover: #3b4252;
   --color-text: #eceff4;
   --color-text-secondary: #d8dee9;
-  --color-text-muted: #4c566a;
+  --color-text-muted: #616e88;
   --color-text-inverse: #2e3440;
-  --color-border: #4c566a;
-  --color-border-light: #5e81ac;
-  --color-border-dark: #2e3440;
+  --color-border: #3b4252;
+  --color-border-light: #4c566a;
+  --color-border-dark: #5e81ac;
   --shadow: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.4);
-  --radius: 6px;
-  --radius-lg: 12px;
+  --shadow-lg: 0 6px 18px rgba(0,0,0,0.4);
 }
 
+/* 4. Theme: Dracula (Vampire Dark) */
+[data-theme="dracula"] {
+  --color-primary: #bd93f9;
+  --color-primary-hover: #d1b3ff;
+  --color-primary-light: rgba(189, 147, 249, 0.2);
+  --color-secondary: #6272a4;
+  --color-success: #50fa7b;
+  --color-danger: #ff5555;
+  --color-warning: #f1fa8c;
+  --color-info: #8be9fd;
+  --color-bg: #1e1f29;
+  --color-bg-secondary: #282a36;
+  --color-bg-card: #282a36;
+  --color-bg-code: #21222c;
+  --color-bg-hover: #343746;
+  --color-text: #f8f8f2;
+  --color-text-secondary: #cfcfc2;
+  --color-text-muted: #6272a4;
+  --color-text-inverse: #282a36;
+  --color-border: #44475a;
+  --color-border-light: #6272a4;
+  --color-border-dark: #bd93f9;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+}
 
-/* Monokai - Vibrant dark */
+/* 5. Theme: Gruvbox (Retro Warm) */
+[data-theme="gruvbox"] {
+  --color-primary: #fe8019;
+  --color-primary-hover: #fa8b32;
+  --color-primary-light: rgba(254, 128, 25, 0.2);
+  --color-secondary: #928374;
+  --color-success: #b8bb26;
+  --color-danger: #fb4934;
+  --color-warning: #fabd2f;
+  --color-info: #83a598;
+  --color-bg: #1d2021;
+  --color-bg-secondary: #282828;
+  --color-bg-card: #282828;
+  --color-bg-code: #32302f;
+  --color-bg-hover: #3c3836;
+  --color-text: #ebdbb2;
+  --color-text-secondary: #d5c4a1;
+  --color-text-muted: #928374;
+  --color-text-inverse: #282828;
+  --color-border: #3c3836;
+  --color-border-light: #504945;
+  --color-border-dark: #665c54;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 20px rgba(0,0,0,0.5);
+}
+
+/* 6. Theme: Cyberpunk (High Contrast Neon) */
+[data-theme="cyberpunk"] {
+  --color-primary: #00ff66;
+  --color-primary-hover: #33ff88;
+  --color-primary-light: rgba(0, 255, 102, 0.2);
+  --color-secondary: #00e5ff;
+  --color-success: #00ff66;
+  --color-danger: #ff0055;
+  --color-warning: #ffff00;
+  --color-info: #00e5ff;
+  --color-bg: #030712;
+  --color-bg-secondary: #0b0f19;
+  --color-bg-card: #0f172a;
+  --color-bg-code: #050811;
+  --color-bg-hover: #1e293b;
+  --color-text: #f0fdf4;
+  --color-text-secondary: #86efac;
+  --color-text-muted: #4ade80;
+  --color-text-inverse: #030712;
+  --color-border: #15803d;
+  --color-border-light: #16a34a;
+  --color-border-dark: #22c55e;
+  --shadow: 0 0 10px rgba(0, 255, 102, 0.15);
+  --shadow-lg: 0 0 25px rgba(0, 255, 102, 0.25);
+}
+
+/* 7. Theme: Monokai */
 [data-theme="monokai"] {
   --color-primary: #a6e22e;
-  --color-primary-hover: #8ac627;
-  --color-primary-light: #3e4a2d;
+  --color-primary-hover: #b8f044;
+  --color-primary-light: rgba(166, 226, 46, 0.2);
   --color-secondary: #75715e;
   --color-success: #a6e22e;
   --color-danger: #f92672;
   --color-warning: #fd971f;
   --color-info: #66d9ef;
   --color-bg: #272822;
-  --color-bg-secondary: #3e3d32;
-  --color-bg-card: #3e3d32;
-  --color-bg-code: #49483e;
-  --color-bg-hover: #49483e;
+  --color-bg-secondary: #32332a;
+  --color-bg-card: #32332a;
+  --color-bg-code: #1e1f1c;
+  --color-bg-hover: #3e3d32;
   --color-text: #f8f8f2;
   --color-text-secondary: #cfcfc2;
   --color-text-muted: #75715e;
   --color-text-inverse: #272822;
   --color-border: #49483e;
   --color-border-light: #75715e;
-  --color-border-dark: #f8f8f2;
+  --color-border-dark: #a6e22e;
   --shadow: 0 1px 3px rgba(0,0,0,0.4);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.5);
-  --radius: 6px;
-  --radius-lg: 12px;
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
 }
 
-/* GitHub Light */
-[data-theme="github-light"] {
-  --color-primary: #0969da;
-  --color-primary-hover: #0550ae;
-  --color-primary-light: #ddf4ff;
-  --color-secondary: #656d76;
-  --color-success: #1a7f37;
-  --color-danger: #cf222e;
-  --color-warning: #9a6700;
-  --color-info: #0969da;
-  --color-bg: #ffffff;
-  --color-bg-secondary: #f6f8fa;
-  --color-bg-card: #ffffff;
-  --color-bg-code: #f6f8fa;
-  --color-bg-hover: #f6f8fa;
-  --color-text: #24292f;
-  --color-text-secondary: #57606a;
-  --color-text-muted: #8c959f;
-  --color-text-inverse: #ffffff;
-  --color-border: #d0d7de;
-  --color-border-light: #d8dee4;
-  --color-border-dark: #24292f;
-  --shadow: 0 1px 0 rgba(27,31,36,0.04);
-  --shadow-lg: 0 3px 6px rgba(140,149,159,0.15);
-  --radius: 6px;
-  --radius-lg: 12px;
+/* =========================================================================
+   UI MODIFIERS: Density, Font Family, Font Scaling, Border Radius
+   ========================================================================= */
+
+/* Density */
+[data-density="compact"] {
+  --card-padding: 0.85rem;
+  --spacing-btn: 0.35rem 0.65rem;
+  --nav-height: 48px;
+  font-size: 14px;
+}
+[data-density="compact"] .main {
+  padding: 1rem 0.75rem !important;
+}
+[data-density="compact"] .card {
+  padding: 0.85rem !important;
+}
+[data-density="compact"] .browser-hero {
+  padding: 0.75rem 1rem !important;
+  margin-bottom: 0.75rem !important;
+}
+[data-density="compact"] .btn {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.82rem;
 }
 
-/* Template for custom themes - copy and edit */
-/*
-[data-theme="my-custom"] {
-  --color-primary: #your-color;
-  --color-primary-hover: #your-hover;
-  --color-primary-light: #your-light;
-  --color-secondary: #...
-  --color-success: #...
-  --color-danger: #...
-  --color-warning: #...
-  --color-info: #...
-  --color-bg: #...
-  --color-bg-secondary: #...
-  --color-bg-card: #...
-  --color-bg-code: #...
-  --color-bg-hover: #...
-  --color-text: #...
-  --color-text-secondary: #...
-  --color-text-muted: #...
-  --color-text-inverse: #...
-  --color-border: #...
-  --color-border-light: #...
-  --color-border-dark: #...
-  --shadow: 0 1px 3px rgba(0,0,0,0.1);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.15);
-  --radius: 6px;
-  --radius-lg: 12px;
+[data-density="comfortable"] {
+  --card-padding: 1.35rem;
+  --spacing-btn: 0.55rem 1.05rem;
+  --nav-height: 58px;
 }
-*/
+
+/* Font Family Selection */
+[data-font="mono"] {
+  --font-sans: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace !important;
+}
+[data-font="inter"] {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+/* Font Size Scaling */
+[data-font-size="13px"] { font-size: 13px !important; }
+[data-font-size="14px"] { font-size: 14px !important; }
+[data-font-size="15px"] { font-size: 15px !important; }
+[data-font-size="16px"] { font-size: 16px !important; }
+
+/* Border Radius Modifiers */
+[data-radius="0px"] {
+  --radius: 0px !important;
+  --radius-lg: 0px !important;
+}
+[data-radius="4px"] {
+  --radius: 4px !important;
+  --radius-lg: 6px !important;
+}
+[data-radius="8px"] {
+  --radius: 8px !important;
+  --radius-lg: 12px !important;
+}
+[data-radius="12px"] {
+  --radius: 12px !important;
+  --radius-lg: 16px !important;
+}
 
 </style>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🦖</text></svg>">
@@ -820,43 +1100,51 @@ input[type="range"]::-webkit-slider-thumb:hover {
     <!-- Main In-Browser Navigation Header -->
     <header class="navbar">
       <div class="navbar-brand">
-        <a href="browser.html">🦖 Fossil-Nim <span class="badge badge-primary">Browser Edition</span></a>
-        <span class="badge" style="background:#6366f1;">89 MCP Tools</span>
+        <a href="browser.html">🦖 Fossil-Nim <span class="badge badge-primary" data-i18n="app.edition">Browser Edition</span></a>
+        <span class="badge" style="background:#6366f1;" data-i18n="app.tools_badge">89 MCP Tools</span>
       </div>
+
+      <button id="btn-mobile-menu" class="mobile-menu-toggle" aria-label="Toggle navigation menu">☰</button>
+
       <div class="navbar-actions">
         <!-- Storage Selector Dropdown -->
         <div class="storage-selector-group">
           <div class="status-dot" title="Storage Ready"></div>
-          <span style="font-size:0.82rem; font-weight:600; color:var(--color-text-secondary);">Storage:</span>
-          <select id="storage-backend-select" class="form-select" style="padding:0.25rem 2rem 0.25rem 0.65rem; font-size:0.85rem; width:auto; border-radius:12px; height:auto;">
+          <span style="font-size:0.82rem; font-weight:600; color:var(--color-text-secondary);" data-i18n="nav.storage">Storage:</span>
+          <select id="storage-backend-select" class="form-select" style="padding:0.25rem 2rem 0.25rem 0.65rem; font-size:0.85rem; width:auto; border-radius:9999px; height:auto;">
             <option value="indexeddb">🗄️ IndexedDB (Local-First)</option>
             <option value="sqlite_wasm">⚡ SQLite WASM (.fossil)</option>
             <option value="cdb">🚀 Pure-Nim CDB (RAM)</option>
           </select>
         </div>
-        <button id="btn-export-repo" class="btn btn-secondary btn-sm" title="Download repository snapshot">💾 Export</button>
-        <button id="btn-import-repo" class="btn btn-primary btn-sm" title="Import repository snapshot (.json, .fossil, .cdb)">📥 Import</button>
+
+        <button id="btn-export-repo" class="btn btn-secondary btn-sm" data-i18n="nav.export" data-i18n-title="nav.export">💾 Экспорт</button>
+        <button id="btn-import-repo" class="btn btn-primary btn-sm" data-i18n="nav.import" data-i18n-title="nav.import">📥 Импорт</button>
         <input type="file" id="file-import-input" accept=".fossil,.cdb,.json" style="display:none;">
-        <button id="theme-toggle-btn" class="btn btn-icon" title="Toggle Theme">🌙</button>
-        <a href="/" class="btn btn-secondary btn-sm" title="Go to Server UI">🖥️ Server UI</a>
+
+        <!-- Language Switcher & Settings -->
+        <button id="btn-lang-toggle" class="btn btn-secondary btn-sm" title="Переключить язык / Switch Language">🇷🇺 RU</button>
+        <button id="btn-ui-settings" class="btn btn-secondary btn-sm" data-i18n-title="nav.settings">⚙️ Настройки</button>
+        <button id="theme-toggle-btn" class="btn btn-icon" title="Быстрая смена темы (Dark/Light)">🌙</button>
+        <a href="/" class="btn btn-secondary btn-sm" data-i18n="nav.server_ui">🖥️ Серверный UI</a>
       </div>
     </header>
 
     <!-- Main Container -->
     <main class="main">
-      <!-- Hero Banner -->
-      <div class="browser-hero">
+      <!-- Hero Banner / Quick Dashboard Strip -->
+      <div id="browser-hero" class="browser-hero">
         <div class="browser-hero-title">
-          <span style="font-size:2.5rem;">🦖</span>
+          <span style="font-size:2.2rem;">🦖</span>
           <div>
             <h1>Fossil-Nim WebAssembly & JS</h1>
-            <p style="margin:0; font-size:0.92rem; color:var(--color-text-muted);">
-              Distributed Version Control running 100% inside your browser. No server required.
-              Active backend: <b id="active-backend-name" style="color:var(--color-primary);">IndexedDB</b>
+            <p style="margin:0; font-size:0.9rem; color:var(--color-text-muted);">
+              <span data-i18n="app.hero_desc">Распределённая система контроля версий, работающая на 100% внутри браузера. Сервер не требуется.</span>
+              <span data-i18n="app.active_backend">Активное хранилище:</span> <b id="active-backend-name" style="color:var(--color-primary);">IndexedDB</b>
             </p>
           </div>
         </div>
-        <div style="display:flex; gap:0.5rem; align-items:center;">
+        <div style="display:flex; gap:0.45rem; align-items:center; flex-wrap:wrap;">
           <span class="badge badge-success">Local-First</span>
           <span class="badge badge-info">Myers Diff</span>
           <span class="badge badge-warning">MCP 89 Tools</span>
@@ -864,29 +1152,29 @@ input[type="range"]::-webkit-slider-thumb:hover {
       </div>
 
       <!-- Loading overlay -->
-      <div id="loading-indicator" class="loading hidden" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:9999; background:rgba(0,0,0,0.5); padding:2rem; border-radius:12px;">
+      <div id="loading-indicator" class="loading hidden" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); z-index:9999; background:rgba(0,0,0,0.65); padding:2rem; border-radius:12px; backdrop-filter:blur(4px);">
         <div class="spinner"></div>
       </div>
 
       <!-- Tab Navigation Strip -->
-      <div class="tabs-nav">
-        <button class="tab-btn active" data-tab="timeline">📜 Timeline</button>
-        <button class="tab-btn" data-tab="files">📁 Files & Editor</button>
-        <button class="tab-btn" data-tab="diff">🔍 Myers Diff</button>
-        <button class="tab-btn" data-tab="wiki">📖 Wiki & Docs</button>
-        <button class="tab-btn" data-tab="tickets">🎫 Tickets</button>
-        <button class="tab-btn" data-tab="mcp">🤖 AI Agent MCP (89)</button>
-        <button class="tab-btn" data-tab="storage">💾 Multi-DB Diagnostics</button>
-      </div>
+      <nav class="tabs-nav" aria-label="Sections">
+        <button class="tab-btn active" data-tab="timeline" data-i18n="tab.timeline">📜 Таймлайн</button>
+        <button class="tab-btn" data-tab="files" data-i18n="tab.files">📁 Файлы и редактор</button>
+        <button class="tab-btn" data-tab="diff" data-i18n="tab.diff">🔍 Myers Diff</button>
+        <button class="tab-btn" data-tab="wiki" data-i18n="tab.wiki">📖 Wiki и документация</button>
+        <button class="tab-btn" data-tab="tickets" data-i18n="tab.tickets">🎫 Тикеты</button>
+        <button class="tab-btn" data-tab="mcp" data-i18n="tab.mcp">🤖 ИИ-агент MCP (89)</button>
+        <button class="tab-btn" data-tab="storage" data-i18n="tab.storage">💾 Мульти-БД диагностика</button>
+      </nav>
 
       <!-- TAB 1: Timeline -->
       <section id="tab-timeline" class="tab-content active">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">Repository Timeline</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">History of check-ins and commits saved in current browser storage backend.</p>
+            <h2 style="margin:0;" data-i18n="timeline.title">Таймлайн репозитория</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="timeline.desc">История фиксаций и коммитов в текущем браузерном хранилище.</p>
           </div>
-          <button id="btn-new-commit-modal" class="btn btn-primary btn-sm">+ New Commit</button>
+          <button id="btn-new-commit-modal" class="btn btn-primary btn-sm" data-i18n="timeline.new_commit">+ Новый коммит</button>
         </div>
         <div id="timeline-list">
           <div class="loading"><div class="spinner"></div></div>
@@ -895,19 +1183,22 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
       <!-- TAB 2: Virtual Files & Editor -->
       <section id="tab-files" class="tab-content">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">In-Browser Virtual File System</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Edit repository files directly in browser with live Myers diff and commits.</p>
+            <h2 style="margin:0;" data-i18n="files.title">Виртуальная файловая система</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="files.desc">Редактируйте файлы репозитория в браузере с live-diff Myers и коммитами.</p>
           </div>
-          <button id="btn-new-file" class="btn btn-secondary btn-sm">+ New File</button>
+          <div style="display:flex; gap:0.4rem;">
+            <button id="btn-toggle-file-tree" class="btn btn-secondary btn-sm" data-i18n="files.toggle_tree">📁 Дерево файлов</button>
+            <button id="btn-new-file" class="btn btn-secondary btn-sm" data-i18n="files.new_file">+ Новый файл</button>
+          </div>
         </div>
 
         <div class="editor-container">
           <!-- Left: Files Tree -->
           <div class="file-tree">
-            <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.6rem; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;">
-              Repository Tree
+            <div style="font-weight:600; font-size:0.82rem; margin-bottom:0.6rem; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;" data-i18n="files.repo_tree">
+              Дерево репозитория
             </div>
             <div id="files-tree"></div>
           </div>
@@ -916,10 +1207,10 @@ input[type="range"]::-webkit-slider-thumb:hover {
           <div class="code-area">
             <div class="editor-toolbar">
               <span id="active-file-label" style="font-family:var(--font-mono); font-weight:600; font-size:0.95rem;">README.md</span>
-              <div style="display:flex; gap:0.4rem;">
-                <button id="btn-editor-diff" class="btn btn-secondary btn-sm">⚡ Compare Diff</button>
-                <button id="btn-editor-save" class="btn btn-secondary btn-sm">💾 Save File</button>
-                <button id="btn-editor-commit" class="btn btn-primary btn-sm">🚀 Commit</button>
+              <div style="display:flex; gap:0.4rem; flex-wrap:wrap;">
+                <button id="btn-editor-diff" class="btn btn-secondary btn-sm" data-i18n="files.compare_diff">⚡ Сравнить Diff</button>
+                <button id="btn-editor-save" class="btn btn-secondary btn-sm" data-i18n="files.save">💾 Сохранить</button>
+                <button id="btn-editor-commit" class="btn btn-primary btn-sm" data-i18n="files.commit">🚀 Закоммитить</button>
               </div>
             </div>
 
@@ -933,23 +1224,23 @@ input[type="range"]::-webkit-slider-thumb:hover {
 
       <!-- TAB 3: Myers Diff Engine Tool -->
       <section id="tab-diff" class="tab-content">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">Myers Diff Engine (Pure Nim in JS)</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Unified Myers diff algorithm compiled directly from Nim Lang to JavaScript.</p>
+            <h2 style="margin:0;" data-i18n="diff.title">Движок Myers Diff (Pure Nim в JS)</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="diff.desc">Алгоритм Myers diff, скомпилированный напрямую из Nim Lang в JavaScript.</p>
           </div>
           <div style="display:flex; align-items:center; gap:0.5rem;">
-            <span style="font-size:0.85rem; font-weight:600;">Sample:</span>
+            <span style="font-size:0.85rem; font-weight:600;" data-i18n="diff.sample">Пример:</span>
             <select id="diff-preset-select" class="form-select" style="padding:0.25rem 2rem 0.25rem 0.65rem; font-size:0.85rem; width:auto;">
-              <option value="code">Nim Code Diff</option>
-              <option value="doc">Markdown Doc Diff</option>
+              <option value="code" data-i18n="diff.preset_code">Nim Code Diff</option>
+              <option value="doc" data-i18n="diff.preset_doc">Markdown Doc Diff</option>
             </select>
           </div>
         </div>
 
         <div class="grid grid-2" style="margin-bottom:1rem;">
           <div>
-            <label class="form-label">Original Text (v1)</label>
+            <label class="form-label" data-i18n="diff.original">Исходный текст (v1)</label>
             <textarea id="diff-input-a" class="form-textarea" style="height:170px;" spellcheck="false">import std/[strutils, tables]
 
 proc processTask(id: int): string =
@@ -958,7 +1249,7 @@ proc processTask(id: int): string =
 </textarea>
           </div>
           <div>
-            <label class="form-label">Modified Text (v2)</label>
+            <label class="form-label" data-i18n="diff.modified">Изменённый текст (v2)</label>
             <textarea id="diff-input-b" class="form-textarea" style="height:170px;" spellcheck="false">import std/[strutils, tables, os]
 
 proc processTask(id: int): string =
@@ -969,26 +1260,26 @@ proc processTask(id: int): string =
           </div>
         </div>
 
-        <button id="btn-run-standalone-diff" class="btn btn-primary" style="margin-bottom:1rem;">⚡ Compute Myers Diff (via Nim)</button>
+        <button id="btn-run-standalone-diff" class="btn btn-primary" style="margin-bottom:1rem;" data-i18n="diff.compute">⚡ Рассчитать Myers Diff (через Nim)</button>
 
         <div id="standalone-diff-result"></div>
       </section>
 
       <!-- TAB 4: Wiki & Documentation -->
       <section id="tab-wiki" class="tab-content">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">Wiki & Built-in Documentation</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Shipped out-of-the-box with complete Fossil-Nim architecture and reference docs.</p>
+            <h2 style="margin:0;" data-i18n="wiki.title">Wiki и встроенная документация</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="wiki.desc">Поставляется из коробки с архитектурой Fossil-Nim и документацией.</p>
           </div>
-          <button id="btn-wiki-new" class="btn btn-secondary btn-sm">+ New Wiki Page</button>
+          <button id="btn-wiki-new" class="btn btn-secondary btn-sm" data-i18n="wiki.new_page">+ Новая страница</button>
         </div>
 
         <div class="editor-container" style="min-height:540px;">
           <!-- Left: Wiki Pages -->
           <div class="file-tree">
-            <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.6rem; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;">
-              Documentation Pages
+            <div style="font-weight:600; font-size:0.82rem; margin-bottom:0.6rem; color:var(--color-text-secondary); text-transform:uppercase; letter-spacing:0.05em;" data-i18n="wiki.pages">
+              Страницы Wiki
             </div>
             <div id="wiki-pages-list"></div>
           </div>
@@ -999,7 +1290,7 @@ proc processTask(id: int): string =
             <div id="wiki-reader-wrap">
               <div class="editor-toolbar">
                 <span id="wiki-view-title" style="font-weight:700; font-size:1.15rem;">Home</span>
-                <button id="btn-wiki-edit" class="btn btn-secondary btn-sm">✏️ Edit Page</button>
+                <button id="btn-wiki-edit" class="btn btn-secondary btn-sm" data-i18n="wiki.edit">✏️ Редактировать</button>
               </div>
               <div id="wiki-view-content" style="padding:1rem; line-height:1.7;"></div>
             </div>
@@ -1007,10 +1298,10 @@ proc processTask(id: int): string =
             <!-- Editor Mode (hidden by default) -->
             <div id="wiki-editor-wrap" class="hidden">
               <div class="editor-toolbar">
-                <span style="font-weight:600;">Editing Wiki Page</span>
+                <span style="font-weight:600;" data-i18n="wiki.edit">Редактирование Wiki страницы</span>
                 <div style="display:flex; gap:0.4rem;">
-                  <button id="btn-wiki-cancel" class="btn btn-secondary btn-sm">Cancel</button>
-                  <button id="btn-wiki-save" class="btn btn-primary btn-sm">💾 Save Page</button>
+                  <button id="btn-wiki-cancel" class="btn btn-secondary btn-sm" data-i18n="wiki.cancel">Отмена</button>
+                  <button id="btn-wiki-save" class="btn btn-primary btn-sm" data-i18n="wiki.save">💾 Сохранить страницу</button>
                 </div>
               </div>
               <div class="grid grid-2" style="min-height:360px;">
@@ -1024,33 +1315,33 @@ proc processTask(id: int): string =
 
       <!-- TAB 5: Tickets / Issue Tracker -->
       <section id="tab-tickets" class="tab-content">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">Issue & Task Tracker</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">Manage bug reports, roadmap items, and feature requests directly in browser.</p>
+            <h2 style="margin:0;" data-i18n="tickets.title">Трекер задач и тикетов</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="tickets.desc">Встроенный баг-трекер с приоритетами, фильтрацией и локальным сохранением.</p>
           </div>
-          <button id="btn-ticket-modal" class="btn btn-primary btn-sm">+ New Ticket</button>
+          <button id="btn-new-ticket-modal" class="btn btn-primary btn-sm" data-i18n="tickets.new_ticket">+ Новый тикет</button>
         </div>
         <div id="tickets-list"></div>
       </section>
 
       <!-- TAB 6: 89-Tool MCP Agent Console -->
       <section id="tab-mcp" class="tab-content">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">In-Browser AI Agent MCP Server (89 Tools)</h2>
-            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">
-              Model Context Protocol server running directly in browser for Gemini, Claude, ChatGPT, WebLLM.
+            <h2 style="margin:0;" data-i18n="mcp.title">Консоль ИИ-агента (89 MCP Tools)</h2>
+            <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="mcp.desc">
+              Полный набор инструментов Model Context Protocol для автономных агентов.
             </p>
           </div>
-          <button id="btn-copy-mcp-prompt" class="btn btn-secondary btn-sm">📋 Copy Prompt for AI Agent</button>
+          <button id="btn-copy-mcp-prompt" class="btn btn-secondary btn-sm" data-i18n="mcp.copy_prompt">📋 Скопировать системный промпт</button>
         </div>
 
         <div class="mcp-layout">
           <!-- Tools List -->
           <div>
-            <div style="font-weight:600; font-size:0.85rem; margin-bottom:0.5rem; color:var(--color-text-secondary); text-transform:uppercase;">
-              Available Tools (89 Total)
+            <div style="font-weight:600; font-size:0.82rem; margin-bottom:0.5rem; color:var(--color-text-secondary); text-transform:uppercase;" data-i18n="mcp.tools_count">
+              Доступные инструменты (89)
             </div>
             <div id="mcp-tools-list" class="mcp-tools-list"></div>
           </div>
@@ -1067,15 +1358,15 @@ proc processTask(id: int): string =
               </p>
 
               <div class="form-group">
-                <label class="form-label">Parameters (JSON Schema)</label>
+                <label class="form-label" data-i18n="mcp.params">JSON параметры вызова:</label>
                 <textarea id="mcp-params-input" class="form-textarea" style="height:90px; font-family:var(--font-mono); font-size:0.85rem;" spellcheck="false">{}</textarea>
               </div>
 
-              <button id="btn-mcp-invoke" class="btn btn-primary">🚀 Invoke Tool (window.fossilMcp)</button>
+              <button id="btn-mcp-invoke" class="btn btn-primary" data-i18n="mcp.invoke">⚡ Вызвать инструмент</button>
             </div>
 
             <div>
-              <label class="form-label">Tool Execution Output (JSON-RPC Result)</label>
+              <label class="form-label" data-i18n="mcp.response">JSON ответ инструмента:</label>
               <pre id="mcp-output-json" class="mcp-response-box">// Select a tool and click "Invoke Tool" to inspect response...</pre>
             </div>
           </div>
@@ -1084,23 +1375,23 @@ proc processTask(id: int): string =
 
       <!-- TAB 7: Multi-DB Diagnostics & SQL Console -->
       <section id="tab-storage" class="tab-content">
-        <h2 style="margin-bottom:0.25rem;">Multi-Database Diagnostics</h2>
-        <p style="margin-bottom:1.5rem; font-size:0.85rem; color:var(--color-text-muted);">
-          Inspect and interact with the 3 supported browser database engines.
+        <h2 style="margin-bottom:0.25rem;" data-i18n="storage.title">Диагностика Мульти-БД и SQL</h2>
+        <p style="margin-bottom:1.25rem; font-size:0.85rem; color:var(--color-text-muted);" data-i18n="storage.desc">
+          Инспекция 3 браузерных бэкендов: IndexedDB, SQLite WASM и Pure-Nim CDB.
         </p>
 
         <div id="storage-stats-container"></div>
 
         <!-- SQL Console for SQLite WASM -->
         <div class="card" style="margin-top:1.5rem;">
-          <h3 style="margin-bottom:0.5rem;">⚡ SQLite WASM Interactive Query Console</h3>
+          <h3 style="margin-bottom:0.5rem;" data-i18n="storage.sql_console">⚡ Интерактивная SQL-консоль (SQLite WASM)</h3>
           <p style="font-size:0.85rem; color:var(--color-text-muted); margin-bottom:1rem;">
             Run direct SQL statements against the WebAssembly SQLite database when SQLite WASM backend is active.
           </p>
           <div class="form-group">
             <textarea id="sql-query-input" class="form-textarea" style="height:70px; font-family:var(--font-mono);" spellcheck="false">SELECT name, author FROM wiki;</textarea>
           </div>
-          <button id="btn-run-sql" class="btn btn-primary btn-sm">▶ Run SQL Query</button>
+          <button id="btn-run-sql" class="btn btn-primary btn-sm" data-i18n="storage.run_query">▶ Выполнить SQL</button>
 
           <div id="sql-query-output" style="margin-top:1rem; overflow-x:auto;"></div>
         </div>
@@ -1123,28 +1414,28 @@ proc processTask(id: int): string =
   <div id="modal-commit" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>🚀 Create Check-in / Commit</h2>
-        <button class="btn btn-icon" id="btn-commit-cancel">✕</button>
+        <h2 data-i18n="modal.commit_title">🚀 Новый коммит репозитория</h2>
+        <button class="btn btn-icon" id="btn-modal-commit-close">✕</button>
       </div>
       <form id="form-commit">
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">Commit Message</label>
+            <label class="form-label" data-i18n="modal.commit_comment">Комментарий коммита:</label>
             <input type="text" id="commit-comment" class="form-input" placeholder="e.g. Implement browser-native storage engine" required>
           </div>
           <div class="grid grid-2">
             <div class="form-group">
-              <label class="form-label">Branch</label>
+              <label class="form-label" data-i18n="modal.commit_branch">Ветка:</label>
               <input type="text" id="commit-branch" class="form-input" value="trunk">
             </div>
             <div class="form-group">
-              <label class="form-label">Author / User</label>
+              <label class="form-label" data-i18n="modal.commit_user">Автор / Пользователь:</label>
               <input type="text" id="commit-user" class="form-input" value="developer">
             </div>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Commit to Storage</button>
+          <button type="submit" class="btn btn-primary" data-i18n="modal.commit_submit">Зафиксировать коммит</button>
         </div>
       </form>
     </div>
@@ -1154,17 +1445,17 @@ proc processTask(id: int): string =
   <div id="modal-ticket" class="modal hidden">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>🎫 Create New Ticket</h2>
-        <button class="btn btn-icon" id="btn-ticket-cancel">✕</button>
+        <h2 data-i18n="modal.ticket_title">🎫 Создать новый тикет</h2>
+        <button class="btn btn-icon" id="btn-modal-ticket-close">✕</button>
       </div>
       <form id="form-ticket">
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">Ticket Title</label>
+            <label class="form-label" data-i18n="modal.ticket_heading">Заголовок задачи:</label>
             <input type="text" id="ticket-title" class="form-input" placeholder="e.g. Add offline sync for mobile devices" required>
           </div>
           <div class="form-group">
-            <label class="form-label">Priority</label>
+            <label class="form-label" data-i18n="modal.ticket_priority">Приоритет:</label>
             <select id="ticket-priority" class="form-select">
               <option value="Low">Low</option>
               <option value="Medium" selected>Medium</option>
@@ -1173,22 +1464,22 @@ proc processTask(id: int): string =
             </select>
           </div>
           <div class="form-group">
-            <label class="form-label">Description</label>
+            <label class="form-label" data-i18n="modal.ticket_desc">Описание:</label>
             <textarea id="ticket-desc" class="form-textarea" placeholder="Detailed description of the issue or feature request..."></textarea>
           </div>
         </div>
         <div class="modal-footer">
-          <button type="submit" class="btn btn-primary">Save Ticket</button>
+          <button type="submit" class="btn btn-primary" data-i18n="modal.ticket_submit">Создать тикет</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Modal: Import Repository & Conflict Resolution -->
+  <!-- Modal: Import Repository & Smart Conflict Resolution -->
   <div id="modal-import-confirm" class="modal hidden">
     <div class="modal-content" style="max-width:540px;">
       <div class="modal-header">
-        <h2>📥 Import Repository</h2>
+        <h2 data-i18n="modal.import_title">📥 Импорт репозитория</h2>
         <button class="btn btn-icon" id="btn-import-cancel">✕</button>
       </div>
       <div class="modal-body">
@@ -1197,35 +1488,183 @@ proc processTask(id: int): string =
           <div style="font-size:0.85rem; color:var(--color-text-muted);" id="import-meta-label">Detected bundle</div>
         </div>
 
-        <p style="font-size:0.9rem; margin-bottom:1rem;">
-          Your current repository already contains data. How would you like to handle the imported content?
+        <p style="font-size:0.9rem; margin-bottom:1rem;" data-i18n="modal.import_prompt">
+          Текущий репозиторий уже содержит данные. Выберите способ импорта:
         </p>
 
         <div style="display:flex; flex-direction:column; gap:0.75rem;">
-          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1.5px solid var(--color-border); border-radius:8px; cursor:pointer;">
+          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1px solid var(--color-border); border-radius:var(--radius); cursor:pointer;">
             <input type="radio" name="import-mode-choice" value="merge" checked style="margin-top:0.25rem;">
             <div>
-              <div style="font-weight:600; font-size:0.92rem;">🔄 Merge / Continue Project (Слияние / Дополнить)</div>
-              <div style="font-size:0.82rem; color:var(--color-text-muted);">
-                Preserves all existing check-ins and data. Appends new commits, updates modified files, and merges wiki & tickets without loss.
+              <div style="font-weight:600; font-size:0.92rem;" data-i18n="modal.merge_title">🔄 Merge / Continue Project (Слияние / Дополнить)</div>
+              <div style="font-size:0.82rem; color:var(--color-text-muted);" data-i18n="modal.merge_desc">
+                Сохраняет существующие коммиты и файлы. Дополняет новыми коммитами, обновляет файлы, объединяет wiki и тикеты без потерь.
               </div>
             </div>
           </label>
 
-          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1.5px solid var(--color-border); border-radius:8px; cursor:pointer;">
+          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1px solid var(--color-border); border-radius:var(--radius); cursor:pointer;">
             <input type="radio" name="import-mode-choice" value="replace" style="margin-top:0.25rem;">
             <div>
-              <div style="font-weight:600; font-size:0.92rem; color:var(--color-danger);">⚠️ Clean Overwrite (Заменить полностью)</div>
-              <div style="font-size:0.82rem; color:var(--color-text-muted);">
-                Wipes existing files, commits, wiki, and tickets in current storage, replacing everything with the imported snapshot.
+              <div style="font-weight:600; font-size:0.92rem; color:var(--color-danger);" data-i18n="modal.replace_title">⚠️ Clean Overwrite (Заменить полностью)</div>
+              <div style="font-size:0.82rem; color:var(--color-text-muted);" data-i18n="modal.replace_desc">
+                Очищает текущие коммиты, файлы, wiki и тикеты, полностью заменяя их содержимым снапшота.
               </div>
             </div>
           </label>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="btn-import-abort">Cancel</button>
-        <button class="btn btn-primary" id="btn-import-confirm-execute">Proceed with Import</button>
+        <button class="btn btn-secondary" id="btn-import-abort" data-i18n="modal.import_abort">Отмена</button>
+        <button class="btn btn-primary" id="btn-import-confirm-execute" data-i18n="modal.import_proceed">Продолжить импорт</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Comprehensive UI Settings & Customization -->
+  <div id="modal-ui-settings" class="modal hidden">
+    <div class="modal-content" style="max-width:680px;">
+      <div class="modal-header">
+        <h2 data-i18n="settings.title">⚙️ Настройки интерфейса</h2>
+        <button class="btn btn-icon" id="btn-settings-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <!-- Settings Tabs -->
+        <div class="settings-nav">
+          <button class="settings-tab-btn active" data-tab="themes" data-i18n="settings.theme_tab">🎨 Темы и цвета</button>
+          <button class="settings-tab-btn" data-tab="layout" data-i18n="settings.layout_tab">📐 Макет и плотность</button>
+          <button class="settings-tab-btn" data-tab="lang" data-i18n="settings.lang_tab">🌐 Язык (i18n)</button>
+          <button class="settings-tab-btn" data-tab="config" data-i18n="settings.config_tab">💾 Конфигурация</button>
+        </div>
+
+        <!-- Pane 1: Themes & Colors -->
+        <div id="settings-pane-themes" class="settings-tab-pane active">
+          <label class="form-label" data-i18n="settings.theme_preset">Готовые темы оформления:</label>
+          <div class="theme-chips-grid">
+            <div class="theme-chip" data-theme-name="dark">🌑 Obsidian Dark</div>
+            <div class="theme-chip" data-theme-name="light">☀️ GitHub Light</div>
+            <div class="theme-chip" data-theme-name="nord">❄️ Nord Frost</div>
+            <div class="theme-chip" data-theme-name="dracula">🧛 Dracula</div>
+            <div class="theme-chip" data-theme-name="gruvbox">🌲 Gruvbox</div>
+            <div class="theme-chip" data-theme-name="cyberpunk">⚡ Cyberpunk</div>
+            <div class="theme-chip" data-theme-name="monokai">🎨 Monokai</div>
+            <div class="theme-chip" data-theme-name="custom">🛠️ Custom User</div>
+          </div>
+
+          <div id="custom-colors-container" class="card" style="margin-top:1rem; padding:1rem; background:var(--color-bg-code);">
+            <div style="font-weight:600; font-size:0.9rem; margin-bottom:0.75rem;" data-i18n="settings.custom_palette">
+              Пользовательская цветовая палитра:
+            </div>
+            <div class="color-picker-row">
+              <label data-i18n="settings.primary_color">Основной цвет (Primary):</label>
+              <input type="color" id="picker-color-primary" value="#3b82f6">
+            </div>
+            <div class="color-picker-row">
+              <label data-i18n="settings.bg_color">Цвет фона (Background):</label>
+              <input type="color" id="picker-color-bg" value="#0b0f19">
+            </div>
+            <div class="color-picker-row">
+              <label data-i18n="settings.card_color">Цвет карточек (Card/Surface):</label>
+              <input type="color" id="picker-color-card" value="#151d2e">
+            </div>
+            <div class="color-picker-row">
+              <label data-i18n="settings.border_color">Цвет границ (Borders):</label>
+              <input type="color" id="picker-color-border" value="#1e293b">
+            </div>
+            <div class="color-picker-row">
+              <label data-i18n="settings.text_color">Цвет текста (Text):</label>
+              <input type="color" id="picker-color-text" value="#f1f5f9">
+            </div>
+          </div>
+        </div>
+
+        <!-- Pane 2: Layout & Density -->
+        <div id="settings-pane-layout" class="settings-tab-pane">
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings.density_label">Плотность интерфейса:</label>
+            <select id="select-ui-density" class="form-select">
+              <option value="comfortable" data-i18n="settings.density_comfortable">Комфортный (стандартный)</option>
+              <option value="compact" data-i18n="settings.density_compact">Компактный (высокая плотность для профи)</option>
+            </select>
+          </div>
+
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label class="form-label" data-i18n="settings.fontsize_label">Размер шрифта:</label>
+              <select id="select-ui-fontsize" class="form-select">
+                <option value="13px">13px - Ultra Compact</option>
+                <option value="14px">14px - Compact</option>
+                <option value="15px" selected>15px - Default</option>
+                <option value="16px">16px - Large</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" data-i18n="settings.fontfamily_label">Семейство шрифтов:</label>
+              <select id="select-ui-fontfamily" class="form-select">
+                <option value="system" selected>System Modern (San Francisco, Segoe UI)</option>
+                <option value="mono">Developer Mono (JetBrains, SF Mono)</option>
+                <option value="inter">Inter Display</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label class="form-label" data-i18n="settings.radius_label">Скругление углов (Border Radius):</label>
+              <select id="select-ui-radius" class="form-select">
+                <option value="0px">0px - Sharp / Brutalist</option>
+                <option value="4px">4px - Modern Compact</option>
+                <option value="8px" selected>8px - Sleek Rounded</option>
+                <option value="12px">12px - Smooth Soft</option>
+              </select>
+            </div>
+            <div class="form-group" style="display:flex; align-items:center; margin-top:1.5rem;">
+              <label style="display:flex; align-items:center; gap:0.5rem; cursor:pointer;">
+                <input type="checkbox" id="checkbox-ui-hero" checked>
+                <span data-i18n="settings.show_hero_label">Показывать верхний баннер-дэшборд</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pane 3: Language & Localization -->
+        <div id="settings-pane-lang" class="settings-tab-pane">
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings.lang_select">Язык интерфейса:</label>
+            <select id="select-ui-lang" class="form-select">
+              <option value="ru">🇷🇺 Русский (Russian)</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="custom">🌐 Пользовательский (Custom JSON Pack)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings.custom_lang_pack">Пользовательский языковой пакет (JSON):</label>
+            <textarea id="textarea-custom-lang-pack" class="form-textarea" style="height:150px; font-family:var(--font-mono); font-size:0.82rem;" spellcheck="false"></textarea>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button id="btn-export-lang-pack" class="btn btn-secondary btn-sm" data-i18n="settings.export_lang">📥 Экспорт языкового пакета</button>
+            <button id="btn-import-lang-pack" class="btn btn-primary btn-sm" data-i18n="settings.import_lang">📤 Загрузить перевод (JSON)</button>
+          </div>
+        </div>
+
+        <!-- Pane 4: Full Config JSON -->
+        <div id="settings-pane-config" class="settings-tab-pane">
+          <div class="form-group">
+            <label class="form-label" data-i18n="settings.full_config">Полный файл конфигурации UI (JSON):</label>
+            <textarea id="textarea-full-ui-config" class="form-textarea" style="height:170px; font-family:var(--font-mono); font-size:0.82rem;" spellcheck="false"></textarea>
+          </div>
+
+          <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <button id="btn-export-ui-config" class="btn btn-secondary btn-sm" data-i18n="settings.export_config">💾 Экспорт конфигурации UI</button>
+            <button id="btn-import-ui-config" class="btn btn-primary btn-sm" data-i18n="settings.import_config">📂 Импорт конфигурации UI</button>
+            <button id="btn-reset-ui-config" class="btn btn-danger btn-sm" data-i18n="settings.reset_config">🔄 Сброс к умолчаниям</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btn-settings-apply" data-i18n="settings.apply">Применить и закрыть</button>
       </div>
     </div>
   </div>
@@ -7442,9 +7881,15 @@ class BrowserMcpServer {
         case "vcs_file_list": {
           if (mgr.backendType === "indexeddb") {
             const files = await backend.getAll("files");
-            return { files: files.map(f => f.path) };
+            return {
+              files: files.map(f => typeof f === 'string' ? { path: f } : (f.path ? f : { path: f.name || String(f) })),
+              filePaths: files.map(f => typeof f === 'string' ? f : (f.path || f.name || String(f)))
+            };
           }
-          return { files: ["README.md", "src/main.nim", "tests/test.nim"] };
+          return {
+            files: [{ path: "README.md" }, { path: "src/main.nim" }, { path: "tests/test.nim" }],
+            filePaths: ["README.md", "src/main.nim", "tests/test.nim"]
+          };
         }
 
         case "vcs_diff": {
@@ -7483,12 +7928,15 @@ class BrowserMcpServer {
           const limit = params.limit || 20;
           if (mgr.backendType === "indexeddb") {
             const events = await backend.getAll("events");
-            return { count: events.length, events: events.slice(-limit).reverse() };
+            events.sort((a, b) => (Number(b.mtime) || 0) - (Number(a.mtime) || 0));
+            const list = events.slice(0, limit);
+            return { count: events.length, events: list, timeline: list };
           } else if (mgr.backendType === "sqlite_wasm") {
             const events = backend.exec("SELECT * FROM event ORDER BY mtime DESC LIMIT ?", [limit]);
-            return { count: events.length, events };
+            return { count: events.length, events, timeline: events };
           }
-          return { count: 1, events: [{ comment: "Timeline in CDB", branch: "trunk", user: "admin", mtime: Date.now() }] };
+          const defaultEvents = [{ comment: "Timeline in CDB", branch: "trunk", user: "admin", mtime: Date.now() }];
+          return { count: 1, events: defaultEvents, timeline: defaultEvents };
         }
 
         case "vcs_branch_list": {
@@ -7623,18 +8071,417 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
 </script>
   <script>
 /**
- * Fossil-Nim Browser UI Controller
- * Powers the interactive in-browser VCS workspace with:
+ * Fossil-Nim Browser UI Controller (Professional Edition)
+ * Pure Vanilla JavaScript, zero frameworks, maximum performance.
+ * Features:
+ * - Full i18n Localization Engine with extensible language config packs (RU, EN, Custom)
+ * - Complete UI Configuration System (Themes, Custom Color Palettes, Density, Fonts, Radius)
+ * - Responsive Layout for Mobile, Tablet, Desktop, and Ultrawide
  * - 3 Storage Backends (IndexedDB, SQLite WASM, Pure-Nim CDB)
- * - Timeline, File Explorer, In-Browser Editor, Myers Diff Viewer
- * - Wiki & Documentation reader/editor
- * - Issue / Ticket Tracker
- * - 89-Tool MCP Agent Console
- * Pure Vanilla JavaScript, zero heavy frameworks.
+ * - VCS Timeline, Virtual File Tree & Editor, Myers Diff Engine
+ * - Wiki & Built-in Docs, Ticket Tracker, 89-Tool MCP AI Agent Console
+ * - High-speed Snapshot Export & Smart Conflict Resolution Import (Merge vs Replace)
  */
 
 (function () {
   'use strict';
+
+  // =========================================================================
+  // 1. Localization / i18n Engine & Language Configs
+  // =========================================================================
+  const I18N_DICTIONARIES = {
+    ru: {
+      "app.name": "🦖 Fossil-Nim",
+      "app.edition": "Browser Edition",
+      "app.tools_badge": "89 MCP Инструментов",
+      "app.hero_desc": "Распределённая система контроля версий, работающая на 100% внутри браузера. Сервер не требуется.",
+      "app.active_backend": "Активное хранилище:",
+      "nav.storage": "Хранилище:",
+      "nav.export": "💾 Экспорт",
+      "nav.import": "📥 Импорт",
+      "nav.server_ui": "🖥️ Серверный UI",
+      "nav.settings": "⚙️ Настройки",
+      "tab.timeline": "📜 Таймлайн",
+      "tab.files": "📁 Файлы и редактор",
+      "tab.diff": "🔍 Myers Diff",
+      "tab.wiki": "📖 Wiki и документация",
+      "tab.tickets": "🎫 Тикеты",
+      "tab.mcp": "🤖 ИИ-агент MCP (89)",
+      "tab.storage": "💾 Мульти-БД диагностика",
+      "timeline.title": "Таймлайн репозитория",
+      "timeline.desc": "История фиксаций и коммитов в текущем браузерном хранилище.",
+      "timeline.new_commit": "+ Новый коммит",
+      "timeline.empty": "Нет записей в таймлайне. Создайте первый коммит!",
+      "files.title": "Виртуальная файловая система",
+      "files.desc": "Редактируйте файлы репозитория в браузере с live-diff Myers и коммитами.",
+      "files.new_file": "+ Новый файл",
+      "files.repo_tree": "Дерево репозитория",
+      "files.compare_diff": "⚡ Сравнить Diff",
+      "files.save": "💾 Сохранить",
+      "files.commit": "🚀 Закоммитить",
+      "files.toggle_tree": "📁 Дерево файлов",
+      "diff.title": "Движок Myers Diff (Pure Nim в JS)",
+      "diff.desc": "Алгоритм Myers diff, скомпилированный напрямую из Nim Lang в JavaScript.",
+      "diff.sample": "Пример:",
+      "diff.original": "Исходный текст (v1)",
+      "diff.modified": "Изменённый текст (v2)",
+      "diff.compute": "⚡ Рассчитать Myers Diff (через Nim)",
+      "diff.preset_code": "Nim Code Diff",
+      "diff.preset_doc": "Markdown Doc Diff",
+      "wiki.title": "Wiki и встроенная документация",
+      "wiki.desc": "Поставляется из коробки с архитектурой Fossil-Nim и документацией.",
+      "wiki.new_page": "+ Новая страница",
+      "wiki.pages": "Страницы Wiki",
+      "wiki.edit": "✏️ Редактировать",
+      "wiki.preview": "👁️ Предпросмотр",
+      "wiki.save": "💾 Сохранить страницу",
+      "wiki.cancel": "Отмена",
+      "tickets.title": "Трекер задач и тикетов",
+      "tickets.desc": "Встроенный баг-трекер с приоритетами, фильтрацией и локальным сохранением.",
+      "tickets.new_ticket": "+ Новый тикет",
+      "tickets.filter_all": "Все задачи",
+      "tickets.filter_open": "Открытые",
+      "tickets.filter_closed": "Закрытые",
+      "tickets.empty": "Нет тикетов",
+      "mcp.title": "Консоль ИИ-агента (89 MCP Tools)",
+      "mcp.desc": "Полный набор инструментов Model Context Protocol для автономных агентов.",
+      "mcp.tools_count": "Доступные инструменты (89)",
+      "mcp.invoke": "⚡ Вызвать инструмент",
+      "mcp.copy_prompt": "📋 Скопировать системный промпт",
+      "mcp.params": "JSON параметры вызова:",
+      "mcp.response": "JSON ответ инструмента:",
+      "storage.title": "Диагностика Мульти-БД и SQL",
+      "storage.desc": "Инспекция 3 браузерных бэкендов: IndexedDB, SQLite WASM и Pure-Nim CDB.",
+      "storage.sql_console": "Интерактивная SQL-консоль (SQLite WASM)",
+      "storage.run_query": "▶ Выполнить SQL",
+      "storage.stats": "Статистика хранилища",
+      "modal.commit_title": "Новый коммит репозитория",
+      "modal.commit_comment": "Комментарий коммита:",
+      "modal.commit_user": "Автор / Пользователь:",
+      "modal.commit_branch": "Ветка:",
+      "modal.commit_cancel": "Отмена",
+      "modal.commit_submit": "Зафиксировать коммит",
+      "modal.ticket_title": "Создать новый тикет",
+      "modal.ticket_heading": "Заголовок задачи:",
+      "modal.ticket_priority": "Приоритет:",
+      "modal.ticket_desc": "Описание:",
+      "modal.ticket_cancel": "Отмена",
+      "modal.ticket_submit": "Создать тикет",
+      "modal.import_title": "Импорт репозитория",
+      "modal.import_prompt": "Текущий репозиторий уже содержит данные. Выберите способ импорта:",
+      "modal.merge_title": "🔄 Merge / Continue Project (Слияние / Дополнить)",
+      "modal.merge_desc": "Сохраняет существующие коммиты и файлы. Дополняет новыми коммитами, обновляет файлы, объединяет wiki и тикеты без потерь.",
+      "modal.replace_title": "⚠️ Clean Overwrite (Заменить полностью)",
+      "modal.replace_desc": "Очищает текущие коммиты, файлы, wiki и тикеты, полностью заменяя их содержимым снапшота.",
+      "modal.import_abort": "Отмена",
+      "modal.import_proceed": "Продолжить импорт",
+      "settings.title": "Настройки интерфейса и конфигурация",
+      "settings.theme_tab": "🎨 Темы и цвета",
+      "settings.layout_tab": "📐 Макет и плотность",
+      "settings.lang_tab": "🌐 Язык (i18n)",
+      "settings.config_tab": "💾 Конфигурация",
+      "settings.theme_preset": "Готовые темы оформления:",
+      "settings.custom_palette": "Пользовательская цветовая палитра:",
+      "settings.primary_color": "Основной цвет (Primary):",
+      "settings.bg_color": "Цвет фона (Background):",
+      "settings.card_color": "Цвет карточек (Card/Surface):",
+      "settings.border_color": "Цвет границ (Borders):",
+      "settings.text_color": "Цвет текста (Text):",
+      "settings.density_label": "Плотность интерфейса:",
+      "settings.density_compact": "Компактный (высокая плотность для профи)",
+      "settings.density_comfortable": "Комфортный (стандартный)",
+      "settings.fontsize_label": "Размер шрифта:",
+      "settings.fontfamily_label": "Семейство шрифтов:",
+      "settings.radius_label": "Скругление углов (Border Radius):",
+      "settings.show_hero_label": "Показывать верхний баннер-дэшборд",
+      "settings.lang_select": "Язык интерфейса:",
+      "settings.custom_lang_pack": "Пользовательский языковой пакет (JSON):",
+      "settings.export_lang": "📥 Экспорт языкового пакета",
+      "settings.import_lang": "📤 Загрузить перевод (JSON)",
+      "settings.full_config": "Полный файл конфигурации UI (JSON):",
+      "settings.export_config": "💾 Экспорт конфигурации UI",
+      "settings.import_config": "📂 Импорт конфигурации UI",
+      "settings.reset_config": "🔄 Сброс к умолчаниям",
+      "settings.close": "Закрыть",
+      "settings.apply": "Применить",
+      "notif.saved": "Настройки успешно сохранены!",
+      "notif.reset": "Настройки сброшены к значениям по умолчанию!"
+    },
+    en: {
+      "app.name": "🦖 Fossil-Nim",
+      "app.edition": "Browser Edition",
+      "app.tools_badge": "89 MCP Tools",
+      "app.hero_desc": "Distributed Version Control running 100% inside your browser. No server required.",
+      "app.active_backend": "Active backend:",
+      "nav.storage": "Storage:",
+      "nav.export": "💾 Export",
+      "nav.import": "📥 Import",
+      "nav.server_ui": "🖥️ Server UI",
+      "nav.settings": "⚙️ Settings",
+      "tab.timeline": "📜 Timeline",
+      "tab.files": "📁 Files & Editor",
+      "tab.diff": "🔍 Myers Diff",
+      "tab.wiki": "📖 Wiki & Docs",
+      "tab.tickets": "🎫 Tickets",
+      "tab.mcp": "🤖 AI Agent MCP (89)",
+      "tab.storage": "💾 Multi-DB Diagnostics",
+      "timeline.title": "Repository Timeline",
+      "timeline.desc": "History of check-ins and commits saved in current browser storage backend.",
+      "timeline.new_commit": "+ New Commit",
+      "timeline.empty": "No timeline records found. Make your first commit!",
+      "files.title": "In-Browser Virtual File System",
+      "files.desc": "Edit repository files directly in browser with live Myers diff and commits.",
+      "files.new_file": "+ New File",
+      "files.repo_tree": "Repository Tree",
+      "files.compare_diff": "⚡ Compare Diff",
+      "files.save": "💾 Save File",
+      "files.commit": "🚀 Commit",
+      "files.toggle_tree": "📁 File Tree",
+      "diff.title": "Myers Diff Engine (Pure Nim in JS)",
+      "diff.desc": "Unified Myers diff algorithm compiled directly from Nim Lang to JavaScript.",
+      "diff.sample": "Sample:",
+      "diff.original": "Original Text (v1)",
+      "diff.modified": "Modified Text (v2)",
+      "diff.compute": "⚡ Compute Myers Diff (via Nim)",
+      "diff.preset_code": "Nim Code Diff",
+      "diff.preset_doc": "Markdown Doc Diff",
+      "wiki.title": "Wiki & Built-in Documentation",
+      "wiki.desc": "Shipped out-of-the-box with complete Fossil-Nim architecture and reference docs.",
+      "wiki.new_page": "+ New Wiki Page",
+      "wiki.pages": "Wiki Pages",
+      "wiki.edit": "✏️ Edit Page",
+      "wiki.preview": "👁️ Live Preview",
+      "wiki.save": "💾 Save Page",
+      "wiki.cancel": "Cancel",
+      "tickets.title": "Issue & Ticket Tracker",
+      "tickets.desc": "Built-in bug tracking with priority badges, status filters, and local persistence.",
+      "tickets.new_ticket": "+ New Ticket",
+      "tickets.filter_all": "All Tickets",
+      "tickets.filter_open": "Open",
+      "tickets.filter_closed": "Closed",
+      "tickets.empty": "No tickets found",
+      "mcp.title": "AI Agent Console (89 MCP Tools)",
+      "mcp.desc": "Comprehensive Model Context Protocol server exposing 89 tools for autonomous agents.",
+      "mcp.tools_count": "Available Tools (89)",
+      "mcp.invoke": "⚡ Invoke Tool",
+      "mcp.copy_prompt": "📋 Copy System Prompt",
+      "mcp.params": "JSON Parameters:",
+      "mcp.response": "JSON Response:",
+      "storage.title": "Multi-DB Diagnostics & SQL",
+      "storage.desc": "Inspect and manage 3 browser storage backends: IndexedDB, SQLite WASM, and Pure-Nim CDB.",
+      "storage.sql_console": "Interactive SQL Console (SQLite WASM)",
+      "storage.run_query": "▶ Run SQL Query",
+      "storage.stats": "Storage Stats",
+      "modal.commit_title": "New Repository Commit",
+      "modal.commit_comment": "Commit Comment:",
+      "modal.commit_user": "Author / User:",
+      "modal.commit_branch": "Branch:",
+      "modal.commit_cancel": "Cancel",
+      "modal.commit_submit": "Commit Check-in",
+      "modal.ticket_title": "Create New Ticket",
+      "modal.ticket_heading": "Ticket Title:",
+      "modal.ticket_priority": "Priority:",
+      "modal.ticket_desc": "Description:",
+      "modal.ticket_cancel": "Cancel",
+      "modal.ticket_submit": "Create Ticket",
+      "modal.import_title": "Import Repository Snapshot",
+      "modal.import_prompt": "Your current repository already contains data. How would you like to handle the imported content?",
+      "modal.merge_title": "🔄 Merge / Continue Project",
+      "modal.merge_desc": "Preserves existing check-ins and data. Appends new commits, updates modified files, and merges wiki & tickets without loss.",
+      "modal.replace_title": "⚠️ Clean Overwrite",
+      "modal.replace_desc": "Wipes existing files, commits, wiki, and tickets in current storage, replacing everything with the imported snapshot.",
+      "modal.import_abort": "Cancel",
+      "modal.import_proceed": "Proceed with Import",
+      "settings.title": "Interface Settings & Configuration",
+      "settings.theme_tab": "🎨 Themes & Colors",
+      "settings.layout_tab": "📐 Layout & Density",
+      "settings.lang_tab": "🌐 Language (i18n)",
+      "settings.config_tab": "💾 Configuration",
+      "settings.theme_preset": "Theme Presets:",
+      "settings.custom_palette": "Custom Color Palette:",
+      "settings.primary_color": "Primary Color:",
+      "settings.bg_color": "Background Color:",
+      "settings.card_color": "Card / Surface Color:",
+      "settings.border_color": "Border Color:",
+      "settings.text_color": "Text Color:",
+      "settings.density_label": "Interface Density:",
+      "settings.density_compact": "Compact (High information density for pros)",
+      "settings.density_comfortable": "Comfortable (Standard)",
+      "settings.fontsize_label": "Base Font Size:",
+      "settings.fontfamily_label": "Font Family:",
+      "settings.radius_label": "Border Radius:",
+      "settings.show_hero_label": "Show top dashboard hero banner",
+      "settings.lang_select": "Interface Language:",
+      "settings.custom_lang_pack": "Custom Language Pack (JSON):",
+      "settings.export_lang": "📥 Export Language Pack",
+      "settings.import_lang": "📤 Import Translation (JSON)",
+      "settings.full_config": "Full UI Config File (JSON):",
+      "settings.export_config": "💾 Export UI Config",
+      "settings.import_config": "📂 Import UI Config",
+      "settings.reset_config": "🔄 Reset to Defaults",
+      "settings.close": "Close",
+      "settings.apply": "Apply",
+      "notif.saved": "Settings successfully applied!",
+      "notif.reset": "Settings reset to defaults!"
+    }
+  };
+
+  window.FossilI18n = {
+    currentLang: 'ru',
+    dictionaries: I18N_DICTIONARIES,
+
+    init() {
+      const savedCustom = localStorage.getItem('fossil_custom_lang_pack');
+      if (savedCustom) {
+        try {
+          this.dictionaries['custom'] = JSON.parse(savedCustom);
+        } catch (_) {}
+      }
+    },
+
+    t(key, fallback = '') {
+      const dict = this.dictionaries[this.currentLang] || this.dictionaries['ru'];
+      return dict[key] || this.dictionaries['en'][key] || fallback || key;
+    },
+
+    setLanguage(lang) {
+      if (this.dictionaries[lang]) {
+        this.currentLang = lang;
+        this.applyAll();
+        return true;
+      }
+      return false;
+    },
+
+    applyAll() {
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        el.innerText = this.t(key, el.innerText);
+      });
+      document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        el.setAttribute('title', this.t(key, el.getAttribute('title')));
+      });
+      document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+        const key = el.getAttribute('data-i18n-placeholder');
+        el.setAttribute('placeholder', this.t(key, el.getAttribute('placeholder')));
+      });
+      const langBtn = $('btn-lang-toggle');
+      if (langBtn) {
+        langBtn.innerText = this.currentLang === 'ru' ? '🇷🇺 RU' : (this.currentLang === 'en' ? '🇬🇧 EN' : '🌐 ' + this.currentLang.toUpperCase());
+      }
+    },
+
+    importLangPack(code, dict) {
+      this.dictionaries[code] = dict;
+      if (code === 'custom') {
+        localStorage.setItem('fossil_custom_lang_pack', JSON.stringify(dict));
+      }
+      this.setLanguage(code);
+    },
+
+    exportLangPack(code) {
+      return JSON.stringify(this.dictionaries[code] || this.dictionaries['en'], null, 2);
+    }
+  };
+
+  // =========================================================================
+  // 2. Full UI Configuration System
+  // =========================================================================
+  const DEFAULT_UI_CONFIG = {
+    theme: 'dark', // 'dark' | 'light' | 'nord' | 'dracula' | 'gruvbox' | 'cyberpunk' | 'monokai' | 'custom'
+    density: 'comfortable', // 'compact' | 'comfortable'
+    fontSize: '15px', // '13px' | '14px' | '15px' | '16px'
+    fontFamily: 'system', // 'system' | 'mono' | 'inter'
+    radius: '8px', // '0px' | '4px' | '8px' | '12px'
+    showHero: true,
+    lang: 'ru',
+    customColors: {
+      primary: '#3b82f6',
+      primaryHover: '#60a5fa',
+      bg: '#0b0f19',
+      bgCard: '#151d2e',
+      border: '#1e293b',
+      text: '#f1f5f9'
+    }
+  };
+
+  window.FossilUIConfig = {
+    config: { ...DEFAULT_UI_CONFIG },
+
+    load() {
+      const saved = localStorage.getItem('fossil_ui_config');
+      if (saved) {
+        try {
+          this.config = Object.assign({}, DEFAULT_UI_CONFIG, JSON.parse(saved));
+        } catch (_) {
+          this.config = { ...DEFAULT_UI_CONFIG };
+        }
+      }
+      return this.config;
+    },
+
+    save(newConfig) {
+      this.config = Object.assign(this.config, newConfig);
+      localStorage.setItem('fossil_ui_config', JSON.stringify(this.config));
+      this.apply();
+    },
+
+    apply() {
+      const c = this.config;
+      const root = document.documentElement;
+
+      root.setAttribute('data-theme', c.theme);
+      root.setAttribute('data-density', c.density);
+      root.setAttribute('data-font', c.fontFamily);
+      root.setAttribute('data-font-size', c.fontSize);
+      root.setAttribute('data-radius', c.radius);
+
+      // Custom color palette application
+      if (c.theme === 'custom' && c.customColors) {
+        root.style.setProperty('--color-primary', c.customColors.primary);
+        root.style.setProperty('--color-primary-hover', c.customColors.primaryHover || c.customColors.primary);
+        root.style.setProperty('--color-bg', c.customColors.bg);
+        root.style.setProperty('--color-bg-card', c.customColors.bgCard);
+        root.style.setProperty('--color-border', c.customColors.border);
+        root.style.setProperty('--color-text', c.customColors.text);
+      } else {
+        root.style.removeProperty('--color-primary');
+        root.style.removeProperty('--color-primary-hover');
+        root.style.removeProperty('--color-bg');
+        root.style.removeProperty('--color-bg-card');
+        root.style.removeProperty('--color-border');
+        root.style.removeProperty('--color-text');
+      }
+
+      const hero = $('browser-hero');
+      if (hero) {
+        hero.classList.toggle('hidden', !c.showHero);
+      }
+
+      window.FossilI18n.setLanguage(c.lang);
+    },
+
+    exportConfig() {
+      return JSON.stringify(this.config, null, 2);
+    },
+
+    importConfig(jsonStr) {
+      try {
+        const parsed = JSON.parse(jsonStr);
+        this.save(parsed);
+        return { success: true };
+      } catch (err) {
+        return { success: false, error: err.message };
+      }
+    },
+
+    reset() {
+      this.config = JSON.parse(JSON.stringify(DEFAULT_UI_CONFIG));
+      localStorage.removeItem('fossil_ui_config');
+      this.apply();
+    }
+  };
 
   // State
   const state = {
@@ -7662,8 +8509,27 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       .replace(/'/g, '&#039;');
   }
 
+  function showToast(message, type = 'info', duration = 3000) {
+    let container = $('toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'toast-container';
+      document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerText = message;
+    container.appendChild(toast);
+    setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(100%)';
+      toast.style.transition = 'all 0.25s';
+      setTimeout(() => toast.remove(), 250);
+    }, duration);
+  }
+
   function formatDiffHtml(unifiedDiff) {
-    if (!unifiedDiff) return '<div class="empty">No differences found (files are identical)</div>';
+    if (!unifiedDiff) return `<div class="empty">${window.FossilI18n.t('diff.identical', 'No differences found (files are identical)')}</div>`;
     const lines = unifiedDiff.split('\n');
     let html = '<div class="diff-view">';
     for (const line of lines) {
@@ -7683,11 +8549,18 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
     return html;
   }
 
-  // UI Controller Object
+  // =========================================================================
+  // 3. UI Controller Object
+  // =========================================================================
   window.FossilBrowserUI = {
     async init() {
       console.log('🦖 Fossil-Nim Browser Edition UI Initializing...');
       
+      // Init i18n and Config first
+      window.FossilI18n.init();
+      window.FossilUIConfig.load();
+      window.FossilUIConfig.apply();
+
       // Initialize Storage
       if (window.FossilStorageManager) {
         await window.FossilStorageManager.init();
@@ -7696,6 +8569,8 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       this.bindTabs();
       this.bindStorageSwitcher();
       this.bindTheme();
+      this.bindSettingsModal();
+      this.bindMobileNavigation();
       this.bindTimelineActions();
       this.bindEditorActions();
       this.bindDiffTool();
@@ -7706,7 +8581,8 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
 
       // Initial Render
       await this.refreshAll();
-      console.log('✅ Fossil-Nim Browser Edition UI Ready!');
+      window.FossilI18n.applyAll();
+      console.log('✅ Fossil-Nim Professional Browser Edition Ready!');
     },
 
     bindTabs() {
@@ -7724,17 +8600,13 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       document.querySelectorAll('.tab-btn').forEach(b => {
         b.classList.toggle('active', b.getAttribute('data-tab') === tabName);
       });
-      document.querySelectorAll('.tab-content').forEach(p => {
-        p.classList.toggle('active', p.id === `tab-${tabName}`);
+      document.querySelectorAll('.tab-content').forEach(c => {
+        c.classList.toggle('active', c.id === 'tab-' + tabName);
       });
-
-      // Lazy refresh for specific tab
-      if (tabName === 'timeline') this.renderTimeline();
-      if (tabName === 'files') this.renderFiles();
-      if (tabName === 'wiki') this.renderWiki();
-      if (tabName === 'tickets') this.renderTickets();
-      if (tabName === 'mcp') this.renderMcp();
-      if (tabName === 'storage') this.renderStorageDiagnostics();
+      if (tabName === 'timeline') this.refreshTimeline();
+      else if (tabName === 'files') this.refreshFiles();
+      else if (tabName === 'wiki') this.refreshWiki();
+      else if (tabName === 'tickets') this.refreshTickets();
     },
 
     bindStorageSwitcher() {
@@ -7743,384 +8615,551 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       select.value = state.activeBackend;
       select.addEventListener('change', async (e) => {
         const newBackend = e.target.value;
-        $('loading-indicator').classList.remove('hidden');
+        const spinner = $('loading-indicator');
+        if (spinner) spinner.classList.remove('hidden');
         try {
           await window.FossilStorageManager.switchBackend(newBackend);
           state.activeBackend = newBackend;
-          $('active-backend-name').innerText = window.FossilStorageManager.getActiveBackend().name;
+          const activeNameEl = $('active-backend-name');
+          if (activeNameEl) activeNameEl.innerText = window.FossilStorageManager.getActiveBackend().name;
           await this.refreshAll();
         } catch (err) {
           alert('Failed to switch storage backend: ' + err.message);
         } finally {
-          $('loading-indicator').classList.add('hidden');
+          if (spinner) spinner.classList.add('hidden');
         }
       });
     },
 
     bindTheme() {
+      // Direct quick theme toggle button in navbar
       const toggle = $('theme-toggle-btn');
       if (!toggle) return;
-      const current = localStorage.getItem('fossil_theme') || 'light';
-      document.documentElement.setAttribute('data-theme', current);
-      toggle.innerText = current === 'dark' ? '☀️' : '🌙';
 
       toggle.addEventListener('click', () => {
-        const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-        document.documentElement.setAttribute('data-theme', theme);
-        localStorage.setItem('fossil_theme', theme);
-        toggle.innerText = theme === 'dark' ? '☀️' : '🌙';
+        const current = window.FossilUIConfig.config.theme;
+        const next = current === 'dark' ? 'light' : 'dark';
+        window.FossilUIConfig.save({ theme: next });
+        toggle.innerText = next === 'dark' ? '☀️' : '🌙';
       });
+
+      // Quick language toggle button in navbar
+      const langToggle = $('btn-lang-toggle');
+      if (langToggle) {
+        langToggle.addEventListener('click', () => {
+          const cur = window.FossilI18n.currentLang;
+          const next = cur === 'ru' ? 'en' : 'ru';
+          window.FossilUIConfig.save({ lang: next });
+        });
+      }
+    },
+
+    bindMobileNavigation() {
+      const menuBtn = $('btn-mobile-menu');
+      const navActions = document.querySelector('.navbar-actions');
+      if (menuBtn && navActions) {
+        menuBtn.addEventListener('click', () => {
+          navActions.classList.toggle('open');
+        });
+      }
+
+      // Mobile file tree toggle in editor
+      const toggleTreeBtn = $('btn-toggle-file-tree');
+      const fileTree = document.querySelector('.file-tree');
+      if (toggleTreeBtn && fileTree) {
+        toggleTreeBtn.addEventListener('click', () => {
+          fileTree.classList.toggle('collapsed');
+        });
+      }
+    },
+
+    bindSettingsModal() {
+      const settingsBtn = $('btn-ui-settings');
+      const modal = $('modal-ui-settings');
+      const closeBtn = $('btn-settings-close');
+      const applyBtn = $('btn-settings-apply');
+
+      if (settingsBtn && modal) {
+        settingsBtn.addEventListener('click', () => {
+          this.syncSettingsModalInputs();
+          modal.classList.remove('hidden');
+        });
+      }
+
+      if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+      }
+
+      // Tab switching inside Settings modal
+      const settingsTabBtns = document.querySelectorAll('.settings-tab-btn');
+      settingsTabBtns.forEach(b => {
+        b.addEventListener('click', () => {
+          settingsTabBtns.forEach(x => x.classList.remove('active'));
+          b.classList.add('active');
+          const tabKey = b.getAttribute('data-tab');
+          document.querySelectorAll('.settings-tab-pane').forEach(p => {
+            p.classList.toggle('active', p.id === 'settings-pane-' + tabKey);
+          });
+        });
+      });
+
+      // Theme Chips click
+      document.querySelectorAll('.theme-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+          document.querySelectorAll('.theme-chip').forEach(c => c.classList.remove('active'));
+          chip.classList.add('active');
+          const themeName = chip.getAttribute('data-theme-name');
+          window.FossilUIConfig.save({ theme: themeName });
+          const customRow = $('custom-colors-container');
+          if (customRow) customRow.classList.toggle('hidden', themeName !== 'custom');
+        });
+      });
+
+      // Custom Color Inputs live apply
+      const bindColorInput = (id, propKey) => {
+        const input = $(id);
+        if (input) {
+          input.addEventListener('input', (e) => {
+            const colors = Object.assign({}, window.FossilUIConfig.config.customColors);
+            colors[propKey] = e.target.value;
+            window.FossilUIConfig.save({ theme: 'custom', customColors: colors });
+          });
+        }
+      };
+      bindColorInput('picker-color-primary', 'primary');
+      bindColorInput('picker-color-bg', 'bg');
+      bindColorInput('picker-color-card', 'bgCard');
+      bindColorInput('picker-color-border', 'border');
+      bindColorInput('picker-color-text', 'text');
+
+      // Density selection
+      const densitySelect = $('select-ui-density');
+      if (densitySelect) {
+        densitySelect.addEventListener('change', (e) => {
+          window.FossilUIConfig.save({ density: e.target.value });
+        });
+      }
+
+      // Font size selection
+      const fontSizeSelect = $('select-ui-fontsize');
+      if (fontSizeSelect) {
+        fontSizeSelect.addEventListener('change', (e) => {
+          window.FossilUIConfig.save({ fontSize: e.target.value });
+        });
+      }
+
+      // Font family selection
+      const fontFamilySelect = $('select-ui-fontfamily');
+      if (fontFamilySelect) {
+        fontFamilySelect.addEventListener('change', (e) => {
+          window.FossilUIConfig.save({ fontFamily: e.target.value });
+        });
+      }
+
+      // Border radius selection
+      const radiusSelect = $('select-ui-radius');
+      if (radiusSelect) {
+        radiusSelect.addEventListener('change', (e) => {
+          window.FossilUIConfig.save({ radius: e.target.value });
+        });
+      }
+
+      // Show Hero toggle
+      const showHeroToggle = $('checkbox-ui-hero');
+      if (showHeroToggle) {
+        showHeroToggle.addEventListener('change', (e) => {
+          window.FossilUIConfig.save({ showHero: e.target.checked });
+        });
+      }
+
+      // Language selection inside Settings
+      const langSelect = $('select-ui-lang');
+      if (langSelect) {
+        langSelect.addEventListener('change', (e) => {
+          window.FossilUIConfig.save({ lang: e.target.value });
+          this.syncSettingsModalInputs();
+        });
+      }
+
+      // Export Language Pack
+      const exportLangBtn = $('btn-export-lang-pack');
+      if (exportLangBtn) {
+        exportLangBtn.addEventListener('click', () => {
+          const json = window.FossilI18n.exportLangPack(window.FossilI18n.currentLang);
+          const langArea = $('textarea-custom-lang-pack');
+          if (langArea) langArea.value = json;
+          const blob = new Blob([json], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `lang_${window.FossilI18n.currentLang}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast('Language pack exported successfully!');
+        });
+      }
+
+      // Import Custom Language Pack
+      const importLangBtn = $('btn-import-lang-pack');
+      if (importLangBtn) {
+        importLangBtn.addEventListener('click', () => {
+          const langArea = $('textarea-custom-lang-pack');
+          if (langArea && langArea.value.trim()) {
+            try {
+              const pack = JSON.parse(langArea.value.trim());
+              window.FossilI18n.importLangPack('custom', pack);
+              window.FossilUIConfig.save({ lang: 'custom' });
+              showToast('Custom language pack applied!');
+            } catch (err) {
+              alert('Invalid language pack JSON: ' + err.message);
+            }
+          }
+        });
+      }
+
+      // Export UI Config
+      const exportConfigBtn = $('btn-export-ui-config');
+      if (exportConfigBtn) {
+        exportConfigBtn.addEventListener('click', () => {
+          const json = window.FossilUIConfig.exportConfig();
+          const cfgArea = $('textarea-full-ui-config');
+          if (cfgArea) cfgArea.value = json;
+          const blob = new Blob([json], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'fossil_ui_config.json';
+          a.click();
+          URL.revokeObjectURL(url);
+          showToast('UI config exported!');
+        });
+      }
+
+      // Import UI Config
+      const importConfigBtn = $('btn-import-ui-config');
+      if (importConfigBtn) {
+        importConfigBtn.addEventListener('click', () => {
+          const cfgArea = $('textarea-full-ui-config');
+          if (cfgArea && cfgArea.value.trim()) {
+            const res = window.FossilUIConfig.importConfig(cfgArea.value.trim());
+            if (res.success) {
+              this.syncSettingsModalInputs();
+              showToast(window.FossilI18n.t('notif.saved'));
+            } else {
+              alert('Error importing UI config: ' + res.error);
+            }
+          }
+        });
+      }
+
+      // Reset UI Config
+      const resetConfigBtn = $('btn-reset-ui-config');
+      if (resetConfigBtn) {
+        resetConfigBtn.addEventListener('click', () => {
+          if (confirm('Reset UI settings to default?')) {
+            window.FossilUIConfig.reset();
+            this.syncSettingsModalInputs();
+            showToast(window.FossilI18n.t('notif.reset'));
+          }
+        });
+      }
+
+      if (applyBtn && modal) {
+        applyBtn.addEventListener('click', () => {
+          modal.classList.add('hidden');
+          showToast(window.FossilI18n.t('notif.saved'));
+        });
+      }
+    },
+
+    syncSettingsModalInputs() {
+      const c = window.FossilUIConfig.config;
+      document.querySelectorAll('.theme-chip').forEach(chip => {
+        chip.classList.toggle('active', chip.getAttribute('data-theme-name') === c.theme);
+      });
+
+      const customContainer = $('custom-colors-container');
+      if (customContainer) customContainer.classList.toggle('hidden', c.theme !== 'custom');
+
+      if (c.customColors) {
+        if ($('picker-color-primary')) $('picker-color-primary').value = c.customColors.primary || '#3b82f6';
+        if ($('picker-color-bg')) $('picker-color-bg').value = c.customColors.bg || '#0b0f19';
+        if ($('picker-color-card')) $('picker-color-card').value = c.customColors.bgCard || '#151d2e';
+        if ($('picker-color-border')) $('picker-color-border').value = c.customColors.border || '#1e293b';
+        if ($('picker-color-text')) $('picker-color-text').value = c.customColors.text || '#f1f5f9';
+      }
+
+      if ($('select-ui-density')) $('select-ui-density').value = c.density;
+      if ($('select-ui-fontsize')) $('select-ui-fontsize').value = c.fontSize;
+      if ($('select-ui-fontfamily')) $('select-ui-fontfamily').value = c.fontFamily;
+      if ($('select-ui-radius')) $('select-ui-radius').value = c.radius;
+      if ($('checkbox-ui-hero')) $('checkbox-ui-hero').checked = !!c.showHero;
+      if ($('select-ui-lang')) $('select-ui-lang').value = c.lang;
+
+      if ($('textarea-full-ui-config')) {
+        $('textarea-full-ui-config').value = window.FossilUIConfig.exportConfig();
+      }
+      if ($('textarea-custom-lang-pack')) {
+        $('textarea-custom-lang-pack').value = window.FossilI18n.exportLangPack(c.lang);
+      }
     },
 
     async refreshAll() {
       await Promise.all([
-        this.renderTimeline(),
-        this.renderFiles(),
-        this.renderWiki(),
-        this.renderTickets(),
-        this.renderMcp(),
-        this.renderStorageDiagnostics()
+        this.refreshTimeline(),
+        this.refreshFiles(),
+        this.refreshWiki(),
+        this.refreshTickets()
       ]);
     },
 
-    // -------------------------------------------------------------
-    // Tab 1: Timeline
-    // -------------------------------------------------------------
-    async renderTimeline() {
-      const listEl = $('timeline-list');
-      if (!listEl) return;
-      listEl.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
-
-      const res = await window.fossilMcp.callTool('vcs_timeline', { limit: 50 });
-      const events = res.events || [];
-
-      if (events.length === 0) {
-        listEl.innerHTML = '<div class="empty">No commits yet in this repository backend.</div>';
-        return;
-      }
-
-      let html = '<div style="display:flex; flex-direction:column; gap:0.75rem;">';
-      for (const ev of events) {
-        const dateStr = new Date(ev.mtime > 10000000000 ? ev.mtime : ev.mtime * 1000).toLocaleString();
-        const shortHash = ev.uuid ? ev.uuid.substring(0, 10) : (ev.objid ? `obj-${ev.objid}` : 'ci-init');
-        html += `
-          <div class="card" style="padding:1rem;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.4rem;">
-              <div style="font-weight:600; font-size:1.05rem; display:flex; align-items:center; gap:0.5rem;">
-                <span class="badge badge-primary">${escapeHtml(ev.branch || 'trunk')}</span>
-                <span>${escapeHtml(ev.comment || 'Check-in')}</span>
-              </div>
-              <span class="badge badge-secondary" style="font-family:var(--font-mono); font-size:0.75rem;">${shortHash}</span>
-            </div>
-            <div style="display:flex; gap:1rem; font-size:0.85rem; color:var(--color-text-muted);">
-              <span>👤 User: <b>${escapeHtml(ev.user || 'admin')}</b></span>
-              <span>📅 ${dateStr}</span>
-            </div>
-          </div>
-        `;
-      }
-      html += '</div>';
-      listEl.innerHTML = html;
-    },
-
+    // --- Timeline ---
     bindTimelineActions() {
       const newCommitBtn = $('btn-new-commit-modal');
       const modal = $('modal-commit');
+      const closeBtn = $('btn-modal-commit-close');
       const form = $('form-commit');
-      const cancelBtn = $('btn-commit-cancel');
 
       if (newCommitBtn && modal) {
         newCommitBtn.addEventListener('click', () => modal.classList.remove('hidden'));
       }
-      if (cancelBtn && modal) {
-        cancelBtn.addEventListener('click', () => modal.classList.add('hidden'));
+      if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
       }
-      if (form && modal) {
+      if (form) {
         form.addEventListener('submit', async (e) => {
           e.preventDefault();
           const comment = $('commit-comment').value.trim();
+          const user = $('commit-user').value.trim() || 'admin';
           const branch = $('commit-branch').value.trim() || 'trunk';
-          const user = $('commit-user').value.trim() || 'developer';
-
           if (!comment) return;
 
-          await window.fossilMcp.callTool('vcs_commit', { message: comment, branch });
-          $('commit-comment').value = '';
-          modal.classList.add('hidden');
-          await this.renderTimeline();
-          this.switchTab('timeline');
+          const res = await window.fossilMcp.callTool('vcs_commit', { comment, user, branch });
+          if (res.success) {
+            $('commit-comment').value = '';
+            modal.classList.add('hidden');
+            await this.refreshTimeline();
+            showToast('Check-in committed successfully!');
+          }
         });
       }
     },
 
-    // -------------------------------------------------------------
-    // Tab 2: Files & In-Browser Code Editor
-    // -------------------------------------------------------------
-    async renderFiles() {
-      const treeEl = $('files-tree');
-      const editorEl = $('code-editor-text');
-      const fileLabel = $('active-file-label');
-      if (!treeEl) return;
-
-      const res = await window.fossilMcp.callTool('vcs_file_list');
-      let files = res.files || [];
-      if (files.length === 0) {
-        files = ['README.md'];
+    async refreshTimeline() {
+      const list = $('timeline-list');
+      if (!list) return;
+      const res = await window.fossilMcp.callTool('vcs_timeline', { limit: 20 });
+      const timeline = res.timeline || res.events || [];
+      if (timeline.length === 0) {
+        list.innerHTML = `<div class="empty">${window.FossilI18n.t('timeline.empty')}</div>`;
+        return;
       }
-      if (!files.includes(state.activeFile)) {
-        state.activeFile = files[0];
-      }
-
-      let treeHtml = '';
-      for (const filePath of files) {
-        const isActive = filePath === state.activeFile;
-        treeHtml += `
-          <div class="file-tree-item ${isActive ? 'active' : ''}" data-file="${escapeHtml(filePath)}">
-            📄 <span>${escapeHtml(filePath)}</span>
+      let html = '<div style="display:flex; flex-direction:column; gap:0.75rem;">';
+      for (const item of timeline) {
+        const d = new Date(item.mtime);
+        const timeStr = !isNaN(d.getTime()) ? d.toLocaleString() : String(item.mtime);
+        const branchBadge = item.branch ? `<span class="badge badge-primary">${escapeHtml(item.branch)}</span>` : '';
+        const idLabel = item.uuid ? item.uuid.substring(0, 10) : (item.id != null ? '#' + item.id : '#ci');
+        html += `
+          <div class="card" style="padding:0.85rem 1.15rem;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.35rem;">
+              <div style="display:flex; gap:0.5rem; align-items:center;">
+                <b style="font-family:var(--font-mono); font-size:0.9rem; color:var(--color-primary);">${escapeHtml(idLabel)}</b>
+                ${branchBadge}
+              </div>
+              <span style="font-size:0.78rem; color:var(--color-text-muted);">${escapeHtml(timeStr)}</span>
+            </div>
+            <div style="font-weight:600; font-size:0.95rem; margin-bottom:0.25rem;">${escapeHtml(item.comment)}</div>
+            <div style="font-size:0.8rem; color:var(--color-text-secondary);">Author: <b>${escapeHtml(item.user || 'anonymous')}</b></div>
           </div>
         `;
       }
-      treeEl.innerHTML = treeHtml;
-
-      // Bind file click
-      treeEl.querySelectorAll('.file-tree-item').forEach(item => {
-        item.addEventListener('click', async () => {
-          const path = item.getAttribute('data-file');
-          await this.loadFileIntoEditor(path);
-        });
-      });
-
-      // Load active file
-      await this.loadFileIntoEditor(state.activeFile);
+      html += '</div>';
+      list.innerHTML = html;
     },
 
-    async loadFileIntoEditor(filePath) {
-      state.activeFile = filePath;
-      const editorEl = $('code-editor-text');
-      const fileLabel = $('active-file-label');
-      const diffContainer = $('editor-diff-preview');
-      if (diffContainer) diffContainer.classList.add('hidden');
-
-      if (fileLabel) fileLabel.innerText = filePath;
-
-      document.querySelectorAll('.file-tree-item').forEach(el => {
-        el.classList.toggle('active', el.getAttribute('data-file') === filePath);
-      });
-
-      const res = await window.fossilMcp.callTool('vcs_file_read', { path: filePath });
-      const content = res.content || '';
-      state.fileOriginalContent = content;
-      if (editorEl) editorEl.value = content;
-    },
-
+    // --- Files Explorer & Editor ---
     bindEditorActions() {
       const saveBtn = $('btn-editor-save');
       const diffBtn = $('btn-editor-diff');
       const commitBtn = $('btn-editor-commit');
       const newFileBtn = $('btn-new-file');
-      const editorEl = $('code-editor-text');
-      const diffContainer = $('editor-diff-preview');
+      const textarea = $('code-editor-text');
 
       if (saveBtn) {
         saveBtn.addEventListener('click', async () => {
-          const content = editorEl.value;
+          const content = textarea.value;
           await window.fossilMcp.callTool('vcs_file_write', { path: state.activeFile, content });
           state.fileOriginalContent = content;
-          alert(`Saved ${state.activeFile} to ${state.activeBackend}!`);
-          if (diffContainer) diffContainer.classList.add('hidden');
+          showToast(`File ${state.activeFile} saved!`);
         });
       }
 
       if (diffBtn) {
         diffBtn.addEventListener('click', () => {
-          if (!diffContainer) return;
-          const currentText = editorEl.value;
-          let diffOutput = '';
-          if (window.FossilCore && window.FossilCore.diffUnified) {
-            diffOutput = window.FossilCore.diffUnified(state.fileOriginalContent, currentText, state.activeFile);
-          } else {
-            diffOutput = `--- a/${state.activeFile}\n+++ b/${state.activeFile}\n(Diff engine loading...)`;
+          const current = textarea.value;
+          const diffOutput = window.FossilCore.myersDiff(state.fileOriginalContent, current);
+          const diffPreview = $('editor-diff-preview');
+          if (diffPreview) {
+            diffPreview.innerHTML = `
+              <div style="margin-bottom:0.5rem; font-weight:600; font-size:0.85rem; color:var(--color-text-secondary);">
+                ⚡ Myers Unified Diff Preview (${state.activeFile}):
+              </div>
+              ${formatDiffHtml(diffOutput)}
+            `;
+            diffPreview.classList.remove('hidden');
           }
-          diffContainer.innerHTML = `
-            <div style="font-weight:600; margin-bottom:0.5rem; display:flex; justify-content:space-between; align-items:center;">
-              <span>⚡ Myers Unified Diff (Pure Nim JS Engine):</span>
-              <button class="btn btn-secondary btn-sm" onclick="document.getElementById('editor-diff-preview').classList.add('hidden')">Hide Diff</button>
-            </div>
-            ${formatDiffHtml(diffOutput)}
-          `;
-          diffContainer.classList.remove('hidden');
         });
       }
 
       if (commitBtn) {
         commitBtn.addEventListener('click', async () => {
-          const content = editorEl.value;
+          const comment = prompt('Enter commit message for file ' + state.activeFile + ':', 'Update ' + state.activeFile);
+          if (!comment) return;
+          const content = textarea.value;
           await window.fossilMcp.callTool('vcs_file_write', { path: state.activeFile, content });
           state.fileOriginalContent = content;
-          const msg = prompt(`Enter commit message for ${state.activeFile}:`, `Update ${state.activeFile}`);
-          if (msg) {
-            await window.fossilMcp.callTool('vcs_commit', { message: msg });
-            alert(`Committed changes to ${state.activeFile}!`);
-            await this.renderTimeline();
+          const res = await window.fossilMcp.callTool('vcs_commit', { comment, files: [state.activeFile] });
+          if (res.success) {
+            await this.refreshTimeline();
+            showToast(`Committed ${state.activeFile} successfully!`);
           }
         });
       }
 
       if (newFileBtn) {
         newFileBtn.addEventListener('click', async () => {
-          const name = prompt('Enter new file name (e.g. src/app.nim or notes.md):');
-          if (name && name.trim()) {
-            const cleanName = name.trim();
-            await window.fossilMcp.callTool('vcs_file_write', { path: cleanName, content: `# ${cleanName}\n\nCreated in Fossil-Nim Browser Edition.\n` });
-            state.activeFile = cleanName;
-            await this.renderFiles();
-          }
+          const fileName = prompt('Enter new file name (e.g. src/app.nim):', 'newfile.nim');
+          if (!fileName) return;
+          await window.fossilMcp.callTool('vcs_file_write', { path: fileName, content: '# New file in Fossil-Nim\n' });
+          await this.refreshFiles();
+          this.loadFile(fileName);
         });
       }
     },
 
-    // -------------------------------------------------------------
-    // Tab 3: Myers Diff Engine Tool
-    // -------------------------------------------------------------
+    async refreshFiles() {
+      const tree = $('files-tree');
+      if (!tree) return;
+      const res = await window.fossilMcp.callTool('vcs_file_list', {});
+      const files = res.files || [];
+      if (files.length === 0) {
+        tree.innerHTML = '<div class="empty">No files in repository</div>';
+        return;
+      }
+      let html = '';
+      for (const f of files) {
+        const filePath = typeof f === 'string' ? f : (f.path || f.name || String(f));
+        const isActive = filePath === state.activeFile;
+        html += `
+          <div class="file-tree-item ${isActive ? 'active' : ''}" data-file="${escapeHtml(filePath)}">
+            <span>📄</span>
+            <span>${escapeHtml(filePath)}</span>
+          </div>
+        `;
+      }
+      tree.innerHTML = html;
+
+      tree.querySelectorAll('.file-tree-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const f = el.getAttribute('data-file');
+          this.loadFile(f);
+        });
+      });
+
+      const getFilePath = (item) => typeof item === 'string' ? item : (item.path || item.name || String(item));
+      if (!files.some(f => getFilePath(f) === state.activeFile) && files.length > 0) {
+        this.loadFile(getFilePath(files[0]));
+      } else if (state.activeFile) {
+        this.loadFile(state.activeFile);
+      }
+    },
+
+    async loadFile(filePath) {
+      state.activeFile = filePath;
+      const label = $('active-file-label');
+      if (label) label.innerText = filePath;
+
+      document.querySelectorAll('#files-tree .file-tree-item').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-file') === filePath);
+      });
+
+      const res = await window.fossilMcp.callTool('vcs_file_read', { path: filePath });
+      const textarea = $('code-editor-text');
+      if (textarea) {
+        const text = res.content || '';
+        textarea.value = text;
+        state.fileOriginalContent = text;
+      }
+      const diffPreview = $('editor-diff-preview');
+      if (diffPreview) diffPreview.classList.add('hidden');
+    },
+
+    // --- Myers Diff Tool ---
     bindDiffTool() {
-      const btn = $('btn-run-standalone-diff');
-      const textA = $('diff-input-a');
-      const textB = $('diff-input-b');
-      const resultEl = $('standalone-diff-result');
+      const runBtn = $('btn-run-standalone-diff');
       const presetSelect = $('diff-preset-select');
+      const inputA = $('diff-input-a');
+      const inputB = $('diff-input-b');
+      const result = $('standalone-diff-result');
 
       const presets = {
         code: {
-          a: `import std/[strutils, tables]\n\nproc processTask(id: int): string =\n  result = "Task #" & $id\n  echo "Starting..."\n`,
-          b: `import std/[strutils, tables, os]\n\nproc processTask(id: int): string =\n  result = "Task #" & $id & " [OPTIMIZED]"\n  echo "Starting high-speed processing..."\n  echo "Completed!"\n`
+          a: "import std/[strutils, tables]\n\nproc processTask(id: int): string =\n  result = \"Task #\" & $id\n  echo \"Starting...\"\n",
+          b: "import std/[strutils, tables, os]\n\nproc processTask(id: int): string =\n  result = \"Task #\" & $id & \" [OPTIMIZED]\"\n  echo \"Starting high-speed processing...\"\n  echo \"Completed!\"\n"
         },
         doc: {
-          a: `# Version 1.0\nFossil-Nim is a fast version control system.\nRuns natively on Linux/macOS.\n`,
-          b: `# Version 2.0 (Browser Edition)\nFossil-Nim is a fast distributed version control system.\nRuns natively on Linux/macOS and directly in modern web browsers via Nim JS/WASM!\nIncludes 89 MCP Tools for AI Agents.\n`
+          a: "# Architecture Overview\nFossil-Nim is a 100% pure Nim VCS.\nFeatures:\n- Fast Delta Compression\n- Hybrid CDB Storage\n",
+          b: "# Architecture Overview\nFossil-Nim is a 100% pure Nim VCS.\nFeatures:\n- Version 2.0 WebAssembly & In-Browser Support!\n- Fast Delta Myers Algorithm\n- Hybrid CDB Storage\n- 89 MCP Tools for AI Agents\n"
         }
       };
 
       if (presetSelect) {
-        presetSelect.addEventListener('change', (e) => {
-          const p = presets[e.target.value];
-          if (p && textA && textB) {
-            textA.value = p.a;
-            textB.value = p.b;
-            if (btn) btn.click();
+        presetSelect.addEventListener('change', () => {
+          const p = presets[presetSelect.value];
+          if (p && inputA && inputB) {
+            inputA.value = p.a;
+            inputB.value = p.b;
+            if (runBtn) runBtn.click();
           }
         });
       }
 
-      if (btn && textA && textB && resultEl) {
-        btn.addEventListener('click', () => {
+      if (runBtn && inputA && inputB && result) {
+        runBtn.addEventListener('click', () => {
           const t0 = performance.now();
-          let diffStr = '';
-          if (window.FossilCore && window.FossilCore.diffUnified) {
-            diffStr = window.FossilCore.diffUnified(textA.value, textB.value, 'diff_test.nim');
-          } else {
-            diffStr = 'Diff engine not loaded.';
-          }
+          const diffOutput = window.FossilCore.myersDiff(inputA.value, inputB.value);
           const t1 = performance.now();
           const elapsed = (t1 - t0).toFixed(2);
-
-          resultEl.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-              <span style="font-weight:600; font-size:0.9rem;">Myers Diff Output</span>
-              <span class="badge badge-success">Computed in ${elapsed} ms via Nim Engine</span>
+          result.innerHTML = `
+            <div style="margin-bottom:0.5rem; font-size:0.85rem; color:var(--color-text-secondary); display:flex; justify-content:space-between;">
+              <b>Myers Diff Output:</b>
+              <span class="badge badge-success">Computed in ${elapsed}ms (Nim Engine)</span>
             </div>
-            ${formatDiffHtml(diffStr)}
+            ${formatDiffHtml(diffOutput)}
           `;
         });
       }
     },
 
-    // -------------------------------------------------------------
-    // Tab 4: Wiki & Documentation
-    // -------------------------------------------------------------
-    async renderWiki() {
-      const listEl = $('wiki-pages-list');
-      if (!listEl) return;
-
-      const res = await window.fossilMcp.callTool('wiki_list');
-      const pages = res.pages || [];
-      if (pages.length > 0 && !pages.some(p => p.name === state.activeWiki)) {
-        state.activeWiki = pages[0].name;
-      }
-
-      let listHtml = '';
-      for (const p of pages) {
-        const isActive = p.name === state.activeWiki;
-        listHtml += `
-          <div class="file-tree-item ${isActive ? 'active' : ''}" data-wiki="${escapeHtml(p.name)}">
-            📖 <span>${escapeHtml(p.name)}</span>
-          </div>
-        `;
-      }
-      listEl.innerHTML = listHtml;
-
-      listEl.querySelectorAll('.file-tree-item').forEach(item => {
-        item.addEventListener('click', async () => {
-          const name = item.getAttribute('data-wiki');
-          await this.loadWikiPage(name);
-        });
-      });
-
-      await this.loadWikiPage(state.activeWiki);
-    },
-
-    async loadWikiPage(name) {
-      state.activeWiki = name;
-      const titleEl = $('wiki-view-title');
-      const contentEl = $('wiki-view-content');
-      const editorWrap = $('wiki-editor-wrap');
-      const viewWrap = $('wiki-reader-wrap');
-      const textarea = $('wiki-markdown-input');
-
-      if (titleEl) titleEl.innerText = name;
-
-      document.querySelectorAll('#wiki-pages-list .file-tree-item').forEach(el => {
-        el.classList.toggle('active', el.getAttribute('data-wiki') === name);
-      });
-
-      const res = await window.fossilMcp.callTool('wiki_get', { name });
-      const markdown = res.text || '# Empty Page';
-
-      if (textarea) textarea.value = markdown;
-
-      if (contentEl) {
-        let html = '';
-        if (window.FossilCore && window.FossilCore.markdownToHtml) {
-          html = window.FossilCore.markdownToHtml(markdown);
-        } else {
-          html = `<pre>${escapeHtml(markdown)}</pre>`;
-        }
-        contentEl.innerHTML = html;
-      }
-
-      if (editorWrap && viewWrap) {
-        editorWrap.classList.add('hidden');
-        viewWrap.classList.remove('hidden');
-        state.wikiEditMode = false;
-      }
-    },
-
+    // --- Wiki & Built-in Docs ---
     bindWikiActions() {
       const editBtn = $('btn-wiki-edit');
       const saveBtn = $('btn-wiki-save');
-      const cancelBtn = $('btn-wiki-cancel');
       const newPageBtn = $('btn-wiki-new');
-      const editorWrap = $('wiki-editor-wrap');
-      const viewWrap = $('wiki-reader-wrap');
-      const textarea = $('wiki-markdown-input');
-      const previewEl = $('wiki-live-preview');
+      const cancelBtn = $('btn-wiki-cancel');
+      const mdInput = $('wiki-markdown-input');
+      const preview = $('wiki-live-preview');
 
       if (editBtn) {
         editBtn.addEventListener('click', () => {
           state.wikiEditMode = true;
-          editorWrap.classList.remove('hidden');
-          viewWrap.classList.add('hidden');
-          if (textarea && previewEl && window.FossilCore) {
-            previewEl.innerHTML = window.FossilCore.markdownToHtml(textarea.value);
+          $('wiki-view-mode').classList.add('hidden');
+          $('wiki-edit-mode').classList.remove('hidden');
+          if (mdInput) {
+            const curText = $('wiki-view-content').innerText;
+            mdInput.value = curText;
+            if (preview) preview.innerHTML = window.FossilCore.markdownToHtml(curText);
           }
         });
       }
@@ -8128,128 +9167,170 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       if (cancelBtn) {
         cancelBtn.addEventListener('click', () => {
           state.wikiEditMode = false;
-          editorWrap.classList.add('hidden');
-          viewWrap.classList.remove('hidden');
+          $('wiki-view-mode').classList.remove('hidden');
+          $('wiki-edit-mode').classList.add('hidden');
         });
       }
 
-      if (textarea && previewEl) {
-        textarea.addEventListener('input', () => {
-          if (window.FossilCore && window.FossilCore.markdownToHtml) {
-            previewEl.innerHTML = window.FossilCore.markdownToHtml(textarea.value);
-          }
+      if (mdInput && preview) {
+        mdInput.addEventListener('input', () => {
+          preview.innerHTML = window.FossilCore.markdownToHtml(mdInput.value);
         });
       }
 
-      if (saveBtn) {
+      if (saveBtn && mdInput) {
         saveBtn.addEventListener('click', async () => {
-          const text = textarea.value;
+          const text = mdInput.value;
           await window.fossilMcp.callTool('wiki_create', { name: state.activeWiki, content: text });
-          alert(`Saved wiki page "${state.activeWiki}"!`);
+          state.wikiEditMode = false;
+          $('wiki-view-mode').classList.remove('hidden');
+          $('wiki-edit-mode').classList.add('hidden');
           await this.loadWikiPage(state.activeWiki);
+          showToast(`Wiki page "${state.activeWiki}" saved!`);
         });
       }
 
       if (newPageBtn) {
         newPageBtn.addEventListener('click', async () => {
-          const name = prompt('Enter new Wiki Page name (e.g. Quickstart):');
-          if (name && name.trim()) {
-            const cleanName = name.trim();
-            await window.fossilMcp.callTool('wiki_create', { name: cleanName, content: `# ${cleanName}\n\nWrite documentation here in Markdown.\n` });
-            state.activeWiki = cleanName;
-            await this.renderWiki();
+          const name = prompt('Enter new Wiki Page name (e.g. ArchitectureDoc):');
+          if (!name) return;
+          await window.fossilMcp.callTool('wiki_create', { name, content: `# ${name}\n\nStart writing documentation here.\n` });
+          await this.refreshWiki();
+          await this.loadWikiPage(name);
+        });
+      }
+    },
+
+    async refreshWiki() {
+      const list = $('wiki-pages-list');
+      if (!list) return;
+      const res = await window.fossilMcp.callTool('wiki_list', {});
+      const pages = res.pages || [];
+      let html = '';
+      for (const p of pages) {
+        const isActive = p.name === state.activeWiki;
+        html += `
+          <div class="file-tree-item ${isActive ? 'active' : ''}" data-wiki="${escapeHtml(p.name)}">
+            <span>📖</span>
+            <span>${escapeHtml(p.name)}</span>
+          </div>
+        `;
+      }
+      list.innerHTML = html;
+
+      list.querySelectorAll('.file-tree-item').forEach(el => {
+        el.addEventListener('click', () => {
+          const name = el.getAttribute('data-wiki');
+          this.loadWikiPage(name);
+        });
+      });
+
+      if (pages.length > 0 && !pages.some(p => p.name === state.activeWiki)) {
+        await this.loadWikiPage(pages[0].name);
+      } else if (state.activeWiki) {
+        await this.loadWikiPage(state.activeWiki);
+      }
+    },
+
+    async loadWikiPage(name) {
+      state.activeWiki = name;
+      const title = $('wiki-view-title');
+      if (title) title.innerText = name;
+
+      document.querySelectorAll('#wiki-pages-list .file-tree-item').forEach(el => {
+        el.classList.toggle('active', el.getAttribute('data-wiki') === name);
+      });
+
+      const res = await window.fossilMcp.callTool('wiki_get', { name });
+      const rawText = res.text || '';
+      const content = $('wiki-view-content');
+      if (content) {
+        content.innerHTML = window.FossilCore.markdownToHtml(rawText);
+      }
+    },
+
+    // --- Tickets ---
+    bindTicketActions() {
+      const newTktBtn = $('btn-new-ticket-modal');
+      const modal = $('modal-ticket');
+      const closeBtn = $('btn-modal-ticket-close');
+      const form = $('form-ticket');
+
+      if (newTktBtn && modal) {
+        newTktBtn.addEventListener('click', () => modal.classList.remove('hidden'));
+      }
+      if (closeBtn && modal) {
+        closeBtn.addEventListener('click', () => modal.classList.add('hidden'));
+      }
+      if (form) {
+        form.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          const title = $('ticket-title').value.trim();
+          const priority = $('ticket-priority').value;
+          const desc = $('ticket-desc').value.trim();
+          if (!title) return;
+
+          const res = await window.fossilMcp.callTool('ticket_create', { title, priority, desc });
+          if (res.success) {
+            $('ticket-title').value = '';
+            $('ticket-desc').value = '';
+            modal.classList.add('hidden');
+            await this.refreshTickets();
+            showToast('Ticket created successfully!');
           }
         });
       }
     },
 
-    // -------------------------------------------------------------
-    // Tab 5: Tickets / Issue Tracker
-    // -------------------------------------------------------------
-    async renderTickets() {
-      const listEl = $('tickets-list');
-      if (!listEl) return;
-
-      const res = await window.fossilMcp.callTool('ticket_list');
+    async refreshTickets() {
+      const list = $('tickets-list');
+      if (!list) return;
+      const res = await window.fossilMcp.callTool('ticket_list', {});
       const tickets = res.tickets || [];
-
       if (tickets.length === 0) {
-        listEl.innerHTML = '<div class="empty">No tickets created yet. Click "+ New Ticket" to add one!</div>';
+        list.innerHTML = `<div class="empty">${window.FossilI18n.t('tickets.empty')}</div>`;
         return;
       }
-
       let html = '<div style="display:flex; flex-direction:column; gap:0.75rem;">';
       for (const t of tickets) {
-        const priColor = t.priority === 'Critical' ? 'badge-danger' : (t.priority === 'High' ? 'badge-warning' : 'badge-info');
+        const badgeClass = t.priority === 'Critical' ? 'badge-danger' : (t.priority === 'High' ? 'badge-warning' : 'badge-info');
         html += `
           <div class="card" style="padding:1rem;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">
-              <div style="display:flex; align-items:center; gap:0.5rem;">
-                <span class="badge ${priColor}">${escapeHtml(t.priority || 'Medium')}</span>
-                <span style="font-weight:600; font-size:1.05rem;">${escapeHtml(t.title)}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.4rem;">
+              <div style="display:flex; gap:0.5rem; align-items:center;">
+                <span class="badge ${badgeClass}">${escapeHtml(t.priority || 'Medium')}</span>
+                <b style="font-size:1rem;">${escapeHtml(t.title)}</b>
               </div>
-              <span class="badge badge-success">${escapeHtml(t.status || 'Open')}</span>
+              <span class="badge badge-secondary">${escapeHtml(t.status || 'Open')}</span>
             </div>
-            <p style="font-size:0.9rem; margin-bottom:0.5rem; color:var(--color-text);">${escapeHtml(t.desc)}</p>
-            <div style="font-size:0.8rem; color:var(--color-text-muted);">
-              ID: <code>${escapeHtml(t.id)}</code> | Reported by: <b>${escapeHtml(t.reporter || 'user')}</b>
-            </div>
+            <p style="margin:0; font-size:0.88rem; color:var(--color-text-secondary);">${escapeHtml(t.desc || 'No description provided')}</p>
           </div>
         `;
       }
       html += '</div>';
-      listEl.innerHTML = html;
+      list.innerHTML = html;
     },
 
-    bindTicketActions() {
-      const newBtn = $('btn-ticket-modal');
-      const modal = $('modal-ticket');
-      const form = $('form-ticket');
-      const cancelBtn = $('btn-ticket-cancel');
-
-      if (newBtn && modal) newBtn.addEventListener('click', () => modal.classList.remove('hidden'));
-      if (cancelBtn && modal) cancelBtn.addEventListener('click', () => modal.classList.add('hidden'));
-
-      if (form && modal) {
-        form.addEventListener('submit', async (e) => {
-          e.preventDefault();
-          const title = $('ticket-title').value.trim();
-          const desc = $('ticket-desc').value.trim();
-          const priority = $('ticket-priority').value;
-
-          if (!title) return;
-
-          await window.fossilMcp.callTool('ticket_create', { title, desc, priority });
-          $('ticket-title').value = '';
-          $('ticket-desc').value = '';
-          modal.classList.add('hidden');
-          await this.renderTickets();
-        });
-      }
-    },
-
-    // -------------------------------------------------------------
-    // Tab 6: 89-Tool MCP Agent Console
-    // -------------------------------------------------------------
-    async renderMcp() {
-      const toolsListEl = $('mcp-tools-list');
-      if (!toolsListEl) return;
+    // --- MCP Tools Console ---
+    bindMcpActions() {
+      const list = $('mcp-tools-list');
+      if (!list) return;
 
       const serverInfo = window.fossilMcp.listTools();
-      const tools = serverInfo.tools || [];
+      const tools = serverInfo.tools;
 
       let html = '';
-      for (const t of tools) {
-        const isActive = t.name === state.activeMcpTool;
+      for (const tool of tools) {
+        const isActive = tool.name === state.activeMcpTool;
         html += `
-          <div class="mcp-tool-item ${isActive ? 'active' : ''}" data-tool="${t.name}">
-            <code>${t.name}</code>
+          <div class="mcp-tool-item ${isActive ? 'active' : ''}" data-tool="${escapeHtml(tool.name)}">
+            <b>${escapeHtml(tool.name)}</b>
           </div>
         `;
       }
-      toolsListEl.innerHTML = html;
+      list.innerHTML = html;
 
-      toolsListEl.querySelectorAll('.mcp-tool-item').forEach(item => {
+      list.querySelectorAll('.mcp-tool-item').forEach(item => {
         item.addEventListener('click', () => {
           const toolName = item.getAttribute('data-tool');
           this.selectMcpTool(toolName);
@@ -8257,6 +9338,35 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       });
 
       this.selectMcpTool(state.activeMcpTool);
+
+      const runBtn = $('btn-mcp-invoke');
+      const outputEl = $('mcp-output-json');
+      const copyPromptBtn = $('btn-copy-mcp-prompt');
+
+      if (runBtn && outputEl) {
+        runBtn.addEventListener('click', async () => {
+          outputEl.innerText = 'Calling tool...';
+          const toolName = state.activeMcpTool;
+          let params = {};
+          try {
+            params = JSON.parse($('mcp-params-input').value || '{}');
+          } catch (e) {
+            outputEl.innerText = 'JSON Parse Error: ' + e.message;
+            return;
+          }
+          const res = await window.fossilMcp.callTool(toolName, params);
+          outputEl.innerText = JSON.stringify(res, null, 2);
+        });
+      }
+
+      if (copyPromptBtn) {
+        copyPromptBtn.addEventListener('click', () => {
+          const promptText = `You are connected to Fossil-Nim In-Browser Distributed VCS via Model Context Protocol.\nAvailable MCP Tools: 89.\nActive Storage Backend: ${window.FossilStorageManager.backendType}.\nSupported Endpoints: window.fossilMcp.callTool(name, params).`;
+          navigator.clipboard.writeText(promptText).then(() => {
+            showToast('Agent prompt copied to clipboard!');
+          });
+        });
+      }
     },
 
     selectMcpTool(toolName) {
@@ -8275,12 +9385,11 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       if (nameEl) nameEl.innerText = tool.name;
       if (descEl) descEl.innerText = tool.description || 'No description';
 
-      // Preset sample parameters
       let sampleParams = {};
       if (tool.parameters) {
         for (const [key, type] of Object.entries(tool.parameters)) {
           if (key === 'path') sampleParams[key] = 'README.md';
-          else if (key === 'message') sampleParams[key] = 'Commit message';
+          else if (key === 'message' || key === 'comment') sampleParams[key] = 'Commit message';
           else if (key === 'limit') sampleParams[key] = 10;
           else if (key === 'name') sampleParams[key] = 'Home';
           else if (key === 'backend') sampleParams[key] = 'indexeddb';
@@ -8290,81 +9399,7 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       if (paramsEl) paramsEl.value = JSON.stringify(sampleParams, null, 2);
     },
 
-    bindMcpActions() {
-      const runBtn = $('btn-mcp-invoke');
-      const outputEl = $('mcp-output-json');
-      const copyPromptBtn = $('btn-copy-mcp-prompt');
-
-      if (runBtn && outputEl) {
-        runBtn.addEventListener('click', async () => {
-          outputEl.innerText = 'Calling tool...';
-          const toolName = state.activeMcpTool;
-          let params = {};
-          try {
-            params = JSON.parse($('mcp-params-input').value || '{}');
-          } catch (e) {
-            outputEl.innerText = 'Invalid JSON in Parameters input: ' + e.message;
-            return;
-          }
-
-          const t0 = performance.now();
-          const res = await window.fossilMcp.callTool(toolName, params);
-          const t1 = performance.now();
-          const elapsed = (t1 - t0).toFixed(2);
-
-          outputEl.innerText = JSON.stringify({
-            _timing: `${elapsed}ms`,
-            tool: toolName,
-            result: res
-          }, null, 2);
-        });
-      }
-
-      if (copyPromptBtn) {
-        copyPromptBtn.addEventListener('click', () => {
-          const snippet = `You have access to Fossil-Nim in-browser MCP server with 89 tools exposed via:
-await window.fossilMcp.callTool(name, params);
-
-Key tools:
-- vcs_status: Get working copy status
-- vcs_diff: Compute Myers unified diff via Nim engine
-- vcs_file_read / vcs_file_write: Access repository files
-- vcs_commit: Commit changes to IndexedDB / SQLite WASM / Pure-Nim CDB
-- wiki_get / wiki_create: Access & write repository documentation`;
-          navigator.clipboard.writeText(snippet);
-          alert('Copied AI Agent System Prompt snippet to clipboard!');
-        });
-      }
-    },
-
-    // -------------------------------------------------------------
-    // Tab 7: Storage Diagnostics & SQL Query
-    // -------------------------------------------------------------
-    async renderStorageDiagnostics() {
-      const statsEl = $('storage-stats-container');
-      if (!statsEl) return;
-
-      const mgr = window.FossilStorageManager;
-      const stats = await window.fossilMcp.callTool('storage_stats');
-
-      statsEl.innerHTML = `
-        <div class="grid grid-3" style="margin-bottom:1.5rem;">
-          <div class="card">
-            <div style="font-size:0.85rem; color:var(--color-text-muted);">Active Backend</div>
-            <div style="font-size:1.3rem; font-weight:700; color:var(--color-primary);">${mgr.getActiveBackend().name}</div>
-          </div>
-          <div class="card">
-            <div style="font-size:0.85rem; color:var(--color-text-muted);">MCP Tools Available</div>
-            <div style="font-size:1.3rem; font-weight:700; color:#10b981;">89 Tools</div>
-          </div>
-          <div class="card">
-            <div style="font-size:0.85rem; color:var(--color-text-muted);">Engine Runtime</div>
-            <div style="font-size:1.3rem; font-weight:700;">Nim 2.0+ (JS/WASM)</div>
-          </div>
-        </div>
-      `;
-    },
-
+    // --- Storage Diagnostics & Snapshot Import/Export ---
     bindStorageDiagnostics() {
       const exportBtn = $('btn-export-repo');
       const runSqlBtn = $('btn-run-sql');
@@ -8389,28 +9424,31 @@ Key tools:
           a.download = exp.filename;
           a.click();
           URL.revokeObjectURL(url);
+          showToast(`Repository exported as ${exp.filename}`);
         });
       }
 
-      // Repository Import Handling
+      // Repository Import Handling with Smart Conflict Modal
       const importBtn = $('btn-import-repo');
       const fileInput = $('file-import-input');
       const importModal = $('modal-import-confirm');
+      const importConfirmBtn = $('btn-import-confirm-execute');
       const importCancelBtn = $('btn-import-cancel');
       const importAbortBtn = $('btn-import-abort');
-      const importConfirmBtn = $('btn-import-confirm-execute');
-      let pendingImportFile = null;
+
       let pendingImportData = null;
+      let pendingImportFile = null;
 
       const closeImportModal = () => {
         if (importModal) importModal.classList.add('hidden');
-        pendingImportFile = null;
         pendingImportData = null;
+        pendingImportFile = null;
       };
 
       const executeImport = async (chosenMode) => {
         if (!pendingImportData || !pendingImportFile) return;
-        $('loading-indicator').classList.remove('hidden');
+        const spinner = $('loading-indicator');
+        if (spinner) spinner.classList.remove('hidden');
         try {
           const t0 = performance.now();
           const mgr = window.FossilStorageManager;
@@ -8419,11 +9457,11 @@ Key tools:
           const elapsed = (t1 - t0).toFixed(1);
           closeImportModal();
           await this.refreshAll();
-          alert(`Successfully imported ${pendingImportFile.name} in ${chosenMode} mode (${elapsed}ms)!`);
+          showToast(`Successfully imported ${pendingImportFile.name} in ${chosenMode} mode (${elapsed}ms)!`);
         } catch (err) {
           alert('Import failed: ' + err.message);
         } finally {
-          $('loading-indicator').classList.add('hidden');
+          if (spinner) spinner.classList.add('hidden');
         }
       };
 

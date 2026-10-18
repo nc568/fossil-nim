@@ -1,208 +1,262 @@
-/* Fossil-Nim Themes - Modular, easy to edit palette
-   Generated from src/fossil/ui/theme.nim via tools/generate_themes.nim
-   Edit palette in theme.nim to change colors, then regenerate
-   Or edit directly here for quick tweaks
+/* Fossil-Nim Professional Themes & Layout Customization
+   Pure CSS Custom Properties (Variables)
+   Supports: Dark (Obsidian), Light (GitHub), Nord, Dracula, Gruvbox, Cyberpunk, Monokai, and Custom
+   Plus UI Density, Font scaling, and Radius modifiers
 */
 
-/* Theme: light - Light */
-/* Default light theme, clean and minimal */
-[data-theme="light"] {
-  --color-primary: #0d6efd;
-  --color-primary-hover: #0b5ed7;
-  --color-primary-light: #cfe2ff;
-  --color-secondary: #6c757d;
-  --color-success: #198754;
-  --color-danger: #dc3545;
-  --color-warning: #ffc107;
-  --color-info: #0dcaf0;
-  --color-bg: #f8f9fa;
-  --color-bg-secondary: #e9ecef;
-  --color-bg-card: #ffffff;
-  --color-bg-code: #f1f3f5;
-  --color-bg-hover: #e9ecef;
-  --color-text: #212529;
-  --color-text-secondary: #495057;
-  --color-text-muted: #6c757d;
-  --color-text-inverse: #ffffff;
-  --color-border: #dee2e6;
-  --color-border-light: #e9ecef;
-  --color-border-dark: #343a40;
-  --shadow: 0 1px 3px rgba(0,0,0,0.1);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.15);
-  --radius: 6px;
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Menlo, Consolas, monospace;
+  --font-base: 15px;
+  --radius: 8px;
   --radius-lg: 12px;
+  --card-padding: 1.25rem;
+  --nav-height: 56px;
+  --transition-speed: 0.15s;
 }
 
-/* Theme: dark - Dark */
-/* Dark theme for low light */
+/* 1. Theme: Obsidian Dark (Default Dark - Pro Dev Daily Driver) */
 [data-theme="dark"] {
   --color-primary: #3b82f6;
-  --color-primary-hover: #2563eb;
-  --color-primary-light: #1e3a5f;
-  --color-secondary: #6b7280;
+  --color-primary-hover: #60a5fa;
+  --color-primary-light: rgba(59, 130, 246, 0.15);
+  --color-secondary: #94a3b8;
   --color-success: #10b981;
-  --color-danger: #ef4444;
+  --color-danger: #f43f5e;
   --color-warning: #f59e0b;
   --color-info: #06b6d4;
-  --color-bg: #111827;
-  --color-bg-secondary: #1f2937;
-  --color-bg-card: #1f2937;
-  --color-bg-code: #374151;
-  --color-bg-hover: #374151;
-  --color-text: #f9fafb;
-  --color-text-secondary: #d1d5db;
-  --color-text-muted: #9ca3af;
-  --color-text-inverse: #111827;
-  --color-border: #374151;
-  --color-border-light: #4b5563;
-  --color-border-dark: #6b7280;
-  --shadow: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.4);
-  --radius: 6px;
-  --radius-lg: 12px;
+  --color-bg: #0b0f19;
+  --color-bg-secondary: #111827;
+  --color-bg-card: #151d2e;
+  --color-bg-code: #0d1424;
+  --color-bg-hover: #1e293b;
+  --color-text: #f1f5f9;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #64748b;
+  --color-text-inverse: #0b0f19;
+  --color-border: #1e293b;
+  --color-border-light: #334155;
+  --color-border-dark: #475569;
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
-/* Theme: solarized-light - Solarized Light */
-/* Solarized light, easy on eyes */
-[data-theme="solarized-light"] {
-  --color-primary: #268bd2;
-  --color-primary-hover: #2075b5;
-  --color-primary-light: #d6e9f5;
-  --color-secondary: #93a1a1;
-  --color-success: #859900;
-  --color-danger: #dc322f;
-  --color-warning: #b58900;
-  --color-info: #2aa198;
-  --color-bg: #fdf6e3;
-  --color-bg-secondary: #eee8d5;
+/* 2. Theme: Light (Clean Minimalist GitHub Pro) */
+[data-theme="light"], [data-theme="github-light"] {
+  --color-primary: #0969da;
+  --color-primary-hover: #0550ae;
+  --color-primary-light: #ddf4ff;
+  --color-secondary: #57606a;
+  --color-success: #1a7f37;
+  --color-danger: #cf222e;
+  --color-warning: #9a6700;
+  --color-info: #0969da;
+  --color-bg: #f8fafc;
+  --color-bg-secondary: #f1f5f9;
   --color-bg-card: #ffffff;
-  --color-bg-code: #eee8d5;
-  --color-bg-hover: #eee8d5;
-  --color-text: #586e75;
-  --color-text-secondary: #657b83;
-  --color-text-muted: #93a1a1;
-  --color-text-inverse: #fdf6e3;
-  --color-border: #93a1a1;
-  --color-border-light: #eee8d5;
-  --color-border-dark: #586e75;
-  --shadow: 0 1px 3px rgba(88,110,117,0.1);
-  --shadow-lg: 0 4px 12px rgba(88,110,117,0.15);
-  --radius: 6px;
-  --radius-lg: 12px;
+  --color-bg-code: #f1f5f9;
+  --color-bg-hover: #e2e8f0;
+  --color-text: #0f172a;
+  --color-text-secondary: #334155;
+  --color-text-muted: #64748b;
+  --color-text-inverse: #ffffff;
+  --color-border: #e2e8f0;
+  --color-border-light: #cbd5e1;
+  --color-border-dark: #94a3b8;
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --shadow-lg: 0 8px 20px rgba(15, 23, 42, 0.08);
 }
 
-/* Theme: nord - Nord */
-/* Nord dark, arctic bluish */
+/* 3. Theme: Nord (Arctic Frost) */
 [data-theme="nord"] {
   --color-primary: #88c0d0;
   --color-primary-hover: #81a1c1;
-  --color-primary-light: #4c566a;
-  --color-secondary: #4c566a;
+  --color-primary-light: rgba(136, 192, 208, 0.2);
+  --color-secondary: #81a1c1;
   --color-success: #a3be8c;
   --color-danger: #bf616a;
   --color-warning: #ebcb8b;
-  --color-info: #88c0d0;
-  --color-bg: #2e3440;
-  --color-bg-secondary: #3b4252;
-  --color-bg-card: #3b4252;
-  --color-bg-code: #4c566a;
-  --color-bg-hover: #4c566a;
+  --color-info: #8fbcbb;
+  --color-bg: #242933;
+  --color-bg-secondary: #2e3440;
+  --color-bg-card: #2e3440;
+  --color-bg-code: #3b4252;
+  --color-bg-hover: #3b4252;
   --color-text: #eceff4;
   --color-text-secondary: #d8dee9;
-  --color-text-muted: #4c566a;
+  --color-text-muted: #616e88;
   --color-text-inverse: #2e3440;
-  --color-border: #4c566a;
-  --color-border-light: #5e81ac;
-  --color-border-dark: #2e3440;
+  --color-border: #3b4252;
+  --color-border-light: #4c566a;
+  --color-border-dark: #5e81ac;
   --shadow: 0 1px 3px rgba(0,0,0,0.3);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.4);
-  --radius: 6px;
-  --radius-lg: 12px;
+  --shadow-lg: 0 6px 18px rgba(0,0,0,0.4);
 }
 
+/* 4. Theme: Dracula (Vampire Dark) */
+[data-theme="dracula"] {
+  --color-primary: #bd93f9;
+  --color-primary-hover: #d1b3ff;
+  --color-primary-light: rgba(189, 147, 249, 0.2);
+  --color-secondary: #6272a4;
+  --color-success: #50fa7b;
+  --color-danger: #ff5555;
+  --color-warning: #f1fa8c;
+  --color-info: #8be9fd;
+  --color-bg: #1e1f29;
+  --color-bg-secondary: #282a36;
+  --color-bg-card: #282a36;
+  --color-bg-code: #21222c;
+  --color-bg-hover: #343746;
+  --color-text: #f8f8f2;
+  --color-text-secondary: #cfcfc2;
+  --color-text-muted: #6272a4;
+  --color-text-inverse: #282a36;
+  --color-border: #44475a;
+  --color-border-light: #6272a4;
+  --color-border-dark: #bd93f9;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+}
 
-/* Monokai - Vibrant dark */
+/* 5. Theme: Gruvbox (Retro Warm) */
+[data-theme="gruvbox"] {
+  --color-primary: #fe8019;
+  --color-primary-hover: #fa8b32;
+  --color-primary-light: rgba(254, 128, 25, 0.2);
+  --color-secondary: #928374;
+  --color-success: #b8bb26;
+  --color-danger: #fb4934;
+  --color-warning: #fabd2f;
+  --color-info: #83a598;
+  --color-bg: #1d2021;
+  --color-bg-secondary: #282828;
+  --color-bg-card: #282828;
+  --color-bg-code: #32302f;
+  --color-bg-hover: #3c3836;
+  --color-text: #ebdbb2;
+  --color-text-secondary: #d5c4a1;
+  --color-text-muted: #928374;
+  --color-text-inverse: #282828;
+  --color-border: #3c3836;
+  --color-border-light: #504945;
+  --color-border-dark: #665c54;
+  --shadow: 0 1px 3px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 20px rgba(0,0,0,0.5);
+}
+
+/* 6. Theme: Cyberpunk (High Contrast Neon) */
+[data-theme="cyberpunk"] {
+  --color-primary: #00ff66;
+  --color-primary-hover: #33ff88;
+  --color-primary-light: rgba(0, 255, 102, 0.2);
+  --color-secondary: #00e5ff;
+  --color-success: #00ff66;
+  --color-danger: #ff0055;
+  --color-warning: #ffff00;
+  --color-info: #00e5ff;
+  --color-bg: #030712;
+  --color-bg-secondary: #0b0f19;
+  --color-bg-card: #0f172a;
+  --color-bg-code: #050811;
+  --color-bg-hover: #1e293b;
+  --color-text: #f0fdf4;
+  --color-text-secondary: #86efac;
+  --color-text-muted: #4ade80;
+  --color-text-inverse: #030712;
+  --color-border: #15803d;
+  --color-border-light: #16a34a;
+  --color-border-dark: #22c55e;
+  --shadow: 0 0 10px rgba(0, 255, 102, 0.15);
+  --shadow-lg: 0 0 25px rgba(0, 255, 102, 0.25);
+}
+
+/* 7. Theme: Monokai */
 [data-theme="monokai"] {
   --color-primary: #a6e22e;
-  --color-primary-hover: #8ac627;
-  --color-primary-light: #3e4a2d;
+  --color-primary-hover: #b8f044;
+  --color-primary-light: rgba(166, 226, 46, 0.2);
   --color-secondary: #75715e;
   --color-success: #a6e22e;
   --color-danger: #f92672;
   --color-warning: #fd971f;
   --color-info: #66d9ef;
   --color-bg: #272822;
-  --color-bg-secondary: #3e3d32;
-  --color-bg-card: #3e3d32;
-  --color-bg-code: #49483e;
-  --color-bg-hover: #49483e;
+  --color-bg-secondary: #32332a;
+  --color-bg-card: #32332a;
+  --color-bg-code: #1e1f1c;
+  --color-bg-hover: #3e3d32;
   --color-text: #f8f8f2;
   --color-text-secondary: #cfcfc2;
   --color-text-muted: #75715e;
   --color-text-inverse: #272822;
   --color-border: #49483e;
   --color-border-light: #75715e;
-  --color-border-dark: #f8f8f2;
+  --color-border-dark: #a6e22e;
   --shadow: 0 1px 3px rgba(0,0,0,0.4);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.5);
-  --radius: 6px;
-  --radius-lg: 12px;
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
 }
 
-/* GitHub Light */
-[data-theme="github-light"] {
-  --color-primary: #0969da;
-  --color-primary-hover: #0550ae;
-  --color-primary-light: #ddf4ff;
-  --color-secondary: #656d76;
-  --color-success: #1a7f37;
-  --color-danger: #cf222e;
-  --color-warning: #9a6700;
-  --color-info: #0969da;
-  --color-bg: #ffffff;
-  --color-bg-secondary: #f6f8fa;
-  --color-bg-card: #ffffff;
-  --color-bg-code: #f6f8fa;
-  --color-bg-hover: #f6f8fa;
-  --color-text: #24292f;
-  --color-text-secondary: #57606a;
-  --color-text-muted: #8c959f;
-  --color-text-inverse: #ffffff;
-  --color-border: #d0d7de;
-  --color-border-light: #d8dee4;
-  --color-border-dark: #24292f;
-  --shadow: 0 1px 0 rgba(27,31,36,0.04);
-  --shadow-lg: 0 3px 6px rgba(140,149,159,0.15);
-  --radius: 6px;
-  --radius-lg: 12px;
+/* =========================================================================
+   UI MODIFIERS: Density, Font Family, Font Scaling, Border Radius
+   ========================================================================= */
+
+/* Density */
+[data-density="compact"] {
+  --card-padding: 0.85rem;
+  --spacing-btn: 0.35rem 0.65rem;
+  --nav-height: 48px;
+  font-size: 14px;
+}
+[data-density="compact"] .main {
+  padding: 1rem 0.75rem !important;
+}
+[data-density="compact"] .card {
+  padding: 0.85rem !important;
+}
+[data-density="compact"] .browser-hero {
+  padding: 0.75rem 1rem !important;
+  margin-bottom: 0.75rem !important;
+}
+[data-density="compact"] .btn {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.82rem;
 }
 
-/* Template for custom themes - copy and edit */
-/*
-[data-theme="my-custom"] {
-  --color-primary: #your-color;
-  --color-primary-hover: #your-hover;
-  --color-primary-light: #your-light;
-  --color-secondary: #...
-  --color-success: #...
-  --color-danger: #...
-  --color-warning: #...
-  --color-info: #...
-  --color-bg: #...
-  --color-bg-secondary: #...
-  --color-bg-card: #...
-  --color-bg-code: #...
-  --color-bg-hover: #...
-  --color-text: #...
-  --color-text-secondary: #...
-  --color-text-muted: #...
-  --color-text-inverse: #...
-  --color-border: #...
-  --color-border-light: #...
-  --color-border-dark: #...
-  --shadow: 0 1px 3px rgba(0,0,0,0.1);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.15);
-  --radius: 6px;
-  --radius-lg: 12px;
+[data-density="comfortable"] {
+  --card-padding: 1.35rem;
+  --spacing-btn: 0.55rem 1.05rem;
+  --nav-height: 58px;
 }
-*/
+
+/* Font Family Selection */
+[data-font="mono"] {
+  --font-sans: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace !important;
+}
+[data-font="inter"] {
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+/* Font Size Scaling */
+[data-font-size="13px"] { font-size: 13px !important; }
+[data-font-size="14px"] { font-size: 14px !important; }
+[data-font-size="15px"] { font-size: 15px !important; }
+[data-font-size="16px"] { font-size: 16px !important; }
+
+/* Border Radius Modifiers */
+[data-radius="0px"] {
+  --radius: 0px !important;
+  --radius-lg: 0px !important;
+}
+[data-radius="4px"] {
+  --radius: 4px !important;
+  --radius-lg: 6px !important;
+}
+[data-radius="8px"] {
+  --radius: 8px !important;
+  --radius-lg: 12px !important;
+}
+[data-radius="12px"] {
+  --radius: 12px !important;
+  --radius-lg: 16px !important;
+}
