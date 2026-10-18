@@ -319,71 +319,137 @@ proc processTask(id: int): string =
         <div id="tickets-list"></div>
       </section>
 
-      <!-- TAB: Timeline Calendar & Roadmap -->
+      <!-- TAB: Timeline Calendar & Roadmap (Linear Gantt Timeline) -->
       <section id="tab-calendar" class="tab-content">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">📅 Календарь и Дедлайны (Roadmap &amp; Deadlines)</h2>
+            <h2 style="margin:0; display:flex; align-items:center; gap:0.5rem;">
+              <span>📈</span>
+              <span>Линейный таймлайн задач (Gantt &amp; Roadmap)</span>
+            </h2>
             <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">
-              Интерактивный таймлайн задач с дедлайнами, индикацией просрочки и боковым списком всех тикетов.
+              Визуализация жизненного цикла задач: протяженность от момента создания до даты дедлайна.
             </p>
           </div>
-          <div style="display:flex; gap:0.4rem;">
-            <button id="btn-calendar-add-ticket" class="btn btn-primary btn-sm">+ Добавить тикет с дедлайном</button>
+          <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+            <div class="btn-group" id="calendar-scale-selector" style="display:inline-flex; border:1px solid var(--color-border); border-radius:var(--radius); overflow:hidden;">
+              <button class="btn btn-sm btn-secondary active" data-scale="month" id="scale-month" style="border:none; border-radius:0;">Месяц</button>
+              <button class="btn btn-sm btn-secondary" data-scale="2weeks" id="scale-2weeks" style="border:none; border-radius:0;">2 Недели</button>
+              <button class="btn btn-sm btn-secondary" data-scale="all" id="scale-all" style="border:none; border-radius:0;">Все задачи</button>
+            </div>
+            <button id="btn-toggle-backlog" class="btn btn-secondary btn-sm" title="Скрыть/показать бэклог">📋 Бэклог (<span id="btn-backlog-count">0</span>)</button>
+            <button id="btn-calendar-add-ticket" class="btn btn-primary btn-sm">+ Создать тикет с дедлайном</button>
           </div>
         </div>
 
-        <div class="calendar-layout">
-          <!-- Left Side Panel: All tickets / Backlog without deadlines -->
-          <div class="calendar-side-panel">
+        <!-- Navigation and Filter Bar -->
+        <div class="calendar-nav-bar card" style="padding:0.75rem 1rem; margin-bottom:1rem;">
+          <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:0.25rem;">
+              <button id="btn-calendar-prev" class="btn btn-secondary btn-sm" title="Предыдущий период">◀</button>
+              <h3 id="calendar-month-label" style="margin:0; min-width:180px; text-align:center; font-size:1.05rem; font-weight:700;">Октябрь 2026</h3>
+              <button id="btn-calendar-next" class="btn btn-secondary btn-sm" title="Следующий период">▶</button>
+            </div>
+            <button id="btn-calendar-today" class="btn btn-secondary btn-sm" style="font-weight:600;">Сегодня</button>
+
+            <!-- Filters -->
+            <div style="display:flex; align-items:center; gap:0.5rem; margin-left:0.5rem;">
+              <select id="cal-filter-status" class="form-select form-select-sm" style="font-size:0.8rem; padding:0.25rem 0.5rem; width:auto;">
+                <option value="all">Все статусы</option>
+                <option value="open">Только открытые</option>
+                <option value="closed">Только закрытые</option>
+              </select>
+              <select id="cal-filter-priority" class="form-select form-select-sm" style="font-size:0.8rem; padding:0.25rem 0.5rem; width:auto;">
+                <option value="all">Все приоритеты</option>
+                <option value="Critical">Critical</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Stats / Indicators -->
+          <div style="display:flex; gap:0.5rem; align-items:center; font-size:0.82rem; flex-wrap:wrap;">
+            <span class="badge badge-info" id="cal-total-scheduled">0 с дедлайном</span>
+            <span class="badge badge-success" id="cal-total-closed">0 завершено</span>
+            <span class="badge badge-danger" id="cal-total-overdue" style="display:none;">0 просрочено</span>
+            <span class="badge badge-warning" id="cal-upcoming-count" style="display:none;">0</span>
+          </div>
+        </div>
+
+        <div class="calendar-layout" id="calendar-layout">
+          <!-- Left Side Panel: Backlog without deadlines & Legend -->
+          <div class="calendar-side-panel" id="calendar-side-panel">
             <div class="card" style="padding:1rem;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
                 <b style="font-size:0.92rem;">📋 Бэклог (Без дедлайна)</b>
                 <span class="badge badge-secondary" id="cal-backlog-count">0</span>
               </div>
               <p style="font-size:0.8rem; color:var(--color-text-muted); margin-bottom:0.75rem;">
-                Задачи без назначенной даты. Нажмите на задачу, чтобы установить дедлайн.
+                Задачи без назначенной даты. Нажмите на задачу, чтобы установить дедлайн и вынести на линейный таймлайн.
               </p>
               <div id="calendar-backlog-list" style="display:flex; flex-direction:column; gap:0.5rem; max-height:360px; overflow-y:auto;"></div>
             </div>
 
-            <div class="card" style="padding:1rem;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-                <b style="font-size:0.92rem;">⏱️ Все задачи с дедлайнами</b>
-                <span class="badge badge-warning" id="cal-upcoming-count">0</span>
+            <!-- Side upcoming list (kept for full compatibility) -->
+            <div id="calendar-upcoming-list" style="display:none;"></div>
+
+            <!-- Legend Card -->
+            <div class="card" style="padding:0.9rem; font-size:0.78rem;">
+              <b style="display:block; margin-bottom:0.5rem; color:var(--color-text-secondary);">Обозначения на таймлайне:</b>
+              <div style="display:flex; flex-direction:column; gap:0.4rem;">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="width:16px; height:8px; border-radius:4px; background:#ef4444; display:inline-block;"></span>
+                  <span>Critical приоритет</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="width:16px; height:8px; border-radius:4px; background:#f59e0b; display:inline-block;"></span>
+                  <span>High приоритет</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="width:16px; height:8px; border-radius:4px; background:#3b82f6; display:inline-block;"></span>
+                  <span>Medium приоритет</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="width:16px; height:8px; border-radius:4px; background:#10b981; display:inline-block;"></span>
+                  <span>Завершено (Closed)</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="width:12px; height:12px; border-radius:50%; background:#fff; border:3px solid #ef4444; display:inline-block;"></span>
+                  <span>Точка дедлайна (Пилюля задачи)</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="border-left:2px dashed var(--color-primary); height:14px; display:inline-block; margin-left:5px; margin-right:5px;"></span>
+                  <span>Текущий день (Сегодня)</span>
+                </div>
               </div>
-              <div id="calendar-upcoming-list" style="display:flex; flex-direction:column; gap:0.5rem; max-height:280px; overflow-y:auto;"></div>
             </div>
           </div>
 
-          <!-- Main Area: Interactive Month Grid -->
-          <div class="calendar-main">
-            <div class="calendar-nav-bar">
-              <div style="display:flex; align-items:center; gap:0.5rem;">
-                <button id="btn-calendar-prev" class="btn btn-secondary btn-sm">◀</button>
-                <h3 id="calendar-month-label" style="margin:0; min-width:180px; text-align:center; font-size:1.05rem;">Октябрь 2026</h3>
-                <button id="btn-calendar-next" class="btn btn-secondary btn-sm">▶</button>
-                <button id="btn-calendar-today" class="btn btn-secondary btn-sm" style="margin-left:0.4rem;">Сегодня</button>
+          <!-- Main Area: Linear Gantt Timeline Matrix -->
+          <div class="calendar-main" style="padding:0;">
+            <div class="timeline-gantt-wrapper" id="timeline-gantt-wrapper">
+              <!-- Left Tasks Sticky Column -->
+              <div class="timeline-tasks-column" id="timeline-tasks-column">
+                <div class="timeline-tasks-header">
+                  <span>Задача / Тикет</span>
+                  <span style="font-size:0.75rem; color:var(--color-text-muted);">Сроки</span>
+                </div>
+                <div id="timeline-tasks-list"></div>
               </div>
-              <div style="display:flex; gap:0.5rem; align-items:center; font-size:0.82rem;">
-                <span class="badge badge-info" id="cal-total-scheduled">0 с дедлайном</span>
-                <span class="badge badge-danger" id="cal-total-overdue" style="display:none;">0 просрочено</span>
+
+              <!-- Right Horizontally Scrollable Timeline Matrix -->
+              <div class="timeline-chart-area" id="timeline-chart-area">
+                <!-- Date Headers Strip -->
+                <div class="timeline-dates-header" id="timeline-dates-header"></div>
+                <!-- Body Rows with Vertical Grid Lines and Horizontal Bars -->
+                <div class="timeline-body-grid" id="timeline-body-grid"></div>
               </div>
             </div>
 
-            <!-- Weekdays Header -->
-            <div class="calendar-grid" id="calendar-weekdays-header">
-              <div class="calendar-weekday">Пн</div>
-              <div class="calendar-weekday">Вт</div>
-              <div class="calendar-weekday">Ср</div>
-              <div class="calendar-weekday">Чт</div>
-              <div class="calendar-weekday">Пт</div>
-              <div class="calendar-weekday">Сб</div>
-              <div class="calendar-weekday">Вс</div>
-            </div>
-
-            <!-- Days Grid (35/42 cells rendered dynamically) -->
-            <div class="calendar-grid" id="calendar-days-grid" style="border-top:none;"></div>
+            <!-- Legacy container kept for compatibility -->
+            <div id="calendar-days-grid" style="display:none;"></div>
           </div>
         </div>
       </section>

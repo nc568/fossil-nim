@@ -1158,12 +1158,19 @@ pre code {
   to { transform: translateX(0); opacity: 1; }
 }
 
-/* 16. Timeline-Calendar & Roadmap Component */
+/* 16. Linear Timeline & Roadmap Gantt Component */
 .calendar-layout {
   display: grid;
-  grid-template-columns: 340px 1fr;
+  grid-template-columns: 320px 1fr;
   gap: 1.25rem;
   align-items: start;
+  transition: grid-template-columns 0.2s ease;
+}
+.calendar-layout.backlog-collapsed {
+  grid-template-columns: 1fr;
+}
+.calendar-layout.backlog-collapsed .calendar-side-panel {
+  display: none;
 }
 @media (max-width: 992px) {
   .calendar-layout {
@@ -1181,8 +1188,8 @@ pre code {
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  padding: 1.25rem;
   overflow: hidden;
+  box-shadow: var(--shadow);
 }
 
 .calendar-nav-bar {
@@ -1194,81 +1201,273 @@ pre code {
   gap: 0.5rem;
 }
 
-.calendar-grid {
+/* Linear Gantt Matrix Styles */
+.timeline-gantt-wrapper {
   display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 1px;
-  background: var(--color-border);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  overflow: hidden;
+  grid-template-columns: 260px 1fr;
+  position: relative;
+  overflow-x: auto;
+  min-height: 380px;
+  background: var(--color-bg-card);
+}
+@media (max-width: 768px) {
+  .timeline-gantt-wrapper {
+    grid-template-columns: 160px 1fr;
+  }
 }
 
-.calendar-weekday {
-  background: var(--color-bg-secondary);
-  padding: 0.6rem 0.35rem;
-  text-align: center;
-  font-weight: 700;
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  color: var(--color-text-secondary);
-}
-
-.calendar-cell {
+.timeline-tasks-column {
   background: var(--color-bg);
-  min-height: 95px;
-  padding: 0.45rem;
+  border-right: 2px solid var(--color-border);
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  box-shadow: 2px 0 6px rgba(0, 0, 0, 0.04);
+}
+
+.timeline-tasks-header {
+  height: 52px;
+  padding: 0 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 2px solid var(--color-border);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
+}
+
+.timeline-task-item {
+  height: 50px;
+  padding: 0 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  justify-content: center;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.82rem;
+  cursor: pointer;
   transition: background 0.15s ease;
   position: relative;
 }
-.calendar-cell:hover {
+.timeline-task-item:hover {
   background: var(--color-bg-hover);
 }
-.calendar-cell.other-month {
-  opacity: 0.35;
-  background: var(--color-bg-secondary);
+.timeline-task-item.priority-critical {
+  border-left: 4px solid var(--color-danger, #ef4444);
 }
-.calendar-cell.today {
-  background: var(--color-primary-light);
-  box-shadow: inset 0 0 0 1px var(--color-primary);
+.timeline-task-item.priority-high {
+  border-left: 4px solid var(--color-warning, #f59e0b);
+}
+.timeline-task-item.priority-medium {
+  border-left: 4px solid var(--color-primary, #3b82f6);
+}
+.timeline-task-item.priority-low {
+  border-left: 4px solid var(--color-secondary, #64748b);
 }
 
-.calendar-day-header {
+.timeline-chart-area {
+  position: relative;
+  overflow-x: auto;
+  min-width: 100%;
+}
+
+.timeline-dates-header {
+  height: 52px;
   display: flex;
-  justify-content: space-between;
+  border-bottom: 2px solid var(--color-border);
+  background: var(--color-bg-secondary);
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+
+.timeline-date-cell {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  margin-bottom: 0.25rem;
+  justify-content: center;
+  border-right: 1px solid var(--color-border);
+  font-size: 0.72rem;
+  user-select: none;
+  transition: background 0.15s;
 }
-
-.calendar-day-num {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--color-text);
+.timeline-date-cell.weekend {
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--color-text-muted);
 }
-.calendar-cell.today .calendar-day-num {
+[data-theme="dark"] .timeline-date-cell.weekend {
+  background: rgba(255, 255, 255, 0.02);
+}
+.timeline-date-cell.today-cell {
+  background: var(--color-primary-light);
   color: var(--color-primary);
+  font-weight: 700;
+  border-bottom: 2px solid var(--color-primary);
 }
 
-.calendar-event-pill {
-  display: block;
-  padding: 0.2rem 0.4rem;
+.timeline-date-daynum {
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.timeline-date-dayname {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.timeline-date-cell.today-cell .timeline-date-dayname {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+.timeline-body-grid {
+  position: relative;
+}
+
+.timeline-grid-lines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  pointer-events: none;
+}
+
+.timeline-grid-line {
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border);
+  height: 100%;
+}
+.timeline-grid-line.weekend {
+  background: rgba(0, 0, 0, 0.02);
+}
+[data-theme="dark"] .timeline-grid-line.weekend {
+  background: rgba(255, 255, 255, 0.015);
+}
+.timeline-grid-line.today-line {
+  background: rgba(59, 130, 246, 0.05);
+  border-right: 2px dashed var(--color-primary);
+  z-index: 2;
+}
+
+.timeline-row {
+  height: 50px;
+  position: relative;
+  border-bottom: 1px solid var(--color-border);
+  display: flex;
+  align-items: center;
+}
+.timeline-row:hover {
+  background: rgba(59, 130, 246, 0.04);
+}
+
+/* Linear Horizontal Gantt Task Bar */
+.timeline-bar {
+  position: absolute;
+  height: 30px;
+  border-radius: 15px;
+  display: flex;
+  align-items: center;
+  padding: 0 0.75rem;
+  cursor: pointer;
+  z-index: 4;
+  white-space: nowrap;
   font-size: 0.76rem;
   font-weight: 600;
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: nowrap;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+  user-select: none;
+}
+.timeline-bar:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.25);
+  filter: brightness(1.08);
+  z-index: 15;
+}
+
+.timeline-bar-title {
   overflow: hidden;
   text-overflow: ellipsis;
-  text-decoration: none;
-  line-height: 1.25;
-  transition: transform 0.1s ease, box-shadow 0.1s ease;
+  white-space: nowrap;
+  color: #ffffff;
+  padding-right: 0.75rem;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.3);
 }
-.calendar-event-pill:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow);
+
+.timeline-deadline-pin {
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 3px solid currentColor;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  z-index: 6;
+}
+
+.timeline-bar.priority-critical {
+  background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+  color: #ef4444;
+  border: 1px solid #b91c1c;
+}
+.timeline-bar.priority-high {
+  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+  color: #f59e0b;
+  border: 1px solid #b45309;
+}
+.timeline-bar.priority-medium {
+  background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+  color: #3b82f6;
+  border: 1px solid #1d4ed8;
+}
+.timeline-bar.priority-low {
+  background: linear-gradient(90deg, #64748b 0%, #475569 100%);
+  color: #64748b;
+  border: 1px solid #334155;
+}
+.timeline-bar.status-closed {
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%) !important;
+  color: #10b981 !important;
+  border: 1px solid #047857 !important;
+  opacity: 0.88;
+}
+
+.timeline-bar.is-overdue {
+  animation: pulse-overdue 2s infinite ease-in-out;
+}
+@keyframes pulse-overdue {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  50% { box-shadow: 0 0 0 7px rgba(239, 68, 68, 0); }
+}
+
+/* Floating Rich Tooltip */
+.timeline-tooltip {
+  position: fixed;
+  background: var(--color-bg-card);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  pointer-events: none;
+  z-index: 1000;
+  display: none;
+  max-width: 320px;
 }
 
 /* Priority color variants */
@@ -2035,71 +2234,137 @@ proc processTask(id: int): string =
         <div id="tickets-list"></div>
       </section>
 
-      <!-- TAB: Timeline Calendar & Roadmap -->
+      <!-- TAB: Timeline Calendar & Roadmap (Linear Gantt Timeline) -->
       <section id="tab-calendar" class="tab-content">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; flex-wrap:wrap; gap:0.5rem;">
           <div>
-            <h2 style="margin:0;">📅 Календарь и Дедлайны (Roadmap &amp; Deadlines)</h2>
+            <h2 style="margin:0; display:flex; align-items:center; gap:0.5rem;">
+              <span>📈</span>
+              <span>Линейный таймлайн задач (Gantt &amp; Roadmap)</span>
+            </h2>
             <p style="margin:0; font-size:0.85rem; color:var(--color-text-muted);">
-              Интерактивный таймлайн задач с дедлайнами, индикацией просрочки и боковым списком всех тикетов.
+              Визуализация жизненного цикла задач: протяженность от момента создания до даты дедлайна.
             </p>
           </div>
-          <div style="display:flex; gap:0.4rem;">
-            <button id="btn-calendar-add-ticket" class="btn btn-primary btn-sm">+ Добавить тикет с дедлайном</button>
+          <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+            <div class="btn-group" id="calendar-scale-selector" style="display:inline-flex; border:1px solid var(--color-border); border-radius:var(--radius); overflow:hidden;">
+              <button class="btn btn-sm btn-secondary active" data-scale="month" id="scale-month" style="border:none; border-radius:0;">Месяц</button>
+              <button class="btn btn-sm btn-secondary" data-scale="2weeks" id="scale-2weeks" style="border:none; border-radius:0;">2 Недели</button>
+              <button class="btn btn-sm btn-secondary" data-scale="all" id="scale-all" style="border:none; border-radius:0;">Все задачи</button>
+            </div>
+            <button id="btn-toggle-backlog" class="btn btn-secondary btn-sm" title="Скрыть/показать бэклог">📋 Бэклог (<span id="btn-backlog-count">0</span>)</button>
+            <button id="btn-calendar-add-ticket" class="btn btn-primary btn-sm">+ Создать тикет с дедлайном</button>
           </div>
         </div>
 
-        <div class="calendar-layout">
-          <!-- Left Side Panel: All tickets / Backlog without deadlines -->
-          <div class="calendar-side-panel">
+        <!-- Navigation and Filter Bar -->
+        <div class="calendar-nav-bar card" style="padding:0.75rem 1rem; margin-bottom:1rem;">
+          <div style="display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap;">
+            <div style="display:flex; align-items:center; gap:0.25rem;">
+              <button id="btn-calendar-prev" class="btn btn-secondary btn-sm" title="Предыдущий период">◀</button>
+              <h3 id="calendar-month-label" style="margin:0; min-width:180px; text-align:center; font-size:1.05rem; font-weight:700;">Октябрь 2026</h3>
+              <button id="btn-calendar-next" class="btn btn-secondary btn-sm" title="Следующий период">▶</button>
+            </div>
+            <button id="btn-calendar-today" class="btn btn-secondary btn-sm" style="font-weight:600;">Сегодня</button>
+
+            <!-- Filters -->
+            <div style="display:flex; align-items:center; gap:0.5rem; margin-left:0.5rem;">
+              <select id="cal-filter-status" class="form-select form-select-sm" style="font-size:0.8rem; padding:0.25rem 0.5rem; width:auto;">
+                <option value="all">Все статусы</option>
+                <option value="open">Только открытые</option>
+                <option value="closed">Только закрытые</option>
+              </select>
+              <select id="cal-filter-priority" class="form-select form-select-sm" style="font-size:0.8rem; padding:0.25rem 0.5rem; width:auto;">
+                <option value="all">Все приоритеты</option>
+                <option value="Critical">Critical</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Stats / Indicators -->
+          <div style="display:flex; gap:0.5rem; align-items:center; font-size:0.82rem; flex-wrap:wrap;">
+            <span class="badge badge-info" id="cal-total-scheduled">0 с дедлайном</span>
+            <span class="badge badge-success" id="cal-total-closed">0 завершено</span>
+            <span class="badge badge-danger" id="cal-total-overdue" style="display:none;">0 просрочено</span>
+            <span class="badge badge-warning" id="cal-upcoming-count" style="display:none;">0</span>
+          </div>
+        </div>
+
+        <div class="calendar-layout" id="calendar-layout">
+          <!-- Left Side Panel: Backlog without deadlines & Legend -->
+          <div class="calendar-side-panel" id="calendar-side-panel">
             <div class="card" style="padding:1rem;">
               <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
                 <b style="font-size:0.92rem;">📋 Бэклог (Без дедлайна)</b>
                 <span class="badge badge-secondary" id="cal-backlog-count">0</span>
               </div>
               <p style="font-size:0.8rem; color:var(--color-text-muted); margin-bottom:0.75rem;">
-                Задачи без назначенной даты. Нажмите на задачу, чтобы установить дедлайн.
+                Задачи без назначенной даты. Нажмите на задачу, чтобы установить дедлайн и вынести на линейный таймлайн.
               </p>
               <div id="calendar-backlog-list" style="display:flex; flex-direction:column; gap:0.5rem; max-height:360px; overflow-y:auto;"></div>
             </div>
 
-            <div class="card" style="padding:1rem;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.6rem;">
-                <b style="font-size:0.92rem;">⏱️ Все задачи с дедлайнами</b>
-                <span class="badge badge-warning" id="cal-upcoming-count">0</span>
+            <!-- Side upcoming list (kept for full compatibility) -->
+            <div id="calendar-upcoming-list" style="display:none;"></div>
+
+            <!-- Legend Card -->
+            <div class="card" style="padding:0.9rem; font-size:0.78rem;">
+              <b style="display:block; margin-bottom:0.5rem; color:var(--color-text-secondary);">Обозначения на таймлайне:</b>
+              <div style="display:flex; flex-direction:column; gap:0.4rem;">
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="width:16px; height:8px; border-radius:4px; background:#ef4444; display:inline-block;"></span>
+                  <span>Critical приоритет</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="width:16px; height:8px; border-radius:4px; background:#f59e0b; display:inline-block;"></span>
+                  <span>High приоритет</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="width:16px; height:8px; border-radius:4px; background:#3b82f6; display:inline-block;"></span>
+                  <span>Medium приоритет</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="width:16px; height:8px; border-radius:4px; background:#10b981; display:inline-block;"></span>
+                  <span>Завершено (Closed)</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="width:12px; height:12px; border-radius:50%; background:#fff; border:3px solid #ef4444; display:inline-block;"></span>
+                  <span>Точка дедлайна (Пилюля задачи)</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:0.5rem;">
+                  <span style="border-left:2px dashed var(--color-primary); height:14px; display:inline-block; margin-left:5px; margin-right:5px;"></span>
+                  <span>Текущий день (Сегодня)</span>
+                </div>
               </div>
-              <div id="calendar-upcoming-list" style="display:flex; flex-direction:column; gap:0.5rem; max-height:280px; overflow-y:auto;"></div>
             </div>
           </div>
 
-          <!-- Main Area: Interactive Month Grid -->
-          <div class="calendar-main">
-            <div class="calendar-nav-bar">
-              <div style="display:flex; align-items:center; gap:0.5rem;">
-                <button id="btn-calendar-prev" class="btn btn-secondary btn-sm">◀</button>
-                <h3 id="calendar-month-label" style="margin:0; min-width:180px; text-align:center; font-size:1.05rem;">Октябрь 2026</h3>
-                <button id="btn-calendar-next" class="btn btn-secondary btn-sm">▶</button>
-                <button id="btn-calendar-today" class="btn btn-secondary btn-sm" style="margin-left:0.4rem;">Сегодня</button>
+          <!-- Main Area: Linear Gantt Timeline Matrix -->
+          <div class="calendar-main" style="padding:0;">
+            <div class="timeline-gantt-wrapper" id="timeline-gantt-wrapper">
+              <!-- Left Tasks Sticky Column -->
+              <div class="timeline-tasks-column" id="timeline-tasks-column">
+                <div class="timeline-tasks-header">
+                  <span>Задача / Тикет</span>
+                  <span style="font-size:0.75rem; color:var(--color-text-muted);">Сроки</span>
+                </div>
+                <div id="timeline-tasks-list"></div>
               </div>
-              <div style="display:flex; gap:0.5rem; align-items:center; font-size:0.82rem;">
-                <span class="badge badge-info" id="cal-total-scheduled">0 с дедлайном</span>
-                <span class="badge badge-danger" id="cal-total-overdue" style="display:none;">0 просрочено</span>
+
+              <!-- Right Horizontally Scrollable Timeline Matrix -->
+              <div class="timeline-chart-area" id="timeline-chart-area">
+                <!-- Date Headers Strip -->
+                <div class="timeline-dates-header" id="timeline-dates-header"></div>
+                <!-- Body Rows with Vertical Grid Lines and Horizontal Bars -->
+                <div class="timeline-body-grid" id="timeline-body-grid"></div>
               </div>
             </div>
 
-            <!-- Weekdays Header -->
-            <div class="calendar-grid" id="calendar-weekdays-header">
-              <div class="calendar-weekday">Пн</div>
-              <div class="calendar-weekday">Вт</div>
-              <div class="calendar-weekday">Ср</div>
-              <div class="calendar-weekday">Чт</div>
-              <div class="calendar-weekday">Пт</div>
-              <div class="calendar-weekday">Сб</div>
-              <div class="calendar-weekday">Вс</div>
-            </div>
-
-            <!-- Days Grid (35/42 cells rendered dynamically) -->
-            <div class="calendar-grid" id="calendar-days-grid" style="border-top:none;"></div>
+            <!-- Legacy container kept for compatibility -->
+            <div id="calendar-days-grid" style="display:none;"></div>
           </div>
         </div>
       </section>
@@ -8551,6 +8816,51 @@ const DEFAULT_TICKETS_SEED = [
       { timestamp: NOW - 2 * ONE_DAY, user: "core_dev", action: "created", detail: "Тикет добавлен в бэклог" }
     ],
     linkedPrs: []
+  },
+  {
+    id: "tkt-106",
+    title: "Сборка QBE cproc для супер-легковесных сред",
+    desc: "Адаптировать Си-код для чистого C11 стандарта без GCC расширений и слинковать 456КБ бинарник.",
+    priority: "High",
+    status: "Open",
+    reporter: "qbe_lead",
+    created: NOW - 6 * ONE_DAY,
+    mtime: NOW - 1 * ONE_DAY,
+    deadline: NOW + 7 * ONE_DAY,
+    history: [
+      { timestamp: NOW - 6 * ONE_DAY, user: "qbe_lead", action: "created", detail: "Тикет создан с приоритетом High" }
+    ],
+    linkedPrs: []
+  },
+  {
+    id: "tkt-107",
+    title: "Аудит безопасности и защита от timing-атак",
+    desc: "Провести ревизию поверхности атаки, проверить constant-time сравнение токенов и аутентификацию REST API.",
+    priority: "Critical",
+    status: "Open",
+    reporter: "sec_auditor",
+    created: NOW - 2 * ONE_DAY,
+    mtime: NOW - 1 * ONE_DAY,
+    deadline: NOW + 11 * ONE_DAY,
+    history: [
+      { timestamp: NOW - 2 * ONE_DAY, user: "sec_auditor", action: "created", detail: "Тикет создан с приоритетом Critical" }
+    ],
+    linkedPrs: []
+  },
+  {
+    id: "tkt-108",
+    title: "Поддержка минималистичных браузеров (surf, netsurf)",
+    desc: "Обеспечить корректную работу линейного таймлайна и чистого Vanilla JS без тяжелых зависимостей.",
+    priority: "Low",
+    status: "Open",
+    reporter: "ux_lead",
+    created: NOW - 5 * ONE_DAY,
+    mtime: NOW - 2 * ONE_DAY,
+    deadline: NOW + 2 * ONE_DAY,
+    history: [
+      { timestamp: NOW - 5 * ONE_DAY, user: "ux_lead", action: "created", detail: "Тикет создан с приоритетом Low" }
+    ],
+    linkedPrs: []
   }
 ];
 
@@ -12343,18 +12653,34 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
     },
 
     // --- Timeline Calendar & Roadmap Actions ---
+    // --- Linear Timeline Calendar & Roadmap Gantt Actions ---
     bindCalendarActions() {
       const prevBtn = $('btn-calendar-prev');
       const nextBtn = $('btn-calendar-next');
       const todayBtn = $('btn-calendar-today');
       const addBtn = $('btn-calendar-add-ticket');
+      const toggleBacklogBtn = $('btn-toggle-backlog');
+      const filterStatus = $('cal-filter-status');
+      const filterPriority = $('cal-filter-priority');
+      const scaleMonth = $('scale-month');
+      const scale2Weeks = $('scale-2weeks');
+      const scaleAll = $('scale-all');
+
+      if (!state.calendarScale) state.calendarScale = 'month';
 
       if (prevBtn) {
         prevBtn.addEventListener('click', () => {
-          state.calendarMonth--;
-          if (state.calendarMonth < 0) {
-            state.calendarMonth = 11;
-            state.calendarYear--;
+          if (state.calendarScale === '2weeks') {
+            const curDate = state.calendarDate || new Date();
+            state.calendarDate = new Date(curDate.getTime() - 14 * 24 * 60 * 60 * 1000);
+            state.calendarMonth = state.calendarDate.getMonth();
+            state.calendarYear = state.calendarDate.getFullYear();
+          } else {
+            state.calendarMonth--;
+            if (state.calendarMonth < 0) {
+              state.calendarMonth = 11;
+              state.calendarYear--;
+            }
           }
           this.refreshCalendar();
         });
@@ -12362,10 +12688,17 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
 
       if (nextBtn) {
         nextBtn.addEventListener('click', () => {
-          state.calendarMonth++;
-          if (state.calendarMonth > 11) {
-            state.calendarMonth = 0;
-            state.calendarYear++;
+          if (state.calendarScale === '2weeks') {
+            const curDate = state.calendarDate || new Date();
+            state.calendarDate = new Date(curDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+            state.calendarMonth = state.calendarDate.getMonth();
+            state.calendarYear = state.calendarDate.getFullYear();
+          } else {
+            state.calendarMonth++;
+            if (state.calendarMonth > 11) {
+              state.calendarMonth = 0;
+              state.calendarYear++;
+            }
           }
           this.refreshCalendar();
         });
@@ -12376,6 +12709,7 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
           const now = new Date();
           state.calendarMonth = now.getMonth();
           state.calendarYear = now.getFullYear();
+          state.calendarDate = now;
           this.refreshCalendar();
         });
       }
@@ -12390,41 +12724,104 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
           }
         });
       }
+
+      if (toggleBacklogBtn) {
+        toggleBacklogBtn.addEventListener('click', () => {
+          const layout = $('calendar-layout');
+          if (layout) {
+            layout.classList.toggle('backlog-collapsed');
+            const isCollapsed = layout.classList.contains('backlog-collapsed');
+            toggleBacklogBtn.classList.toggle('btn-primary', isCollapsed);
+            toggleBacklogBtn.classList.toggle('btn-secondary', !isCollapsed);
+          }
+        });
+      }
+
+      if (filterStatus) {
+        filterStatus.addEventListener('change', () => this.refreshCalendar());
+      }
+      if (filterPriority) {
+        filterPriority.addEventListener('change', () => this.refreshCalendar());
+      }
+
+      // Scale selectors
+      const setScale = (scale) => {
+        state.calendarScale = scale;
+        [scaleMonth, scale2Weeks, scaleAll].forEach(b => {
+          if (b) {
+            b.classList.remove('active', 'btn-primary');
+            b.classList.add('btn-secondary');
+          }
+        });
+        const activeBtn = scale === 'month' ? scaleMonth : (scale === '2weeks' ? scale2Weeks : scaleAll);
+        if (activeBtn) {
+          activeBtn.classList.add('active', 'btn-primary');
+          activeBtn.classList.remove('btn-secondary');
+        }
+        this.refreshCalendar();
+      };
+
+      if (scaleMonth) scaleMonth.addEventListener('click', () => setScale('month'));
+      if (scale2Weeks) scale2Weeks.addEventListener('click', () => setScale('2weeks'));
+      if (scaleAll) scaleAll.addEventListener('click', () => setScale('all'));
+
+      // Ensure Tooltip DOM element exists
+      if (!document.getElementById('timeline-tooltip')) {
+        const tt = document.createElement('div');
+        tt.id = 'timeline-tooltip';
+        tt.className = 'timeline-tooltip';
+        document.body.appendChild(tt);
+      }
     },
 
     async refreshCalendar() {
-      const grid = $('calendar-days-grid');
       const monthLabel = $('calendar-month-label');
-      if (!grid) return;
+      const datesHeader = $('timeline-dates-header');
+      const tasksList = $('timeline-tasks-list');
+      const bodyGrid = $('timeline-body-grid');
+      const legacyGrid = $('calendar-days-grid');
 
       const monthNamesRu = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
       const monthNamesEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
       const curLang = (window.FossilI18n && window.FossilI18n.currentLang) || 'ru';
       const mName = curLang === 'ru' ? monthNamesRu[state.calendarMonth] : monthNamesEn[state.calendarMonth];
-      if (monthLabel) monthLabel.innerText = `${mName} ${state.calendarYear}`;
 
-      // Fetch all tickets
+      if (monthLabel) {
+        if (state.calendarScale === '2weeks') {
+          monthLabel.innerText = `14 дней (${mName} ${state.calendarYear})`;
+        } else if (state.calendarScale === 'all') {
+          monthLabel.innerText = `Вся дорожная карта (${state.calendarYear})`;
+        } else {
+          monthLabel.innerText = `${mName} ${state.calendarYear}`;
+        }
+      }
+
+      // Fetch all tickets from MCP
       const allRes = await window.fossilMcp.callTool('ticket_list', { status: 'all' });
       const tickets = allRes.tickets || [];
       const now = new Date();
-      const isCurrentMonth = now.getFullYear() === state.calendarYear && now.getMonth() === state.calendarMonth;
+      const nowTs = now.getTime();
+      const ONE_DAY = 24 * 60 * 60 * 1000;
 
       // Filter tickets with and without deadlines
       const scheduled = tickets.filter(t => t.deadline && Number(t.deadline) > 0);
       const backlog = tickets.filter(t => !t.deadline || Number(t.deadline) === 0);
 
       // Overdue tickets
-      const nowTs = Date.now();
       const overdue = scheduled.filter(t => Number(t.deadline) < nowTs && (t.status || 'Open').toLowerCase() !== 'closed');
+      const closed = scheduled.filter(t => (t.status || 'Open').toLowerCase() === 'closed');
 
       // Update counters & badges
       const totalScheduledEl = $('cal-total-scheduled');
+      const totalClosedEl = $('cal-total-closed');
       const totalOverdueEl = $('cal-total-overdue');
       const backlogCountEl = $('cal-backlog-count');
+      const btnBacklogCountEl = $('btn-backlog-count');
       const upcomingCountEl = $('cal-upcoming-count');
       const sidebarCalBadge = $('sidebar-calendar-badge');
 
       if (totalScheduledEl) totalScheduledEl.innerText = `${scheduled.length} с дедлайном`;
+      if (totalClosedEl) totalClosedEl.innerText = `${closed.length} завершено`;
       if (totalOverdueEl) {
         if (overdue.length > 0) {
           totalOverdueEl.style.display = 'inline-block';
@@ -12434,6 +12831,7 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
         }
       }
       if (backlogCountEl) backlogCountEl.innerText = backlog.length;
+      if (btnBacklogCountEl) btnBacklogCountEl.innerText = backlog.length;
       if (upcomingCountEl) upcomingCountEl.innerText = scheduled.length;
       if (sidebarCalBadge) {
         if (overdue.length > 0) {
@@ -12448,7 +12846,7 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
       const backlogList = $('calendar-backlog-list');
       if (backlogList) {
         if (backlog.length === 0) {
-          backlogList.innerHTML = '<div style="font-size:0.8rem; color:var(--color-text-muted);">Все задачи имеют назначенные дедлайны!</div>';
+          backlogList.innerHTML = '<div style="font-size:0.8rem; color:var(--color-text-muted); padding:0.5rem 0;">Все задачи имеют назначенные дедлайны!</div>';
         } else {
           let bHtml = '';
           for (const t of backlog) {
@@ -12462,7 +12860,7 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
                 <div style="font-weight:600; font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.title)}</div>
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.35rem; font-size:0.72rem;">
                   <span style="color:var(--color-text-secondary);">${escapeHtml(t.status || 'Open')}</span>
-                  <span style="color:var(--color-primary); font-weight:600;">+ Дедлайн</span>
+                  <span style="color:var(--color-primary); font-weight:600;">+ Назначить дедлайн</span>
                 </div>
               </div>
             `;
@@ -12474,143 +12872,290 @@ console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.foss
         }
       }
 
-      // Render Upcoming side panel
-      const upcomingList = $('calendar-upcoming-list');
-      if (upcomingList) {
-        if (scheduled.length === 0) {
-          upcomingList.innerHTML = '<div style="font-size:0.8rem; color:var(--color-text-muted);">Нет запланированных задач.</div>';
-        } else {
-          let uHtml = '';
-          for (const t of scheduled) {
-            const pClass = `priority-${(t.priority || 'Medium').toLowerCase()}`;
-            const diffDays = Math.ceil((Number(t.deadline) - nowTs) / (24 * 60 * 60 * 1000));
-            const isClosed = (t.status || 'Open').toLowerCase() === 'closed';
-            const isOverdue = diffDays < 0 && !isClosed;
-            const d = new Date(Number(t.deadline));
+      // Filter scheduled tickets by UI controls
+      const statusFilter = $('cal-filter-status') ? $('cal-filter-status').value : 'all';
+      const priorityFilter = $('cal-filter-priority') ? $('cal-filter-priority').value : 'all';
 
-            uHtml += `
-              <div class="ticket-card ${pClass}" style="padding:0.6rem 0.75rem; cursor:pointer;" data-id="${escapeHtml(t.id)}">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.2rem;">
-                  <span class="badge ${pClass}" style="font-size:0.7rem; padding:0.1rem 0.35rem;">${escapeHtml(t.priority || 'Medium')}</span>
-                  ${isOverdue ? '<span class="badge-overdue">ПРОСРОЧЕНО</span>' : `<span style="font-size:0.72rem; color:var(--color-text-muted);">${d.toLocaleDateString()}</span>`}
+      let displayedScheduled = scheduled.filter(t => {
+        if (statusFilter === 'open' && (t.status || 'Open').toLowerCase() === 'closed') return false;
+        if (statusFilter === 'closed' && (t.status || 'Open').toLowerCase() !== 'closed') return false;
+        if (priorityFilter !== 'all' && (t.priority || 'Medium').toLowerCase() !== priorityFilter.toLowerCase()) return false;
+        return true;
+      });
+
+      // Sort: Critical & Overdue first, then by deadline
+      displayedScheduled.sort((a, b) => {
+        const aDead = Number(a.deadline);
+        const bDead = Number(b.deadline);
+        const aOver = aDead < nowTs && (a.status||'Open').toLowerCase() !== 'closed';
+        const bOver = bDead < nowTs && (b.status||'Open').toLowerCase() !== 'closed';
+        if (aOver && !bOver) return -1;
+        if (!aOver && bOver) return 1;
+        return aDead - bDead;
+      });
+
+      // Compute Timeline Visible Window (Start Date, End Date, Total Days)
+      const year = state.calendarYear;
+      const month = state.calendarMonth;
+      let startDate, endDate, totalDays, cellWidth = 42;
+
+      if (state.calendarScale === '2weeks') {
+        cellWidth = 56;
+        const curDate = state.calendarDate || now;
+        startDate = new Date(curDate.getFullYear(), curDate.getMonth(), curDate.getDate() - 4, 0, 0, 0);
+        endDate = new Date(startDate.getTime() + 14 * ONE_DAY);
+        totalDays = 14;
+      } else if (state.calendarScale === 'all') {
+        cellWidth = 36;
+        let minTs = nowTs - 3 * ONE_DAY;
+        let maxTs = nowTs + 7 * ONE_DAY;
+        for (const t of scheduled) {
+          const cStart = Number(t.created) || (Number(t.deadline) - 4 * ONE_DAY);
+          const cEnd = Number(t.deadline);
+          if (cStart < minTs) minTs = cStart;
+          if (cEnd > maxTs) maxTs = cEnd;
+        }
+        startDate = new Date(minTs);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(maxTs);
+        endDate.setHours(23, 59, 59, 999);
+        totalDays = Math.max(14, Math.ceil((endDate.getTime() - startDate.getTime()) / ONE_DAY));
+      } else {
+        // Month view (default)
+        cellWidth = 42;
+        startDate = new Date(year, month, 1, 0, 0, 0);
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        endDate = new Date(year, month, daysInMonth, 23, 59, 59);
+        totalDays = daysInMonth;
+      }
+
+      const totalCanvasWidth = totalDays * cellWidth;
+      const weekdaysRu = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+      const weekdaysEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const wNames = curLang === 'ru' ? weekdaysRu : weekdaysEn;
+
+      // 1. Build Dates Header Strip
+      if (datesHeader) {
+        let hHtml = '';
+        for (let i = 0; i < totalDays; i++) {
+          const cDate = new Date(startDate.getTime() + i * ONE_DAY);
+          const dNum = cDate.getDate();
+          const dWeek = cDate.getDay();
+          const isWeekend = dWeek === 0 || dWeek === 6;
+          const isToday = cDate.getFullYear() === now.getFullYear() &&
+                          cDate.getMonth() === now.getMonth() &&
+                          cDate.getDate() === now.getDate();
+
+          hHtml += `
+            <div class="timeline-date-cell ${isWeekend ? 'weekend' : ''} ${isToday ? 'today-cell' : ''}"
+                 style="width:${cellWidth}px;"
+                 title="${cDate.toLocaleDateString()}">
+              <span class="timeline-date-daynum">${dNum}</span>
+              <span class="timeline-date-dayname">${wNames[dWeek]}</span>
+            </div>
+          `;
+        }
+        datesHeader.innerHTML = hHtml;
+        datesHeader.style.width = `${totalCanvasWidth}px`;
+      }
+
+      // 2. Build Tasks Column (Left) and Gantt Rows (Right)
+      if (tasksList && bodyGrid) {
+        if (displayedScheduled.length === 0) {
+          tasksList.innerHTML = `
+            <div style="padding:2rem 1rem; color:var(--color-text-muted); font-size:0.82rem; text-align:center;">
+              Нет запланированных задач по выбранным фильтрам.
+            </div>
+          `;
+          bodyGrid.innerHTML = `
+            <div style="padding:2.5rem 1.5rem; color:var(--color-text-muted); font-size:0.85rem; width:${totalCanvasWidth}px;">
+              💡 Назначьте дедлайн задаче из бэклога или нажмите <b>«+ Создать тикет с дедлайном»</b>.
+            </div>
+          `;
+        } else {
+          let leftHtml = '';
+          let rightRowsHtml = '';
+
+          // Background vertical grid lines
+          let gridLinesHtml = `<div class="timeline-grid-lines" style="width:${totalCanvasWidth}px;">`;
+          for (let i = 0; i < totalDays; i++) {
+            const cDate = new Date(startDate.getTime() + i * ONE_DAY);
+            const dWeek = cDate.getDay();
+            const isWeekend = dWeek === 0 || dWeek === 6;
+            const isToday = cDate.getFullYear() === now.getFullYear() &&
+                            cDate.getMonth() === now.getMonth() &&
+                            cDate.getDate() === now.getDate();
+
+            gridLinesHtml += `
+              <div class="timeline-grid-line ${isWeekend ? 'weekend' : ''} ${isToday ? 'today-line' : ''}"
+                   style="width:${cellWidth}px;"></div>
+            `;
+          }
+          gridLinesHtml += `</div>`;
+
+          for (const t of displayedScheduled) {
+            const priorityLower = (t.priority || 'Medium').toLowerCase();
+            const pClass = `priority-${priorityLower}`;
+            const isClosed = (t.status || 'Open').toLowerCase() === 'closed';
+            const deadlineTs = Number(t.deadline);
+            const createdTs = Number(t.created) || (deadlineTs - 4 * ONE_DAY);
+            const isOverdue = deadlineTs < nowTs && !isClosed;
+            const diffDays = Math.ceil((deadlineTs - nowTs) / ONE_DAY);
+            const totalSpanDays = Math.max(1, Math.round((deadlineTs - createdTs) / ONE_DAY));
+
+            const dStart = new Date(createdTs);
+            const dEnd = new Date(deadlineTs);
+            const startStr = `${dStart.getDate()}.${String(dStart.getMonth() + 1).padStart(2, '0')}`;
+            const endStr = `${dEnd.getDate()}.${String(dEnd.getMonth() + 1).padStart(2, '0')}`;
+
+            // Left Task Item
+            leftHtml += `
+              <div class="timeline-task-item ${pClass}" data-id="${escapeHtml(t.id)}" title="${escapeHtml(t.title)} (${escapeHtml(t.priority || 'Medium')})">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                  <span style="font-weight:700; font-size:0.75rem; color:var(--color-primary);">#${escapeHtml(t.id)}</span>
+                  <span class="badge ${pClass}" style="font-size:0.65rem; padding:0.05rem 0.35rem;">${escapeHtml(t.priority || 'Medium')}</span>
                 </div>
-                <div style="font-weight:600; font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.title)}</div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.35rem; font-size:0.72rem;">
-                  <span style="color:var(--color-text-secondary);">${escapeHtml(t.status || 'Open')}</span>
-                  <span style="color:var(--color-text-muted);">${isClosed ? 'Завершено ✓' : (diffDays >= 0 ? diffDays + ' дн. осталось' : Math.abs(diffDays) + ' дн. назад')}</span>
+                <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:0.82rem;">
+                  ${isClosed ? '✓ ' : (isOverdue ? '⚠️ ' : '')}${escapeHtml(t.title)}
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.68rem; color:var(--color-text-muted); margin-top:2px;">
+                  <span>${startStr} → ${endStr}</span>
+                  <span style="color:${isClosed ? 'var(--color-success)' : (isOverdue ? 'var(--color-danger)' : 'var(--color-text-secondary)')}; font-weight:700;">
+                    ${isClosed ? 'Готово' : (isOverdue ? 'Просрочено' : diffDays + ' дн.')}
+                  </span>
+                </div>
+              </div>
+            `;
+
+            // Right Gantt Bar Position
+            const startDayOffset = (createdTs - startDate.getTime()) / ONE_DAY;
+            const endDayOffset = (deadlineTs - startDate.getTime()) / ONE_DAY + 1; // Include deadline day
+
+            const visStart = Math.max(0, startDayOffset);
+            const visEnd = Math.min(totalDays, endDayOffset);
+            const safeVisEnd = visEnd <= visStart ? visStart + 0.9 : visEnd;
+
+            const leftPx = visStart * cellWidth;
+            const widthPx = Math.max((safeVisEnd - visStart) * cellWidth, 34);
+
+            const hasLeftContinuation = startDayOffset < 0;
+            const hasRightContinuation = endDayOffset > totalDays;
+
+            rightRowsHtml += `
+              <div class="timeline-row" style="width:${totalCanvasWidth}px;" data-id="${escapeHtml(t.id)}">
+                <div class="timeline-bar ${pClass} ${isClosed ? 'status-closed' : ''} ${isOverdue ? 'is-overdue' : ''}"
+                     style="left:${leftPx}px; width:${widthPx}px;"
+                     data-id="${escapeHtml(t.id)}"
+                     data-title="${escapeHtml(t.title)}"
+                     data-priority="${escapeHtml(t.priority || 'Medium')}"
+                     data-status="${escapeHtml(t.status || 'Open')}"
+                     data-reporter="${escapeHtml(t.reporter || 'user')}"
+                     data-start="${startStr}"
+                     data-end="${endStr}"
+                     data-span="${totalSpanDays}"
+                     data-diff="${diffDays}"
+                     data-overdue="${isOverdue ? 'true' : 'false'}"
+                     data-closed="${isClosed ? 'true' : 'false'}">
+                  <span class="timeline-bar-title">
+                    ${hasLeftContinuation ? '◄ ' : ''}${escapeHtml(t.title)} (${totalSpanDays} дн.)${hasRightContinuation ? ' ►' : ''}
+                  </span>
+                  <span class="timeline-deadline-pin" title="Дедлайн: ${endStr}">
+                    ${isClosed ? '✓' : (isOverdue ? '!' : '●')}
+                  </span>
                 </div>
               </div>
             `;
           }
-          upcomingList.innerHTML = uHtml;
-          upcomingList.querySelectorAll('.ticket-card').forEach(el => {
-            el.addEventListener('click', () => this.openTicketEditModal(el.getAttribute('data-id')));
+
+          tasksList.innerHTML = leftHtml;
+          bodyGrid.innerHTML = gridLinesHtml + rightRowsHtml;
+          bodyGrid.style.width = `${totalCanvasWidth}px`;
+
+          // Setup rich hover tooltips and clicks
+          const tooltip = $('timeline-tooltip');
+          bodyGrid.querySelectorAll('.timeline-bar').forEach(bar => {
+            bar.addEventListener('mouseenter', (e) => {
+              if (!tooltip) return;
+              const title = bar.getAttribute('data-title');
+              const id = bar.getAttribute('data-id');
+              const priority = bar.getAttribute('data-priority');
+              const status = bar.getAttribute('data-status');
+              const reporter = bar.getAttribute('data-reporter');
+              const start = bar.getAttribute('data-start');
+              const end = bar.getAttribute('data-end');
+              const span = bar.getAttribute('data-span');
+              const diff = Number(bar.getAttribute('data-diff'));
+              const isOverdue = bar.getAttribute('data-overdue') === 'true';
+              const isClosed = bar.getAttribute('data-closed') === 'true';
+
+              let statusText = isClosed ? '<span style="color:var(--color-success); font-weight:700;">✓ Завершено</span>' :
+                               (isOverdue ? `<span style="color:var(--color-danger); font-weight:700;">⚠️ Просрочено на ${Math.abs(diff)} дн.</span>` :
+                               `<span style="color:var(--color-primary); font-weight:700;">В работе (осталось ${diff} дн.)</span>`);
+
+              tooltip.innerHTML = `
+                <div style="font-weight:700; font-size:0.86rem; margin-bottom:0.35rem; color:var(--color-text);">
+                  #${escapeHtml(id)}: ${escapeHtml(title)}
+                </div>
+                <div style="display:flex; gap:0.4rem; margin-bottom:0.4rem;">
+                  <span class="badge priority-${priority.toLowerCase()}">${escapeHtml(priority)}</span>
+                  <span class="badge badge-secondary">${escapeHtml(status)}</span>
+                </div>
+                <div style="font-size:0.75rem; color:var(--color-text-secondary); line-height:1.4;">
+                  <div>📅 <b>Сроки:</b> ${start} → ${end} (${span} дн.)</div>
+                  <div>⏳ <b>Статус:</b> ${statusText}</div>
+                  <div>👤 <b>Автор:</b> ${escapeHtml(reporter)}</div>
+                </div>
+                <div style="font-size:0.68rem; color:var(--color-text-muted); margin-top:0.4rem; border-top:1px solid var(--color-border); padding-top:0.3rem;">
+                  Нажмите на полосу, чтобы открыть или изменить тикет
+                </div>
+              `;
+              tooltip.style.display = 'block';
+            });
+
+            bar.addEventListener('mousemove', (e) => {
+              if (!tooltip) return;
+              let x = e.clientX + 14;
+              let y = e.clientY + 14;
+              if (x + 320 > window.innerWidth) {
+                x = Math.max(10, e.clientX - 330);
+              }
+              if (y + 180 > window.innerHeight) {
+                y = Math.max(10, e.clientY - 160);
+              }
+              tooltip.style.left = x + 'px';
+              tooltip.style.top = y + 'px';
+            });
+
+            bar.addEventListener('mouseleave', () => {
+              if (tooltip) tooltip.style.display = 'none';
+            });
+
+            bar.addEventListener('click', (e) => {
+              e.stopPropagation();
+              if (tooltip) tooltip.style.display = 'none';
+              this.openTicketEditModal(bar.getAttribute('data-id'));
+            });
+          });
+
+          // Click on left item opens edit modal as well
+          tasksList.querySelectorAll('.timeline-task-item').forEach(el => {
+            el.addEventListener('click', () => {
+              this.openTicketEditModal(el.getAttribute('data-id'));
+            });
           });
         }
       }
 
-      // Compute calendar matrix
-      const year = state.calendarYear;
-      const month = state.calendarMonth;
-      const firstDayOfMonth = new Date(year, month, 1);
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const daysInPrevMonth = new Date(year, month, 0).getDate();
-
-      // In Russia/Europe, week starts on Monday (0=Mon ... 6=Sun)
-      let startDayOfWeek = firstDayOfMonth.getDay() - 1;
-      if (startDayOfWeek === -1) startDayOfWeek = 6;
-
-      let cellsHtml = '';
-
-      // Previous month padding cells
-      for (let i = startDayOfWeek - 1; i >= 0; i--) {
-        const dayNum = daysInPrevMonth - i;
-        cellsHtml += `
-          <div class="calendar-cell other-month">
-            <div class="calendar-day-header">
-              <span class="calendar-day-num">${dayNum}</span>
-            </div>
-          </div>
-        `;
+      // Auto-scroll timeline to 'Today' if today is visible
+      const chartArea = $('timeline-chart-area');
+      const isCurrentMonth = (now.getFullYear() === state.calendarYear && now.getMonth() === state.calendarMonth);
+      if (chartArea && isCurrentMonth && state.calendarScale === 'month') {
+        const todayOffset = (now.getDate() - 3) * cellWidth;
+        chartArea.scrollLeft = Math.max(0, todayOffset);
       }
 
-      // Current month day cells
-      for (let day = 1; day <= daysInMonth; day++) {
-        const isToday = isCurrentMonth && day === now.getDate();
-        const currentCellDate = new Date(year, month, day);
-        const yyyy = year;
-        const mm = String(month + 1).padStart(2, '0');
-        const dd = String(day).padStart(2, '0');
-        const dateIso = `${yyyy}-${mm}-${dd}`;
-
-        // Find tickets matching this day
-        const dayTickets = scheduled.filter(t => {
-          const tDate = new Date(Number(t.deadline));
-          return tDate.getFullYear() === year && tDate.getMonth() === month && tDate.getDate() === day;
-        });
-
-        let eventsHtml = '';
-        for (const t of dayTickets) {
-          const pClass = `priority-${(t.priority || 'Medium').toLowerCase()}`;
-          const isClosed = (t.status || 'Open').toLowerCase() === 'closed';
-          const isOverdue = Number(t.deadline) < nowTs && !isClosed;
-
-          eventsHtml += `
-            <div class="calendar-event-pill ${pClass}" data-id="${escapeHtml(t.id)}" title="${escapeHtml(t.title)} (${t.priority})">
-              ${isOverdue ? '⚠️ ' : (isClosed ? '✓ ' : '')}${escapeHtml(t.title)}
-            </div>
-          `;
-        }
-
-        cellsHtml += `
-          <div class="calendar-cell ${isToday ? 'today calendar-day-today' : ''}" data-date="${dateIso}">
-            <div class="calendar-day-header">
-              <span class="calendar-day-num">${day}</span>
-              ${isToday ? '<span style="font-size:0.68rem; font-weight:700; color:var(--color-primary);">Сегодня</span>' : ''}
-            </div>
-            <div style="display:flex; flex-direction:column; gap:0.25rem; overflow-y:auto; flex:1;">
-              ${eventsHtml}
-            </div>
-          </div>
-        `;
-      }
-
-      // Next month padding cells to complete 35 or 42 grid
-      const totalCells = startDayOfWeek + daysInMonth;
-      const targetTotal = totalCells > 35 ? 42 : 35;
-      const remainingCells = targetTotal - totalCells;
-      for (let day = 1; day <= remainingCells; day++) {
-        cellsHtml += `
-          <div class="calendar-cell other-month">
-            <div class="calendar-day-header">
-              <span class="calendar-day-num">${day}</span>
-            </div>
-          </div>
-        `;
-      }
-
-      grid.innerHTML = cellsHtml;
-
-      // Event click on event pill
-      grid.querySelectorAll('.calendar-event-pill').forEach(pill => {
-        pill.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const tktId = pill.getAttribute('data-id');
-          this.openTicketEditModal(tktId);
-        });
-      });
-
-      // Click on day cell to quickly create a ticket on that date
-      grid.querySelectorAll('.calendar-cell:not(.other-month)').forEach(cell => {
-        cell.addEventListener('click', () => {
-          const dateStr = cell.getAttribute('data-date');
-          const modal = $('modal-ticket');
-          if (modal) {
-            if ($('ticket-deadline')) $('ticket-deadline').value = dateStr;
-            modal.classList.remove('hidden');
-          }
-        });
-      });
+      // Legacy grid compatibility
+      if (legacyGrid) legacyGrid.innerHTML = '';
     },
 
     // --- Pull Request Actions ---

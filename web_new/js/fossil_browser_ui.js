@@ -1710,18 +1710,34 @@
     },
 
     // --- Timeline Calendar & Roadmap Actions ---
+    // --- Linear Timeline Calendar & Roadmap Gantt Actions ---
     bindCalendarActions() {
       const prevBtn = $('btn-calendar-prev');
       const nextBtn = $('btn-calendar-next');
       const todayBtn = $('btn-calendar-today');
       const addBtn = $('btn-calendar-add-ticket');
+      const toggleBacklogBtn = $('btn-toggle-backlog');
+      const filterStatus = $('cal-filter-status');
+      const filterPriority = $('cal-filter-priority');
+      const scaleMonth = $('scale-month');
+      const scale2Weeks = $('scale-2weeks');
+      const scaleAll = $('scale-all');
+
+      if (!state.calendarScale) state.calendarScale = 'month';
 
       if (prevBtn) {
         prevBtn.addEventListener('click', () => {
-          state.calendarMonth--;
-          if (state.calendarMonth < 0) {
-            state.calendarMonth = 11;
-            state.calendarYear--;
+          if (state.calendarScale === '2weeks') {
+            const curDate = state.calendarDate || new Date();
+            state.calendarDate = new Date(curDate.getTime() - 14 * 24 * 60 * 60 * 1000);
+            state.calendarMonth = state.calendarDate.getMonth();
+            state.calendarYear = state.calendarDate.getFullYear();
+          } else {
+            state.calendarMonth--;
+            if (state.calendarMonth < 0) {
+              state.calendarMonth = 11;
+              state.calendarYear--;
+            }
           }
           this.refreshCalendar();
         });
@@ -1729,10 +1745,17 @@
 
       if (nextBtn) {
         nextBtn.addEventListener('click', () => {
-          state.calendarMonth++;
-          if (state.calendarMonth > 11) {
-            state.calendarMonth = 0;
-            state.calendarYear++;
+          if (state.calendarScale === '2weeks') {
+            const curDate = state.calendarDate || new Date();
+            state.calendarDate = new Date(curDate.getTime() + 14 * 24 * 60 * 60 * 1000);
+            state.calendarMonth = state.calendarDate.getMonth();
+            state.calendarYear = state.calendarDate.getFullYear();
+          } else {
+            state.calendarMonth++;
+            if (state.calendarMonth > 11) {
+              state.calendarMonth = 0;
+              state.calendarYear++;
+            }
           }
           this.refreshCalendar();
         });
@@ -1743,6 +1766,7 @@
           const now = new Date();
           state.calendarMonth = now.getMonth();
           state.calendarYear = now.getFullYear();
+          state.calendarDate = now;
           this.refreshCalendar();
         });
       }
@@ -1757,41 +1781,104 @@
           }
         });
       }
+
+      if (toggleBacklogBtn) {
+        toggleBacklogBtn.addEventListener('click', () => {
+          const layout = $('calendar-layout');
+          if (layout) {
+            layout.classList.toggle('backlog-collapsed');
+            const isCollapsed = layout.classList.contains('backlog-collapsed');
+            toggleBacklogBtn.classList.toggle('btn-primary', isCollapsed);
+            toggleBacklogBtn.classList.toggle('btn-secondary', !isCollapsed);
+          }
+        });
+      }
+
+      if (filterStatus) {
+        filterStatus.addEventListener('change', () => this.refreshCalendar());
+      }
+      if (filterPriority) {
+        filterPriority.addEventListener('change', () => this.refreshCalendar());
+      }
+
+      // Scale selectors
+      const setScale = (scale) => {
+        state.calendarScale = scale;
+        [scaleMonth, scale2Weeks, scaleAll].forEach(b => {
+          if (b) {
+            b.classList.remove('active', 'btn-primary');
+            b.classList.add('btn-secondary');
+          }
+        });
+        const activeBtn = scale === 'month' ? scaleMonth : (scale === '2weeks' ? scale2Weeks : scaleAll);
+        if (activeBtn) {
+          activeBtn.classList.add('active', 'btn-primary');
+          activeBtn.classList.remove('btn-secondary');
+        }
+        this.refreshCalendar();
+      };
+
+      if (scaleMonth) scaleMonth.addEventListener('click', () => setScale('month'));
+      if (scale2Weeks) scale2Weeks.addEventListener('click', () => setScale('2weeks'));
+      if (scaleAll) scaleAll.addEventListener('click', () => setScale('all'));
+
+      // Ensure Tooltip DOM element exists
+      if (!document.getElementById('timeline-tooltip')) {
+        const tt = document.createElement('div');
+        tt.id = 'timeline-tooltip';
+        tt.className = 'timeline-tooltip';
+        document.body.appendChild(tt);
+      }
     },
 
     async refreshCalendar() {
-      const grid = $('calendar-days-grid');
       const monthLabel = $('calendar-month-label');
-      if (!grid) return;
+      const datesHeader = $('timeline-dates-header');
+      const tasksList = $('timeline-tasks-list');
+      const bodyGrid = $('timeline-body-grid');
+      const legacyGrid = $('calendar-days-grid');
 
       const monthNamesRu = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
       const monthNamesEn = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
       const curLang = (window.FossilI18n && window.FossilI18n.currentLang) || 'ru';
       const mName = curLang === 'ru' ? monthNamesRu[state.calendarMonth] : monthNamesEn[state.calendarMonth];
-      if (monthLabel) monthLabel.innerText = `${mName} ${state.calendarYear}`;
 
-      // Fetch all tickets
+      if (monthLabel) {
+        if (state.calendarScale === '2weeks') {
+          monthLabel.innerText = `14 дней (${mName} ${state.calendarYear})`;
+        } else if (state.calendarScale === 'all') {
+          monthLabel.innerText = `Вся дорожная карта (${state.calendarYear})`;
+        } else {
+          monthLabel.innerText = `${mName} ${state.calendarYear}`;
+        }
+      }
+
+      // Fetch all tickets from MCP
       const allRes = await window.fossilMcp.callTool('ticket_list', { status: 'all' });
       const tickets = allRes.tickets || [];
       const now = new Date();
-      const isCurrentMonth = now.getFullYear() === state.calendarYear && now.getMonth() === state.calendarMonth;
+      const nowTs = now.getTime();
+      const ONE_DAY = 24 * 60 * 60 * 1000;
 
       // Filter tickets with and without deadlines
       const scheduled = tickets.filter(t => t.deadline && Number(t.deadline) > 0);
       const backlog = tickets.filter(t => !t.deadline || Number(t.deadline) === 0);
 
       // Overdue tickets
-      const nowTs = Date.now();
       const overdue = scheduled.filter(t => Number(t.deadline) < nowTs && (t.status || 'Open').toLowerCase() !== 'closed');
+      const closed = scheduled.filter(t => (t.status || 'Open').toLowerCase() === 'closed');
 
       // Update counters & badges
       const totalScheduledEl = $('cal-total-scheduled');
+      const totalClosedEl = $('cal-total-closed');
       const totalOverdueEl = $('cal-total-overdue');
       const backlogCountEl = $('cal-backlog-count');
+      const btnBacklogCountEl = $('btn-backlog-count');
       const upcomingCountEl = $('cal-upcoming-count');
       const sidebarCalBadge = $('sidebar-calendar-badge');
 
       if (totalScheduledEl) totalScheduledEl.innerText = `${scheduled.length} с дедлайном`;
+      if (totalClosedEl) totalClosedEl.innerText = `${closed.length} завершено`;
       if (totalOverdueEl) {
         if (overdue.length > 0) {
           totalOverdueEl.style.display = 'inline-block';
@@ -1801,6 +1888,7 @@
         }
       }
       if (backlogCountEl) backlogCountEl.innerText = backlog.length;
+      if (btnBacklogCountEl) btnBacklogCountEl.innerText = backlog.length;
       if (upcomingCountEl) upcomingCountEl.innerText = scheduled.length;
       if (sidebarCalBadge) {
         if (overdue.length > 0) {
@@ -1815,7 +1903,7 @@
       const backlogList = $('calendar-backlog-list');
       if (backlogList) {
         if (backlog.length === 0) {
-          backlogList.innerHTML = '<div style="font-size:0.8rem; color:var(--color-text-muted);">Все задачи имеют назначенные дедлайны!</div>';
+          backlogList.innerHTML = '<div style="font-size:0.8rem; color:var(--color-text-muted); padding:0.5rem 0;">Все задачи имеют назначенные дедлайны!</div>';
         } else {
           let bHtml = '';
           for (const t of backlog) {
@@ -1829,7 +1917,7 @@
                 <div style="font-weight:600; font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.title)}</div>
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.35rem; font-size:0.72rem;">
                   <span style="color:var(--color-text-secondary);">${escapeHtml(t.status || 'Open')}</span>
-                  <span style="color:var(--color-primary); font-weight:600;">+ Дедлайн</span>
+                  <span style="color:var(--color-primary); font-weight:600;">+ Назначить дедлайн</span>
                 </div>
               </div>
             `;
@@ -1841,143 +1929,290 @@
         }
       }
 
-      // Render Upcoming side panel
-      const upcomingList = $('calendar-upcoming-list');
-      if (upcomingList) {
-        if (scheduled.length === 0) {
-          upcomingList.innerHTML = '<div style="font-size:0.8rem; color:var(--color-text-muted);">Нет запланированных задач.</div>';
-        } else {
-          let uHtml = '';
-          for (const t of scheduled) {
-            const pClass = `priority-${(t.priority || 'Medium').toLowerCase()}`;
-            const diffDays = Math.ceil((Number(t.deadline) - nowTs) / (24 * 60 * 60 * 1000));
-            const isClosed = (t.status || 'Open').toLowerCase() === 'closed';
-            const isOverdue = diffDays < 0 && !isClosed;
-            const d = new Date(Number(t.deadline));
+      // Filter scheduled tickets by UI controls
+      const statusFilter = $('cal-filter-status') ? $('cal-filter-status').value : 'all';
+      const priorityFilter = $('cal-filter-priority') ? $('cal-filter-priority').value : 'all';
 
-            uHtml += `
-              <div class="ticket-card ${pClass}" style="padding:0.6rem 0.75rem; cursor:pointer;" data-id="${escapeHtml(t.id)}">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.2rem;">
-                  <span class="badge ${pClass}" style="font-size:0.7rem; padding:0.1rem 0.35rem;">${escapeHtml(t.priority || 'Medium')}</span>
-                  ${isOverdue ? '<span class="badge-overdue">ПРОСРОЧЕНО</span>' : `<span style="font-size:0.72rem; color:var(--color-text-muted);">${d.toLocaleDateString()}</span>`}
+      let displayedScheduled = scheduled.filter(t => {
+        if (statusFilter === 'open' && (t.status || 'Open').toLowerCase() === 'closed') return false;
+        if (statusFilter === 'closed' && (t.status || 'Open').toLowerCase() !== 'closed') return false;
+        if (priorityFilter !== 'all' && (t.priority || 'Medium').toLowerCase() !== priorityFilter.toLowerCase()) return false;
+        return true;
+      });
+
+      // Sort: Critical & Overdue first, then by deadline
+      displayedScheduled.sort((a, b) => {
+        const aDead = Number(a.deadline);
+        const bDead = Number(b.deadline);
+        const aOver = aDead < nowTs && (a.status||'Open').toLowerCase() !== 'closed';
+        const bOver = bDead < nowTs && (b.status||'Open').toLowerCase() !== 'closed';
+        if (aOver && !bOver) return -1;
+        if (!aOver && bOver) return 1;
+        return aDead - bDead;
+      });
+
+      // Compute Timeline Visible Window (Start Date, End Date, Total Days)
+      const year = state.calendarYear;
+      const month = state.calendarMonth;
+      let startDate, endDate, totalDays, cellWidth = 42;
+
+      if (state.calendarScale === '2weeks') {
+        cellWidth = 56;
+        const curDate = state.calendarDate || now;
+        startDate = new Date(curDate.getFullYear(), curDate.getMonth(), curDate.getDate() - 4, 0, 0, 0);
+        endDate = new Date(startDate.getTime() + 14 * ONE_DAY);
+        totalDays = 14;
+      } else if (state.calendarScale === 'all') {
+        cellWidth = 36;
+        let minTs = nowTs - 3 * ONE_DAY;
+        let maxTs = nowTs + 7 * ONE_DAY;
+        for (const t of scheduled) {
+          const cStart = Number(t.created) || (Number(t.deadline) - 4 * ONE_DAY);
+          const cEnd = Number(t.deadline);
+          if (cStart < minTs) minTs = cStart;
+          if (cEnd > maxTs) maxTs = cEnd;
+        }
+        startDate = new Date(minTs);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(maxTs);
+        endDate.setHours(23, 59, 59, 999);
+        totalDays = Math.max(14, Math.ceil((endDate.getTime() - startDate.getTime()) / ONE_DAY));
+      } else {
+        // Month view (default)
+        cellWidth = 42;
+        startDate = new Date(year, month, 1, 0, 0, 0);
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        endDate = new Date(year, month, daysInMonth, 23, 59, 59);
+        totalDays = daysInMonth;
+      }
+
+      const totalCanvasWidth = totalDays * cellWidth;
+      const weekdaysRu = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+      const weekdaysEn = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const wNames = curLang === 'ru' ? weekdaysRu : weekdaysEn;
+
+      // 1. Build Dates Header Strip
+      if (datesHeader) {
+        let hHtml = '';
+        for (let i = 0; i < totalDays; i++) {
+          const cDate = new Date(startDate.getTime() + i * ONE_DAY);
+          const dNum = cDate.getDate();
+          const dWeek = cDate.getDay();
+          const isWeekend = dWeek === 0 || dWeek === 6;
+          const isToday = cDate.getFullYear() === now.getFullYear() &&
+                          cDate.getMonth() === now.getMonth() &&
+                          cDate.getDate() === now.getDate();
+
+          hHtml += `
+            <div class="timeline-date-cell ${isWeekend ? 'weekend' : ''} ${isToday ? 'today-cell' : ''}"
+                 style="width:${cellWidth}px;"
+                 title="${cDate.toLocaleDateString()}">
+              <span class="timeline-date-daynum">${dNum}</span>
+              <span class="timeline-date-dayname">${wNames[dWeek]}</span>
+            </div>
+          `;
+        }
+        datesHeader.innerHTML = hHtml;
+        datesHeader.style.width = `${totalCanvasWidth}px`;
+      }
+
+      // 2. Build Tasks Column (Left) and Gantt Rows (Right)
+      if (tasksList && bodyGrid) {
+        if (displayedScheduled.length === 0) {
+          tasksList.innerHTML = `
+            <div style="padding:2rem 1rem; color:var(--color-text-muted); font-size:0.82rem; text-align:center;">
+              Нет запланированных задач по выбранным фильтрам.
+            </div>
+          `;
+          bodyGrid.innerHTML = `
+            <div style="padding:2.5rem 1.5rem; color:var(--color-text-muted); font-size:0.85rem; width:${totalCanvasWidth}px;">
+              💡 Назначьте дедлайн задаче из бэклога или нажмите <b>«+ Создать тикет с дедлайном»</b>.
+            </div>
+          `;
+        } else {
+          let leftHtml = '';
+          let rightRowsHtml = '';
+
+          // Background vertical grid lines
+          let gridLinesHtml = `<div class="timeline-grid-lines" style="width:${totalCanvasWidth}px;">`;
+          for (let i = 0; i < totalDays; i++) {
+            const cDate = new Date(startDate.getTime() + i * ONE_DAY);
+            const dWeek = cDate.getDay();
+            const isWeekend = dWeek === 0 || dWeek === 6;
+            const isToday = cDate.getFullYear() === now.getFullYear() &&
+                            cDate.getMonth() === now.getMonth() &&
+                            cDate.getDate() === now.getDate();
+
+            gridLinesHtml += `
+              <div class="timeline-grid-line ${isWeekend ? 'weekend' : ''} ${isToday ? 'today-line' : ''}"
+                   style="width:${cellWidth}px;"></div>
+            `;
+          }
+          gridLinesHtml += `</div>`;
+
+          for (const t of displayedScheduled) {
+            const priorityLower = (t.priority || 'Medium').toLowerCase();
+            const pClass = `priority-${priorityLower}`;
+            const isClosed = (t.status || 'Open').toLowerCase() === 'closed';
+            const deadlineTs = Number(t.deadline);
+            const createdTs = Number(t.created) || (deadlineTs - 4 * ONE_DAY);
+            const isOverdue = deadlineTs < nowTs && !isClosed;
+            const diffDays = Math.ceil((deadlineTs - nowTs) / ONE_DAY);
+            const totalSpanDays = Math.max(1, Math.round((deadlineTs - createdTs) / ONE_DAY));
+
+            const dStart = new Date(createdTs);
+            const dEnd = new Date(deadlineTs);
+            const startStr = `${dStart.getDate()}.${String(dStart.getMonth() + 1).padStart(2, '0')}`;
+            const endStr = `${dEnd.getDate()}.${String(dEnd.getMonth() + 1).padStart(2, '0')}`;
+
+            // Left Task Item
+            leftHtml += `
+              <div class="timeline-task-item ${pClass}" data-id="${escapeHtml(t.id)}" title="${escapeHtml(t.title)} (${escapeHtml(t.priority || 'Medium')})">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                  <span style="font-weight:700; font-size:0.75rem; color:var(--color-primary);">#${escapeHtml(t.id)}</span>
+                  <span class="badge ${pClass}" style="font-size:0.65rem; padding:0.05rem 0.35rem;">${escapeHtml(t.priority || 'Medium')}</span>
                 </div>
-                <div style="font-weight:600; font-size:0.84rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.title)}</div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.35rem; font-size:0.72rem;">
-                  <span style="color:var(--color-text-secondary);">${escapeHtml(t.status || 'Open')}</span>
-                  <span style="color:var(--color-text-muted);">${isClosed ? 'Завершено ✓' : (diffDays >= 0 ? diffDays + ' дн. осталось' : Math.abs(diffDays) + ' дн. назад')}</span>
+                <div style="font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:0.82rem;">
+                  ${isClosed ? '✓ ' : (isOverdue ? '⚠️ ' : '')}${escapeHtml(t.title)}
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.68rem; color:var(--color-text-muted); margin-top:2px;">
+                  <span>${startStr} → ${endStr}</span>
+                  <span style="color:${isClosed ? 'var(--color-success)' : (isOverdue ? 'var(--color-danger)' : 'var(--color-text-secondary)')}; font-weight:700;">
+                    ${isClosed ? 'Готово' : (isOverdue ? 'Просрочено' : diffDays + ' дн.')}
+                  </span>
+                </div>
+              </div>
+            `;
+
+            // Right Gantt Bar Position
+            const startDayOffset = (createdTs - startDate.getTime()) / ONE_DAY;
+            const endDayOffset = (deadlineTs - startDate.getTime()) / ONE_DAY + 1; // Include deadline day
+
+            const visStart = Math.max(0, startDayOffset);
+            const visEnd = Math.min(totalDays, endDayOffset);
+            const safeVisEnd = visEnd <= visStart ? visStart + 0.9 : visEnd;
+
+            const leftPx = visStart * cellWidth;
+            const widthPx = Math.max((safeVisEnd - visStart) * cellWidth, 34);
+
+            const hasLeftContinuation = startDayOffset < 0;
+            const hasRightContinuation = endDayOffset > totalDays;
+
+            rightRowsHtml += `
+              <div class="timeline-row" style="width:${totalCanvasWidth}px;" data-id="${escapeHtml(t.id)}">
+                <div class="timeline-bar ${pClass} ${isClosed ? 'status-closed' : ''} ${isOverdue ? 'is-overdue' : ''}"
+                     style="left:${leftPx}px; width:${widthPx}px;"
+                     data-id="${escapeHtml(t.id)}"
+                     data-title="${escapeHtml(t.title)}"
+                     data-priority="${escapeHtml(t.priority || 'Medium')}"
+                     data-status="${escapeHtml(t.status || 'Open')}"
+                     data-reporter="${escapeHtml(t.reporter || 'user')}"
+                     data-start="${startStr}"
+                     data-end="${endStr}"
+                     data-span="${totalSpanDays}"
+                     data-diff="${diffDays}"
+                     data-overdue="${isOverdue ? 'true' : 'false'}"
+                     data-closed="${isClosed ? 'true' : 'false'}">
+                  <span class="timeline-bar-title">
+                    ${hasLeftContinuation ? '◄ ' : ''}${escapeHtml(t.title)} (${totalSpanDays} дн.)${hasRightContinuation ? ' ►' : ''}
+                  </span>
+                  <span class="timeline-deadline-pin" title="Дедлайн: ${endStr}">
+                    ${isClosed ? '✓' : (isOverdue ? '!' : '●')}
+                  </span>
                 </div>
               </div>
             `;
           }
-          upcomingList.innerHTML = uHtml;
-          upcomingList.querySelectorAll('.ticket-card').forEach(el => {
-            el.addEventListener('click', () => this.openTicketEditModal(el.getAttribute('data-id')));
+
+          tasksList.innerHTML = leftHtml;
+          bodyGrid.innerHTML = gridLinesHtml + rightRowsHtml;
+          bodyGrid.style.width = `${totalCanvasWidth}px`;
+
+          // Setup rich hover tooltips and clicks
+          const tooltip = $('timeline-tooltip');
+          bodyGrid.querySelectorAll('.timeline-bar').forEach(bar => {
+            bar.addEventListener('mouseenter', (e) => {
+              if (!tooltip) return;
+              const title = bar.getAttribute('data-title');
+              const id = bar.getAttribute('data-id');
+              const priority = bar.getAttribute('data-priority');
+              const status = bar.getAttribute('data-status');
+              const reporter = bar.getAttribute('data-reporter');
+              const start = bar.getAttribute('data-start');
+              const end = bar.getAttribute('data-end');
+              const span = bar.getAttribute('data-span');
+              const diff = Number(bar.getAttribute('data-diff'));
+              const isOverdue = bar.getAttribute('data-overdue') === 'true';
+              const isClosed = bar.getAttribute('data-closed') === 'true';
+
+              let statusText = isClosed ? '<span style="color:var(--color-success); font-weight:700;">✓ Завершено</span>' :
+                               (isOverdue ? `<span style="color:var(--color-danger); font-weight:700;">⚠️ Просрочено на ${Math.abs(diff)} дн.</span>` :
+                               `<span style="color:var(--color-primary); font-weight:700;">В работе (осталось ${diff} дн.)</span>`);
+
+              tooltip.innerHTML = `
+                <div style="font-weight:700; font-size:0.86rem; margin-bottom:0.35rem; color:var(--color-text);">
+                  #${escapeHtml(id)}: ${escapeHtml(title)}
+                </div>
+                <div style="display:flex; gap:0.4rem; margin-bottom:0.4rem;">
+                  <span class="badge priority-${priority.toLowerCase()}">${escapeHtml(priority)}</span>
+                  <span class="badge badge-secondary">${escapeHtml(status)}</span>
+                </div>
+                <div style="font-size:0.75rem; color:var(--color-text-secondary); line-height:1.4;">
+                  <div>📅 <b>Сроки:</b> ${start} → ${end} (${span} дн.)</div>
+                  <div>⏳ <b>Статус:</b> ${statusText}</div>
+                  <div>👤 <b>Автор:</b> ${escapeHtml(reporter)}</div>
+                </div>
+                <div style="font-size:0.68rem; color:var(--color-text-muted); margin-top:0.4rem; border-top:1px solid var(--color-border); padding-top:0.3rem;">
+                  Нажмите на полосу, чтобы открыть или изменить тикет
+                </div>
+              `;
+              tooltip.style.display = 'block';
+            });
+
+            bar.addEventListener('mousemove', (e) => {
+              if (!tooltip) return;
+              let x = e.clientX + 14;
+              let y = e.clientY + 14;
+              if (x + 320 > window.innerWidth) {
+                x = Math.max(10, e.clientX - 330);
+              }
+              if (y + 180 > window.innerHeight) {
+                y = Math.max(10, e.clientY - 160);
+              }
+              tooltip.style.left = x + 'px';
+              tooltip.style.top = y + 'px';
+            });
+
+            bar.addEventListener('mouseleave', () => {
+              if (tooltip) tooltip.style.display = 'none';
+            });
+
+            bar.addEventListener('click', (e) => {
+              e.stopPropagation();
+              if (tooltip) tooltip.style.display = 'none';
+              this.openTicketEditModal(bar.getAttribute('data-id'));
+            });
+          });
+
+          // Click on left item opens edit modal as well
+          tasksList.querySelectorAll('.timeline-task-item').forEach(el => {
+            el.addEventListener('click', () => {
+              this.openTicketEditModal(el.getAttribute('data-id'));
+            });
           });
         }
       }
 
-      // Compute calendar matrix
-      const year = state.calendarYear;
-      const month = state.calendarMonth;
-      const firstDayOfMonth = new Date(year, month, 1);
-      const daysInMonth = new Date(year, month + 1, 0).getDate();
-      const daysInPrevMonth = new Date(year, month, 0).getDate();
-
-      // In Russia/Europe, week starts on Monday (0=Mon ... 6=Sun)
-      let startDayOfWeek = firstDayOfMonth.getDay() - 1;
-      if (startDayOfWeek === -1) startDayOfWeek = 6;
-
-      let cellsHtml = '';
-
-      // Previous month padding cells
-      for (let i = startDayOfWeek - 1; i >= 0; i--) {
-        const dayNum = daysInPrevMonth - i;
-        cellsHtml += `
-          <div class="calendar-cell other-month">
-            <div class="calendar-day-header">
-              <span class="calendar-day-num">${dayNum}</span>
-            </div>
-          </div>
-        `;
+      // Auto-scroll timeline to 'Today' if today is visible
+      const chartArea = $('timeline-chart-area');
+      const isCurrentMonth = (now.getFullYear() === state.calendarYear && now.getMonth() === state.calendarMonth);
+      if (chartArea && isCurrentMonth && state.calendarScale === 'month') {
+        const todayOffset = (now.getDate() - 3) * cellWidth;
+        chartArea.scrollLeft = Math.max(0, todayOffset);
       }
 
-      // Current month day cells
-      for (let day = 1; day <= daysInMonth; day++) {
-        const isToday = isCurrentMonth && day === now.getDate();
-        const currentCellDate = new Date(year, month, day);
-        const yyyy = year;
-        const mm = String(month + 1).padStart(2, '0');
-        const dd = String(day).padStart(2, '0');
-        const dateIso = `${yyyy}-${mm}-${dd}`;
-
-        // Find tickets matching this day
-        const dayTickets = scheduled.filter(t => {
-          const tDate = new Date(Number(t.deadline));
-          return tDate.getFullYear() === year && tDate.getMonth() === month && tDate.getDate() === day;
-        });
-
-        let eventsHtml = '';
-        for (const t of dayTickets) {
-          const pClass = `priority-${(t.priority || 'Medium').toLowerCase()}`;
-          const isClosed = (t.status || 'Open').toLowerCase() === 'closed';
-          const isOverdue = Number(t.deadline) < nowTs && !isClosed;
-
-          eventsHtml += `
-            <div class="calendar-event-pill ${pClass}" data-id="${escapeHtml(t.id)}" title="${escapeHtml(t.title)} (${t.priority})">
-              ${isOverdue ? '⚠️ ' : (isClosed ? '✓ ' : '')}${escapeHtml(t.title)}
-            </div>
-          `;
-        }
-
-        cellsHtml += `
-          <div class="calendar-cell ${isToday ? 'today calendar-day-today' : ''}" data-date="${dateIso}">
-            <div class="calendar-day-header">
-              <span class="calendar-day-num">${day}</span>
-              ${isToday ? '<span style="font-size:0.68rem; font-weight:700; color:var(--color-primary);">Сегодня</span>' : ''}
-            </div>
-            <div style="display:flex; flex-direction:column; gap:0.25rem; overflow-y:auto; flex:1;">
-              ${eventsHtml}
-            </div>
-          </div>
-        `;
-      }
-
-      // Next month padding cells to complete 35 or 42 grid
-      const totalCells = startDayOfWeek + daysInMonth;
-      const targetTotal = totalCells > 35 ? 42 : 35;
-      const remainingCells = targetTotal - totalCells;
-      for (let day = 1; day <= remainingCells; day++) {
-        cellsHtml += `
-          <div class="calendar-cell other-month">
-            <div class="calendar-day-header">
-              <span class="calendar-day-num">${day}</span>
-            </div>
-          </div>
-        `;
-      }
-
-      grid.innerHTML = cellsHtml;
-
-      // Event click on event pill
-      grid.querySelectorAll('.calendar-event-pill').forEach(pill => {
-        pill.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const tktId = pill.getAttribute('data-id');
-          this.openTicketEditModal(tktId);
-        });
-      });
-
-      // Click on day cell to quickly create a ticket on that date
-      grid.querySelectorAll('.calendar-cell:not(.other-month)').forEach(cell => {
-        cell.addEventListener('click', () => {
-          const dateStr = cell.getAttribute('data-date');
-          const modal = $('modal-ticket');
-          if (modal) {
-            if ($('ticket-deadline')) $('ticket-deadline').value = dateStr;
-            modal.classList.remove('hidden');
-          }
-        });
-      });
+      // Legacy grid compatibility
+      if (legacyGrid) legacyGrid.innerHTML = '';
     },
 
     // --- Pull Request Actions ---

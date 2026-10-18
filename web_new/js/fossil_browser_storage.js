@@ -97,6 +97,51 @@ const DEFAULT_TICKETS_SEED = [
       { timestamp: NOW - 2 * ONE_DAY, user: "core_dev", action: "created", detail: "Тикет добавлен в бэклог" }
     ],
     linkedPrs: []
+  },
+  {
+    id: "tkt-106",
+    title: "Сборка QBE cproc для супер-легковесных сред",
+    desc: "Адаптировать Си-код для чистого C11 стандарта без GCC расширений и слинковать 456КБ бинарник.",
+    priority: "High",
+    status: "Open",
+    reporter: "qbe_lead",
+    created: NOW - 6 * ONE_DAY,
+    mtime: NOW - 1 * ONE_DAY,
+    deadline: NOW + 7 * ONE_DAY,
+    history: [
+      { timestamp: NOW - 6 * ONE_DAY, user: "qbe_lead", action: "created", detail: "Тикет создан с приоритетом High" }
+    ],
+    linkedPrs: []
+  },
+  {
+    id: "tkt-107",
+    title: "Аудит безопасности и защита от timing-атак",
+    desc: "Провести ревизию поверхности атаки, проверить constant-time сравнение токенов и аутентификацию REST API.",
+    priority: "Critical",
+    status: "Open",
+    reporter: "sec_auditor",
+    created: NOW - 2 * ONE_DAY,
+    mtime: NOW - 1 * ONE_DAY,
+    deadline: NOW + 11 * ONE_DAY,
+    history: [
+      { timestamp: NOW - 2 * ONE_DAY, user: "sec_auditor", action: "created", detail: "Тикет создан с приоритетом Critical" }
+    ],
+    linkedPrs: []
+  },
+  {
+    id: "tkt-108",
+    title: "Поддержка минималистичных браузеров (surf, netsurf)",
+    desc: "Обеспечить корректную работу линейного таймлайна и чистого Vanilla JS без тяжелых зависимостей.",
+    priority: "Low",
+    status: "Open",
+    reporter: "ux_lead",
+    created: NOW - 5 * ONE_DAY,
+    mtime: NOW - 2 * ONE_DAY,
+    deadline: NOW + 2 * ONE_DAY,
+    history: [
+      { timestamp: NOW - 5 * ONE_DAY, user: "ux_lead", action: "created", detail: "Тикет создан с приоритетом Low" }
+    ],
+    linkedPrs: []
   }
 ];
 
