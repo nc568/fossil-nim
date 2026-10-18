@@ -14,12 +14,14 @@ WebAssembly. Not a port of SQLite — a rewrite with the legacy cut out.
 | [Portability](../en/portability.md) | C / JS / wasm / cproc, parity digests, wasm recipe and size |
 | [Roadmap](../en/plan.md) | v0.1 done → v0.5, with "done when" criteria |
 | [SQLite pain points](../en/research-painpoints.md) | what hurts users and how we answer it |
+| [Storage engine](../en/storage.md) | VFS tiers, 4 KiB pages, LRU cache, freelist |
+| [WAL](../en/wal.md) | durability contract, frame checksums, group commit, checkpoint |
 
 ## Quick facts
 
 ```
 Engine size        4 492 LOC          (SQLite: ~150 000)
-Tests              26 core + 18 security
+Tests              26 core + 20 security + 17 storage + 17 WAL
 Backend parity     native == JS, byte for byte (md5 0376a7c4…)
 wasm              328 KB, no emscripten, no wasi-sdk
 Point lookup      185 842 q/s  (was 56 q/s before the index planner)
