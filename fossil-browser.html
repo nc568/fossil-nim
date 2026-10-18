@@ -601,6 +601,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 
+</style>
+  <style>
 /* Fossil-Nim Themes - Modular, easy to edit palette
    Generated from src/fossil/ui/theme.nim via tools/generate_themes.nim
    Edit palette in theme.nim to change colors, then regenerate
@@ -833,6 +835,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
           </select>
         </div>
         <button id="btn-export-repo" class="btn btn-secondary btn-sm" title="Download repository snapshot">💾 Export</button>
+        <button id="btn-import-repo" class="btn btn-primary btn-sm" title="Import repository snapshot (.json, .fossil, .cdb)">📥 Import</button>
+        <input type="file" id="file-import-input" accept=".fossil,.cdb,.json" style="display:none;">
         <button id="theme-toggle-btn" class="btn btn-icon" title="Toggle Theme">🌙</button>
         <a href="/" class="btn btn-secondary btn-sm" title="Go to Server UI">🖥️ Server UI</a>
       </div>
@@ -1177,6 +1181,52 @@ proc processTask(id: int): string =
           <button type="submit" class="btn btn-primary">Save Ticket</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Import Repository & Conflict Resolution -->
+  <div id="modal-import-confirm" class="modal hidden">
+    <div class="modal-content" style="max-width:540px;">
+      <div class="modal-header">
+        <h2>📥 Import Repository</h2>
+        <button class="btn btn-icon" id="btn-import-cancel">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="import-file-details" class="card" style="margin-bottom:1rem; padding:0.75rem; background:var(--color-bg-code);">
+          <div style="font-weight:600; font-size:0.95rem;" id="import-filename-label">filename.json</div>
+          <div style="font-size:0.85rem; color:var(--color-text-muted);" id="import-meta-label">Detected bundle</div>
+        </div>
+
+        <p style="font-size:0.9rem; margin-bottom:1rem;">
+          Your current repository already contains data. How would you like to handle the imported content?
+        </p>
+
+        <div style="display:flex; flex-direction:column; gap:0.75rem;">
+          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1.5px solid var(--color-border); border-radius:8px; cursor:pointer;">
+            <input type="radio" name="import-mode-choice" value="merge" checked style="margin-top:0.25rem;">
+            <div>
+              <div style="font-weight:600; font-size:0.92rem;">🔄 Merge / Continue Project (Слияние / Дополнить)</div>
+              <div style="font-size:0.82rem; color:var(--color-text-muted);">
+                Preserves all existing check-ins and data. Appends new commits, updates modified files, and merges wiki & tickets without loss.
+              </div>
+            </div>
+          </label>
+
+          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1.5px solid var(--color-border); border-radius:8px; cursor:pointer;">
+            <input type="radio" name="import-mode-choice" value="replace" style="margin-top:0.25rem;">
+            <div>
+              <div style="font-weight:600; font-size:0.92rem; color:var(--color-danger);">⚠️ Clean Overwrite (Заменить полностью)</div>
+              <div style="font-size:0.82rem; color:var(--color-text-muted);">
+                Wipes existing files, commits, wiki, and tickets in current storage, replacing everything with the imported snapshot.
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-import-abort">Cancel</button>
+        <button class="btn btn-primary" id="btn-import-confirm-execute">Proceed with Import</button>
+      </div>
     </div>
   </div>
 
@@ -6719,6 +6769,8 @@ if (typeof globalThis !== 'undefined') {
 }
 
 
+</script>
+  <script>
 /**
  * Fossil-Nim Browser Storage Engine
  * Supports 3 Multi-Database Backends:
@@ -6837,6 +6889,82 @@ class IndexedDbStorage {
       req.onerror = () => resolve(0);
     });
   }
+
+  async clearAll() {
+    return new Promise((resolve) => {
+      const stores = ["files", "events", "wiki", "tickets", "artifacts", "meta"];
+      const tx = this.db.transaction(stores, "readwrite");
+      for (const s of stores) {
+        tx.objectStore(s).clear();
+      }
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  }
+
+  async importBundle(bundle, mode = "merge") {
+    return new Promise((resolve, reject) => {
+      const stores = ["files", "events", "wiki", "tickets", "meta"];
+      const tx = this.db.transaction(stores, "readwrite");
+
+      if (mode === "replace") {
+        for (const s of stores) {
+          tx.objectStore(s).clear();
+        }
+      }
+
+      let countFiles = 0, countEvents = 0, countWiki = 0, countTickets = 0;
+
+      if (Array.isArray(bundle.events)) {
+        const eventStore = tx.objectStore("events");
+        for (const ev of bundle.events) {
+          eventStore.put(ev);
+          countEvents++;
+        }
+      }
+
+      if (Array.isArray(bundle.files)) {
+        const fileStore = tx.objectStore("files");
+        for (const f of bundle.files) {
+          fileStore.put(f);
+          countFiles++;
+        }
+      }
+
+      if (Array.isArray(bundle.wiki)) {
+        const wikiStore = tx.objectStore("wiki");
+        for (const w of bundle.wiki) {
+          wikiStore.put(w);
+          countWiki++;
+        }
+      } else if (bundle.wiki && typeof bundle.wiki === "object") {
+        const wikiStore = tx.objectStore("wiki");
+        for (const [name, text] of Object.entries(bundle.wiki)) {
+          wikiStore.put({ name, text: typeof text === "string" ? text : (text.text || ""), author: "imported", mtime: Date.now() });
+          countWiki++;
+        }
+      }
+
+      if (Array.isArray(bundle.tickets)) {
+        const tktStore = tx.objectStore("tickets");
+        for (const t of bundle.tickets) {
+          tktStore.put(t);
+          countTickets++;
+        }
+      }
+
+      tx.oncomplete = () => {
+        resolve({
+          mode,
+          importedFiles: countFiles,
+          importedEvents: countEvents,
+          importedWiki: countWiki,
+          importedTickets: countTickets
+        });
+      };
+      tx.onerror = () => reject(tx.error);
+    });
+  }
 }
 
 // =========================================================================
@@ -6925,6 +7053,89 @@ class SqliteWasmStorage {
     if (!this.db) return new Uint8Array();
     return this.db.export();
   }
+
+  importBinary(uint8Array, mode = "merge") {
+    if (!this.db || mode === "replace") {
+      this.db = new this.sqlModule.Database(uint8Array);
+      return { mode: "replace", success: true };
+    }
+    try {
+      const incomingDb = new this.sqlModule.Database(uint8Array);
+      this.db.run("BEGIN TRANSACTION;");
+
+      const events = incomingDb.exec("SELECT * FROM event");
+      if (events.length > 0 && events[0].values) {
+        const cols = events[0].columns;
+        for (const row of events[0].values) {
+          const obj = {};
+          cols.forEach((c, idx) => obj[c] = row[idx]);
+          this.db.run("INSERT OR IGNORE INTO event(objid, type, mtime, user, comment, branch) VALUES(?, ?, ?, ?, ?, ?)",
+            [obj.objid, obj.type, obj.mtime, obj.user, obj.comment, obj.branch || "trunk"]);
+        }
+      }
+
+      const wiki = incomingDb.exec("SELECT * FROM wiki");
+      if (wiki.length > 0 && wiki[0].values) {
+        const cols = wiki[0].columns;
+        for (const row of wiki[0].values) {
+          const obj = {};
+          cols.forEach((c, idx) => obj[c] = row[idx]);
+          this.db.run("INSERT OR REPLACE INTO wiki(name, text, author, mtime) VALUES(?, ?, ?, ?)",
+            [obj.name, obj.text, obj.author, obj.mtime]);
+        }
+      }
+
+      const fn = incomingDb.exec("SELECT * FROM filename");
+      if (fn.length > 0 && fn[0].values) {
+        for (const row of fn[0].values) {
+          this.db.run("INSERT OR IGNORE INTO filename(fnid, name) VALUES(?, ?)", [row[0], row[1]]);
+        }
+      }
+
+      this.db.run("COMMIT;");
+      incomingDb.close();
+      return { mode: "merge", success: true };
+    } catch (e) {
+      try { this.db.run("ROLLBACK;"); } catch (_) {}
+      console.error("Merge error in SQLite WASM:", e);
+      throw e;
+    }
+  }
+
+  importBundle(bundle, mode = "merge") {
+    if (!this.db) return { success: false };
+    if (mode === "replace") {
+      this.db.run("DELETE FROM event; DELETE FROM wiki; DELETE FROM filename; DELETE FROM ticket; DELETE FROM blob;");
+    }
+    this.db.run("BEGIN TRANSACTION;");
+    let countEvents = 0, countWiki = 0, countFiles = 0;
+
+    if (Array.isArray(bundle.events)) {
+      for (const ev of bundle.events) {
+        this.db.run("INSERT OR IGNORE INTO event(type, mtime, user, comment, branch) VALUES(?, ?, ?, ?, ?)",
+          [ev.type || "ci", (ev.mtime > 10000000000 ? ev.mtime / 1000 : ev.mtime) || Date.now() / 1000, ev.user || "admin", ev.comment || "", ev.branch || "trunk"]);
+        countEvents++;
+      }
+    }
+
+    if (Array.isArray(bundle.wiki)) {
+      for (const w of bundle.wiki) {
+        this.db.run("INSERT OR REPLACE INTO wiki(name, text, author, mtime) VALUES(?, ?, ?, ?)",
+          [w.name, w.text, w.author || "imported", Date.now() / 1000]);
+        countWiki++;
+      }
+    }
+
+    if (Array.isArray(bundle.files)) {
+      for (const f of bundle.files) {
+        this.db.run("INSERT OR IGNORE INTO filename(name) VALUES(?)", [f.path]);
+        countFiles++;
+      }
+    }
+
+    this.db.run("COMMIT;");
+    return { mode, success: true, countEvents, countWiki, countFiles };
+  }
 }
 
 // =========================================================================
@@ -6972,6 +7183,33 @@ class CdbMemoryStorage {
     if (!this.handle || !window.FossilCore) return "";
     return window.FossilCore.cdbSerialize(this.handle);
   }
+
+  importCdb(cdbString, mode = "merge") {
+    if (!window.FossilCore) return { success: false };
+    this.handle = window.FossilCore.cdbLoad(cdbString);
+    return { mode: "replace", success: true };
+  }
+
+  importBundle(bundle, mode = "merge") {
+    if (!window.FossilCore) return { success: false };
+    if (mode === "replace" || !this.handle) {
+      this.handle = window.FossilCore.cdbCreate();
+    }
+    let countFiles = 0, countWiki = 0;
+    if (Array.isArray(bundle.files)) {
+      for (const f of bundle.files) {
+        window.FossilCore.cdbPut(this.handle, "file:" + f.path, f.content || "");
+        countFiles++;
+      }
+    }
+    if (Array.isArray(bundle.wiki)) {
+      for (const w of bundle.wiki) {
+        window.FossilCore.cdbPut(this.handle, "wiki:" + w.name, w.text || "");
+        countWiki++;
+      }
+    }
+    return { mode, success: true, countFiles, countWiki };
+  }
 }
 
 // Global Storage Manager instance
@@ -7000,9 +7238,100 @@ window.FossilStorageManager = {
       await this.cdb.init(data);
     }
     return this.getActiveBackend();
+  },
+
+  async hasExistingData() {
+    if (this.backendType === "indexeddb") {
+      const fc = await this.indexedDB.count("files");
+      const ec = await this.indexedDB.count("events");
+      return (fc > 0 || ec > 0);
+    } else if (this.backendType === "sqlite_wasm") {
+      if (!this.sqliteWasm.db) return false;
+      const rows = this.sqliteWasm.exec("SELECT count(*) as c FROM event;");
+      return rows.length > 0 && rows[0].c > 0;
+    } else if (this.backendType === "cdb") {
+      return !!this.cdb.handle;
+    }
+    return false;
+  },
+
+  async importRepo(data, filename, mode = "merge") {
+    const isFossilBinary = filename.endsWith(".fossil") || (data instanceof Uint8Array && String.fromCharCode(...data.slice(0, 15)).includes("SQLite format 3"));
+    const isCdb = filename.endsWith(".cdb");
+
+    if (isFossilBinary) {
+      if (this.backendType !== "sqlite_wasm") {
+        await this.switchBackend("sqlite_wasm");
+      }
+      return this.sqliteWasm.importBinary(data instanceof Uint8Array ? data : new Uint8Array(data), mode);
+    } else if (isCdb) {
+      if (this.backendType !== "cdb") {
+        await this.switchBackend("cdb");
+      }
+      return this.cdb.importCdb(typeof data === "string" ? data : new TextDecoder().decode(data), mode);
+    } else {
+      let bundle;
+      if (typeof data === "string") {
+        bundle = JSON.parse(data);
+      } else if (data instanceof Uint8Array) {
+        bundle = JSON.parse(new TextDecoder().decode(data));
+      } else {
+        bundle = data;
+      }
+
+      if (this.backendType === "indexeddb") {
+        return await this.indexedDB.importBundle(bundle, mode);
+      } else if (this.backendType === "sqlite_wasm") {
+        return this.sqliteWasm.importBundle(bundle, mode);
+      } else if (this.backendType === "cdb") {
+        return this.cdb.importBundle(bundle, mode);
+      }
+    }
+  },
+
+  async exportRepo() {
+    if (this.backendType === 'sqlite_wasm') {
+      const bin = this.sqliteWasm.exportBinary();
+      return {
+        type: 'binary',
+        filename: 'repository.fossil',
+        mimeType: 'application/x-sqlite3',
+        data: bin
+      };
+    } else if (this.backendType === 'cdb') {
+      const ser = this.cdb.serialize();
+      return {
+        type: 'text',
+        filename: 'repository.cdb',
+        mimeType: 'text/plain',
+        data: ser
+      };
+    } else {
+      const files = await this.indexedDB.getAll('files');
+      const events = await this.indexedDB.getAll('events');
+      const wiki = await this.indexedDB.getAll('wiki');
+      const tickets = await this.indexedDB.getAll('tickets');
+      const bundle = {
+        format: 'fossil-nim-bundle',
+        version: '1.0',
+        files,
+        events,
+        wiki,
+        tickets,
+        exportedAt: new Date().toISOString()
+      };
+      return {
+        type: 'json',
+        filename: 'fossil_backup.json',
+        mimeType: 'application/json',
+        data: bundle
+      };
+    }
   }
 };
 
+</script>
+  <script>
 /**
  * Fossil-Nim Browser MCP (Model Context Protocol) Server
  * Exposes 89 tools directly to In-Browser AI Agents (Gemini, Claude, ChatGPT, WebLLM)
@@ -7037,6 +7366,7 @@ const MCP_TOOLS_LIST = [
   { name: "storage_stats", description: "Get current storage backend statistics (IndexedDB, SQLite WASM, CDB)" },
   { name: "storage_switch_backend", description: "Switch active storage engine: 'indexeddb' | 'sqlite_wasm' | 'cdb'", parameters: { backend: "string" } },
   { name: "storage_export_file", description: "Export entire repository as downloadable .fossil (SQLite) or .cdb binary" },
+  { name: "storage_import_file", description: "Import repository data (.fossil, .cdb, or JSON bundle) with mode: 'merge' | 'replace'", parameters: { data: "string", format: "string", mode: "string" } },
   { name: "sql_query", description: "Execute SQL query on SQLite WASM database", parameters: { query: "string" } }
 ];
 
@@ -7248,6 +7578,26 @@ class BrowserMcpServer {
           return { success: true, currentBackend: mgr.backendType };
         }
 
+        case "storage_export_file": {
+          const exportData = await mgr.exportRepo();
+          return {
+            success: true,
+            backend: mgr.backendType,
+            filename: exportData.filename,
+            type: exportData.type,
+            data: exportData.data
+          };
+        }
+
+        case "storage_import_file": {
+          const mode = params.mode || "merge";
+          const format = params.format || "json";
+          const data = params.data;
+          if (!data) throw new Error("data parameter is required");
+          const res = await mgr.importRepo(data, "import." + format, mode);
+          return { success: true, mode, result: res };
+        }
+
         case "sql_query": {
           if (mgr.backendType !== "sqlite_wasm") {
             return { error: "sql_query only supported when SQLite WASM backend is active" };
@@ -7270,6 +7620,8 @@ window.BrowserMcpServer = BrowserMcpServer;
 window.fossilMcp = new BrowserMcpServer();
 console.log("🤖 In-Browser MCP Server initialized with 89 tools on window.fossilMcp!");
 
+</script>
+  <script>
 /**
  * Fossil-Nim Browser UI Controller
  * Powers the interactive in-browser VCS workspace with:
@@ -8022,39 +8374,108 @@ Key tools:
       if (exportBtn) {
         exportBtn.addEventListener('click', async () => {
           const mgr = window.FossilStorageManager;
-          if (mgr.backendType === 'sqlite_wasm') {
-            const bin = mgr.sqliteWasm.exportBinary();
-            const blob = new Blob([bin], { type: 'application/x-sqlite3' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'repository.fossil';
-            a.click();
-            URL.revokeObjectURL(url);
-          } else if (mgr.backendType === 'cdb') {
-            const ser = mgr.cdb.serialize();
-            const blob = new Blob([ser], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'repository.cdb';
-            a.click();
-            URL.revokeObjectURL(url);
+          const exp = await mgr.exportRepo();
+          let blob;
+          if (exp.type === 'binary') {
+            blob = new Blob([exp.data], { type: exp.mimeType });
+          } else if (exp.type === 'json') {
+            blob = new Blob([JSON.stringify(exp.data, null, 2)], { type: exp.mimeType });
           } else {
-            // IndexedDB JSON export
-            const files = await mgr.indexedDB.getAll('files');
-            const events = await mgr.indexedDB.getAll('events');
-            const wiki = await mgr.indexedDB.getAll('wiki');
-            const tickets = await mgr.indexedDB.getAll('tickets');
-            const exportData = { files, events, wiki, tickets, exportedAt: new Date().toISOString() };
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'fossil_backup.json';
-            a.click();
-            URL.revokeObjectURL(url);
+            blob = new Blob([exp.data], { type: exp.mimeType });
           }
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = exp.filename;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+      }
+
+      // Repository Import Handling
+      const importBtn = $('btn-import-repo');
+      const fileInput = $('file-import-input');
+      const importModal = $('modal-import-confirm');
+      const importCancelBtn = $('btn-import-cancel');
+      const importAbortBtn = $('btn-import-abort');
+      const importConfirmBtn = $('btn-import-confirm-execute');
+      let pendingImportFile = null;
+      let pendingImportData = null;
+
+      const closeImportModal = () => {
+        if (importModal) importModal.classList.add('hidden');
+        pendingImportFile = null;
+        pendingImportData = null;
+      };
+
+      const executeImport = async (chosenMode) => {
+        if (!pendingImportData || !pendingImportFile) return;
+        $('loading-indicator').classList.remove('hidden');
+        try {
+          const t0 = performance.now();
+          const mgr = window.FossilStorageManager;
+          const res = await mgr.importRepo(pendingImportData, pendingImportFile.name, chosenMode);
+          const t1 = performance.now();
+          const elapsed = (t1 - t0).toFixed(1);
+          closeImportModal();
+          await this.refreshAll();
+          alert(`Successfully imported ${pendingImportFile.name} in ${chosenMode} mode (${elapsed}ms)!`);
+        } catch (err) {
+          alert('Import failed: ' + err.message);
+        } finally {
+          $('loading-indicator').classList.add('hidden');
+        }
+      };
+
+      if (importBtn && fileInput) {
+        importBtn.addEventListener('click', () => {
+          fileInput.value = '';
+          fileInput.click();
+        });
+      }
+
+      if (fileInput) {
+        fileInput.addEventListener('change', async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          const isBinary = file.name.endsWith('.fossil');
+
+          reader.onload = async (ev) => {
+            pendingImportFile = file;
+            pendingImportData = isBinary ? new Uint8Array(ev.target.result) : ev.target.result;
+
+            const mgr = window.FossilStorageManager;
+            const hasData = await mgr.hasExistingData();
+
+            if (hasData && importModal) {
+              const nameLabel = $('import-filename-label');
+              const metaLabel = $('import-meta-label');
+              if (nameLabel) nameLabel.innerText = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+              if (metaLabel) metaLabel.innerText = isBinary ? 'Binary SQLite (.fossil) repository database' : (file.name.endsWith('.cdb') ? 'Pure-Nim Constant DB (.cdb)' : 'Fossil-Nim JSON Repository Bundle');
+              importModal.classList.remove('hidden');
+            } else {
+              await executeImport('replace');
+            }
+          };
+
+          if (isBinary) {
+            reader.readAsArrayBuffer(file);
+          } else {
+            reader.readAsText(file);
+          }
+        });
+      }
+
+      if (importCancelBtn) importCancelBtn.addEventListener('click', closeImportModal);
+      if (importAbortBtn) importAbortBtn.addEventListener('click', closeImportModal);
+
+      if (importConfirmBtn) {
+        importConfirmBtn.addEventListener('click', async () => {
+          const modeRadio = document.querySelector('input[name="import-mode-choice"]:checked');
+          const chosenMode = modeRadio ? modeRadio.value : 'merge';
+          await executeImport(chosenMode);
         });
       }
 

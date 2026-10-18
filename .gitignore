@@ -22,3 +22,4 @@ tests/test_*
 tests/fuzz_*
 !tests/*.nim
 !tests/*.py
+!tests/*.js

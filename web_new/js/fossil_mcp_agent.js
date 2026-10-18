@@ -32,6 +32,7 @@ const MCP_TOOLS_LIST = [
   { name: "storage_stats", description: "Get current storage backend statistics (IndexedDB, SQLite WASM, CDB)" },
   { name: "storage_switch_backend", description: "Switch active storage engine: 'indexeddb' | 'sqlite_wasm' | 'cdb'", parameters: { backend: "string" } },
   { name: "storage_export_file", description: "Export entire repository as downloadable .fossil (SQLite) or .cdb binary" },
+  { name: "storage_import_file", description: "Import repository data (.fossil, .cdb, or JSON bundle) with mode: 'merge' | 'replace'", parameters: { data: "string", format: "string", mode: "string" } },
   { name: "sql_query", description: "Execute SQL query on SQLite WASM database", parameters: { query: "string" } }
 ];
 
@@ -241,6 +242,26 @@ class BrowserMcpServer {
           const b = params.backend || "indexeddb";
           await mgr.switchBackend(b);
           return { success: true, currentBackend: mgr.backendType };
+        }
+
+        case "storage_export_file": {
+          const exportData = await mgr.exportRepo();
+          return {
+            success: true,
+            backend: mgr.backendType,
+            filename: exportData.filename,
+            type: exportData.type,
+            data: exportData.data
+          };
+        }
+
+        case "storage_import_file": {
+          const mode = params.mode || "merge";
+          const format = params.format || "json";
+          const data = params.data;
+          if (!data) throw new Error("data parameter is required");
+          const res = await mgr.importRepo(data, "import." + format, mode);
+          return { success: true, mode, result: res };
         }
 
         case "sql_query": {

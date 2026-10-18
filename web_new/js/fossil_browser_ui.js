@@ -750,39 +750,108 @@ Key tools:
       if (exportBtn) {
         exportBtn.addEventListener('click', async () => {
           const mgr = window.FossilStorageManager;
-          if (mgr.backendType === 'sqlite_wasm') {
-            const bin = mgr.sqliteWasm.exportBinary();
-            const blob = new Blob([bin], { type: 'application/x-sqlite3' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'repository.fossil';
-            a.click();
-            URL.revokeObjectURL(url);
-          } else if (mgr.backendType === 'cdb') {
-            const ser = mgr.cdb.serialize();
-            const blob = new Blob([ser], { type: 'text/plain' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'repository.cdb';
-            a.click();
-            URL.revokeObjectURL(url);
+          const exp = await mgr.exportRepo();
+          let blob;
+          if (exp.type === 'binary') {
+            blob = new Blob([exp.data], { type: exp.mimeType });
+          } else if (exp.type === 'json') {
+            blob = new Blob([JSON.stringify(exp.data, null, 2)], { type: exp.mimeType });
           } else {
-            // IndexedDB JSON export
-            const files = await mgr.indexedDB.getAll('files');
-            const events = await mgr.indexedDB.getAll('events');
-            const wiki = await mgr.indexedDB.getAll('wiki');
-            const tickets = await mgr.indexedDB.getAll('tickets');
-            const exportData = { files, events, wiki, tickets, exportedAt: new Date().toISOString() };
-            const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'fossil_backup.json';
-            a.click();
-            URL.revokeObjectURL(url);
+            blob = new Blob([exp.data], { type: exp.mimeType });
           }
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = exp.filename;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+      }
+
+      // Repository Import Handling
+      const importBtn = $('btn-import-repo');
+      const fileInput = $('file-import-input');
+      const importModal = $('modal-import-confirm');
+      const importCancelBtn = $('btn-import-cancel');
+      const importAbortBtn = $('btn-import-abort');
+      const importConfirmBtn = $('btn-import-confirm-execute');
+      let pendingImportFile = null;
+      let pendingImportData = null;
+
+      const closeImportModal = () => {
+        if (importModal) importModal.classList.add('hidden');
+        pendingImportFile = null;
+        pendingImportData = null;
+      };
+
+      const executeImport = async (chosenMode) => {
+        if (!pendingImportData || !pendingImportFile) return;
+        $('loading-indicator').classList.remove('hidden');
+        try {
+          const t0 = performance.now();
+          const mgr = window.FossilStorageManager;
+          const res = await mgr.importRepo(pendingImportData, pendingImportFile.name, chosenMode);
+          const t1 = performance.now();
+          const elapsed = (t1 - t0).toFixed(1);
+          closeImportModal();
+          await this.refreshAll();
+          alert(`Successfully imported ${pendingImportFile.name} in ${chosenMode} mode (${elapsed}ms)!`);
+        } catch (err) {
+          alert('Import failed: ' + err.message);
+        } finally {
+          $('loading-indicator').classList.add('hidden');
+        }
+      };
+
+      if (importBtn && fileInput) {
+        importBtn.addEventListener('click', () => {
+          fileInput.value = '';
+          fileInput.click();
+        });
+      }
+
+      if (fileInput) {
+        fileInput.addEventListener('change', async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          const isBinary = file.name.endsWith('.fossil');
+
+          reader.onload = async (ev) => {
+            pendingImportFile = file;
+            pendingImportData = isBinary ? new Uint8Array(ev.target.result) : ev.target.result;
+
+            const mgr = window.FossilStorageManager;
+            const hasData = await mgr.hasExistingData();
+
+            if (hasData && importModal) {
+              const nameLabel = $('import-filename-label');
+              const metaLabel = $('import-meta-label');
+              if (nameLabel) nameLabel.innerText = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+              if (metaLabel) metaLabel.innerText = isBinary ? 'Binary SQLite (.fossil) repository database' : (file.name.endsWith('.cdb') ? 'Pure-Nim Constant DB (.cdb)' : 'Fossil-Nim JSON Repository Bundle');
+              importModal.classList.remove('hidden');
+            } else {
+              await executeImport('replace');
+            }
+          };
+
+          if (isBinary) {
+            reader.readAsArrayBuffer(file);
+          } else {
+            reader.readAsText(file);
+          }
+        });
+      }
+
+      if (importCancelBtn) importCancelBtn.addEventListener('click', closeImportModal);
+      if (importAbortBtn) importAbortBtn.addEventListener('click', closeImportModal);
+
+      if (importConfirmBtn) {
+        importConfirmBtn.addEventListener('click', async () => {
+          const modeRadio = document.querySelector('input[name="import-mode-choice"]:checked');
+          const chosenMode = modeRadio ? modeRadio.value : 'merge';
+          await executeImport(chosenMode);
         });
       }
 

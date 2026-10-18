@@ -29,6 +29,30 @@ import ../vcs/blame as blameMod
 import ../vcs/archive as archiveMod
 import std/[json, tables, strutils, options, asynchttpserver, asyncdispatch, os, times, sequtils, uri]
 
+{.push header: "<sqlite3.h>".}
+type sqlite3_stmt {.importc: "sqlite3_stmt", incompleteStruct.} = object
+proc sqlite3_prepare_v2(db: pointer, zSql: cstring, nByte: cint, ppStmt: ptr ptr sqlite3_stmt, pzTail: pointer): cint {.importc.}
+proc sqlite3_finalize(pStmt: ptr sqlite3_stmt): cint {.importc.}
+proc sqlite3_step(pStmt: ptr sqlite3_stmt): cint {.importc.}
+proc sqlite3_reset(pStmt: ptr sqlite3_stmt): cint {.importc.}
+proc sqlite3_bind_text(pStmt: ptr sqlite3_stmt, i: cint, zData: cstring, n: cint, xDel: pointer): cint {.importc.}
+proc sqlite3_bind_double(pStmt: ptr sqlite3_stmt, i: cint, val: cdouble): cint {.importc.}
+proc sqlite3_column_int(pStmt: ptr sqlite3_stmt, iCol: cint): cint {.importc.}
+proc sqlite3_column_int64(pStmt: ptr sqlite3_stmt, iCol: cint): int64 {.importc.}
+proc sqlite3_column_double(pStmt: ptr sqlite3_stmt, iCol: cint): cdouble {.importc.}
+proc sqlite3_column_text(pStmt: ptr sqlite3_stmt, iCol: cint): cstring {.importc.}
+proc sqlite3_exec(db: pointer, sql: cstring, cb: pointer, arg: pointer, errmsg: ptr cstring): cint {.importc.}
+{.pop.}
+const
+  SQLITE_OK* = 0
+  SQLITE_ROW* = 100
+  SQLITE_DONE* = 101
+  SQLITE_OK_CONST = 0
+  SQLITE_ROW_CONST = 100
+  SQLITE_DONE_CONST = 101
+  SQLITE_TRANSIENT* = cast[pointer](-1)
+  SQLITE_TRANSIENT_VAL = cast[pointer](-1)
+
 type
   ApiRoute* = object
     meth*: string
@@ -313,24 +337,12 @@ proc handleFile*(req: Request, params: Table[string, string]): Future[JsonNode] 
     return jsonError("cannot open repo")
   defer: db.close()
   # Try to get file by rid or by latest manifest
-  # For MVP, try to find file in vfile or get latest blob for path via filename table
-  {.push header: "<sqlite3.h>".}
-  type sqlite3_stmt {.importc: "sqlite3_stmt", incompleteStruct.} = object
-  proc sqlite3_prepare_v2(db: pointer, zSql: cstring, nByte: cint, ppStmt: ptr ptr sqlite3_stmt, pzTail: pointer): cint {.importc.}
-  proc sqlite3_finalize(pStmt: ptr sqlite3_stmt): cint {.importc.}
-  proc sqlite3_step(pStmt: ptr sqlite3_stmt): cint {.importc.}
-  proc sqlite3_column_int64(pStmt: ptr sqlite3_stmt, iCol: cint): int64 {.importc.}
-  {.pop.}
-  const SQLITE_ROW = 100
   let sql = "SELECT rid FROM mlink JOIN filename ON mlink.fnid=filename.fnid WHERE filename.name=?1 ORDER BY mid DESC LIMIT 1"
   var stmt: ptr sqlite3_stmt
   if sqlite3_prepare_v2(db.db, sql.cstring, -1, addr stmt, nil) == 0:
     defer: discard sqlite3_finalize(stmt)
-    {.push header: "<sqlite3.h>".}
-    proc sqlite3_bind_text(pStmt: ptr sqlite3_stmt, i: cint, zData: cstring, n: cint, xDel: pointer): cint {.importc.}
-    {.pop.}
-    discard sqlite3_bind_text(stmt, 1, path.cstring, -1, nil)
-    if sqlite3_step(stmt) == SQLITE_ROW:
+    discard sqlite3_bind_text(stmt, 1, path.cstring, -1, SQLITE_TRANSIENT_VAL)
+    if sqlite3_step(stmt) == SQLITE_ROW_CONST:
       let rid = sqlite3_column_int64(stmt, 0)
       let blobRes = db.getBlob(Rid(rid))
       if blobRes.isOk:
@@ -1971,6 +1983,211 @@ proc handleMcpDiscovery*(req: Request, params: Table[string, string]): Future[Js
     "security": {"originValidation": true, "readOnly": "SQLITE_OPEN_READONLY", "pathTraversal": "normalizedPath blocked"}
   })
 
+proc handleRepoExport*(req: Request, params: Table[string, string]): Future[JsonNode] {.async, gcsafe.} =
+  let cfg = loadConfigFromEnv()
+  let repoPath = resolveRepoPathApi(cfg)
+  if repoPath=="" or not fileExists(repoPath):
+    return jsonError("repo not found", 404)
+  var db = SqliteBackend()
+  if db.open(repoPath).isErr:
+    return jsonError("cannot open repo")
+  defer: db.close()
+
+  var events = newJArray()
+  var stmt: ptr sqlite3_stmt
+  if sqlite3_prepare_v2(db.db, "SELECT objid, type, mtime, user, comment, branch FROM event ORDER BY mtime DESC LIMIT 500", -1, addr stmt, nil) == SQLITE_OK:
+    while sqlite3_step(stmt) == SQLITE_ROW:
+      events.add(%*{
+        "objid": sqlite3_column_int(stmt, 0),
+        "type": $sqlite3_column_text(stmt, 1),
+        "mtime": sqlite3_column_double(stmt, 2),
+        "user": $sqlite3_column_text(stmt, 3),
+        "comment": $sqlite3_column_text(stmt, 4),
+        "branch": $sqlite3_column_text(stmt, 5)
+      })
+    discard sqlite3_finalize(stmt)
+
+  var files = newJArray()
+  if sqlite3_prepare_v2(db.db, "SELECT fnid, name FROM filename LIMIT 500", -1, addr stmt, nil) == SQLITE_OK:
+    while sqlite3_step(stmt) == SQLITE_ROW:
+      files.add(%*{
+        "fnid": sqlite3_column_int(stmt, 0),
+        "path": $sqlite3_column_text(stmt, 1)
+      })
+    discard sqlite3_finalize(stmt)
+
+  var wiki = newJArray()
+  var wikiTable = initTable[string, JsonNode]()
+  if sqlite3_prepare_v2(db.db, "SELECT title, content, mtime FROM search_index WHERE kind='wiki' LIMIT 200", -1, addr stmt, nil) == SQLITE_OK:
+    while sqlite3_step(stmt) == SQLITE_ROW:
+      let name = $sqlite3_column_text(stmt, 0)
+      wikiTable[name] = %*{
+        "name": name,
+        "text": $sqlite3_column_text(stmt, 1),
+        "author": "admin",
+        "mtime": sqlite3_column_double(stmt, 2)
+      }
+    discard sqlite3_finalize(stmt)
+
+  discard sqlite3_exec(db.db, "CREATE TABLE IF NOT EXISTS wiki(name TEXT PRIMARY KEY, text TEXT, author TEXT, mtime REAL);".cstring, nil, nil, nil)
+  if sqlite3_prepare_v2(db.db, "SELECT name, text, author, mtime FROM wiki LIMIT 200", -1, addr stmt, nil) == SQLITE_OK:
+    while sqlite3_step(stmt) == SQLITE_ROW:
+      let name = $sqlite3_column_text(stmt, 0)
+      wikiTable[name] = %*{
+        "name": name,
+        "text": $sqlite3_column_text(stmt, 1),
+        "author": $sqlite3_column_text(stmt, 2),
+        "mtime": sqlite3_column_double(stmt, 3)
+      }
+    discard sqlite3_finalize(stmt)
+
+  for _, wNode in wikiTable:
+    wiki.add(wNode)
+
+  var tickets = newJArray()
+  if sqlite3_prepare_v2(db.db, "SELECT tkt_uuid, tkt_title, tkt_desc, tkt_status, tkt_priority FROM ticket LIMIT 200", -1, addr stmt, nil) == SQLITE_OK:
+    while sqlite3_step(stmt) == SQLITE_ROW:
+      tickets.add(%*{
+        "id": $sqlite3_column_text(stmt, 0),
+        "title": $sqlite3_column_text(stmt, 1),
+        "desc": $sqlite3_column_text(stmt, 2),
+        "status": $sqlite3_column_text(stmt, 3),
+        "priority": $sqlite3_column_text(stmt, 4)
+      })
+    discard sqlite3_finalize(stmt)
+
+  return jsonOk(%*{
+    "format": "fossil-nim-bundle",
+    "version": "1.0",
+    "events": events,
+    "files": files,
+    "wiki": wiki,
+    "tickets": tickets
+  })
+
+proc handleRepoImport*(req: Request, params: Table[string, string]): Future[JsonNode] {.async, gcsafe.} =
+  let cfg = loadConfigFromEnv()
+  let repoPath = resolveRepoPathApi(cfg)
+  if repoPath=="" or not fileExists(repoPath):
+    return jsonError("repo not found", 404)
+  var db = SqliteBackend()
+  if db.open(repoPath).isErr:
+    return jsonError("cannot open repo")
+  defer: db.close()
+
+  var bodyJson: JsonNode
+  try:
+    bodyJson = parseJson(req.body)
+  except:
+    return jsonError("Invalid JSON payload", 400)
+
+  let mode = if bodyJson.hasKey("mode") and bodyJson["mode"].getStr() == "replace": "replace" else: "merge"
+
+  discard sqlite3_exec(db.db, "BEGIN IMMEDIATE TRANSACTION;".cstring, nil, nil, nil)
+  var importedEvents = 0
+  var importedFiles = 0
+  var importedWiki = 0
+  var importedTickets = 0
+
+  if mode == "replace":
+    discard sqlite3_exec(db.db, "DELETE FROM event; DELETE FROM ticket; DELETE FROM filename;".cstring, nil, nil, nil)
+    discard sqlite3_exec(db.db, "CREATE TABLE IF NOT EXISTS wiki(name TEXT PRIMARY KEY, text TEXT, author TEXT, mtime REAL); DELETE FROM wiki;".cstring, nil, nil, nil)
+    discard sqlite3_exec(db.db, "DELETE FROM search_index WHERE kind='wiki';".cstring, nil, nil, nil)
+
+  if bodyJson.hasKey("events") and bodyJson["events"].kind == JArray:
+    var stmt: ptr sqlite3_stmt
+    if sqlite3_prepare_v2(db.db, "INSERT OR IGNORE INTO event(type, mtime, user, comment, branch) VALUES(?1, ?2, ?3, ?4, ?5)", -1, addr stmt, nil) == SQLITE_OK:
+      for ev in bodyJson["events"]:
+        let evType = if ev.hasKey("type"): ev["type"].getStr("ci") else: "ci"
+        let mtime = if ev.hasKey("mtime"): ev["mtime"].getFloat(epochTime()) else: epochTime()
+        let user = if ev.hasKey("user"): ev["user"].getStr("admin") else: "admin"
+        let comment = if ev.hasKey("comment"): ev["comment"].getStr("") else: ""
+        let branch = if ev.hasKey("branch"): ev["branch"].getStr("trunk") else: "trunk"
+        discard sqlite3_bind_text(stmt, 1, evType.cstring, -1, SQLITE_TRANSIENT)
+        discard sqlite3_bind_double(stmt, 2, mtime)
+        discard sqlite3_bind_text(stmt, 3, user.cstring, -1, SQLITE_TRANSIENT)
+        discard sqlite3_bind_text(stmt, 4, comment.cstring, -1, SQLITE_TRANSIENT)
+        discard sqlite3_bind_text(stmt, 5, branch.cstring, -1, SQLITE_TRANSIENT)
+        if sqlite3_step(stmt) == SQLITE_DONE:
+          inc importedEvents
+        discard sqlite3_reset(stmt)
+      discard sqlite3_finalize(stmt)
+
+  if bodyJson.hasKey("files") and bodyJson["files"].kind == JArray:
+    var stmt: ptr sqlite3_stmt
+    if sqlite3_prepare_v2(db.db, "INSERT OR IGNORE INTO filename(name) VALUES(?1)", -1, addr stmt, nil) == SQLITE_OK:
+      for f in bodyJson["files"]:
+        let path = if f.hasKey("path"): f["path"].getStr() else: f.getStr()
+        if path.len > 0:
+          discard sqlite3_bind_text(stmt, 1, path.cstring, -1, SQLITE_TRANSIENT)
+          if sqlite3_step(stmt) == SQLITE_DONE:
+            inc importedFiles
+          discard sqlite3_reset(stmt)
+      discard sqlite3_finalize(stmt)
+
+  if bodyJson.hasKey("wiki") and bodyJson["wiki"].kind == JArray:
+    discard sqlite3_exec(db.db, "CREATE TABLE IF NOT EXISTS wiki(name TEXT PRIMARY KEY, text TEXT, author TEXT, mtime REAL);".cstring, nil, nil, nil)
+    var stmt: ptr sqlite3_stmt
+    if sqlite3_prepare_v2(db.db, "INSERT OR REPLACE INTO wiki(name, text, author, mtime) VALUES(?1, ?2, ?3, ?4)", -1, addr stmt, nil) == SQLITE_OK:
+      for w in bodyJson["wiki"]:
+        let name = if w.hasKey("name"): w["name"].getStr() else: ""
+        let text = if w.hasKey("text"): w["text"].getStr() else: ""
+        let author = if w.hasKey("author"): w["author"].getStr("imported") else: "imported"
+        let mtime = if w.hasKey("mtime"): w["mtime"].getFloat(epochTime()) else: epochTime()
+        if name.len > 0:
+          discard sqlite3_bind_text(stmt, 1, name.cstring, -1, SQLITE_TRANSIENT)
+          discard sqlite3_bind_text(stmt, 2, text.cstring, -1, SQLITE_TRANSIENT)
+          discard sqlite3_bind_text(stmt, 3, author.cstring, -1, SQLITE_TRANSIENT)
+          discard sqlite3_bind_double(stmt, 4, mtime)
+          if sqlite3_step(stmt) == SQLITE_DONE:
+            inc importedWiki
+          discard sqlite3_reset(stmt)
+      discard sqlite3_finalize(stmt)
+    # Also index in search_index
+    if sqlite3_prepare_v2(db.db, "INSERT OR REPLACE INTO search_index(id, kind, title, content, mtime) VALUES(?1, 'wiki', ?2, ?3, ?4)", -1, addr stmt, nil) == SQLITE_OK:
+      for w in bodyJson["wiki"]:
+        let name = if w.hasKey("name"): w["name"].getStr() else: ""
+        let text = if w.hasKey("text"): w["text"].getStr() else: ""
+        let mtime = if w.hasKey("mtime"): int64(w["mtime"].getFloat(epochTime())) else: int64(epochTime())
+        if name.len > 0:
+          let id = "wiki-" & name
+          discard sqlite3_bind_text(stmt, 1, id.cstring, -1, SQLITE_TRANSIENT)
+          discard sqlite3_bind_text(stmt, 2, name.cstring, -1, SQLITE_TRANSIENT)
+          discard sqlite3_bind_text(stmt, 3, text.cstring, -1, SQLITE_TRANSIENT)
+          discard sqlite3_bind_double(stmt, 4, cdouble(mtime))
+          discard sqlite3_step(stmt)
+          discard sqlite3_reset(stmt)
+      discard sqlite3_finalize(stmt)
+
+  if bodyJson.hasKey("tickets") and bodyJson["tickets"].kind == JArray:
+    var stmt: ptr sqlite3_stmt
+    if sqlite3_prepare_v2(db.db, "INSERT OR REPLACE INTO ticket(tkt_uuid, tkt_title, tkt_desc, tkt_status, tkt_priority) VALUES(?1, ?2, ?3, ?4, ?5)", -1, addr stmt, nil) == SQLITE_OK:
+      for t in bodyJson["tickets"]:
+        let id = if t.hasKey("id"): t["id"].getStr() else: "tkt-" & $epochTime()
+        let title = if t.hasKey("title"): t["title"].getStr() else: "Untitled"
+        let desc = if t.hasKey("desc"): t["desc"].getStr() else: ""
+        let status = if t.hasKey("status"): t["status"].getStr("Open") else: "Open"
+        let priority = if t.hasKey("priority"): t["priority"].getStr("Medium") else: "Medium"
+        discard sqlite3_bind_text(stmt, 1, id.cstring, -1, SQLITE_TRANSIENT)
+        discard sqlite3_bind_text(stmt, 2, title.cstring, -1, SQLITE_TRANSIENT)
+        discard sqlite3_bind_text(stmt, 3, desc.cstring, -1, SQLITE_TRANSIENT)
+        discard sqlite3_bind_text(stmt, 4, status.cstring, -1, SQLITE_TRANSIENT)
+        discard sqlite3_bind_text(stmt, 5, priority.cstring, -1, SQLITE_TRANSIENT)
+        if sqlite3_step(stmt) == SQLITE_DONE:
+          inc importedTickets
+        discard sqlite3_reset(stmt)
+      discard sqlite3_finalize(stmt)
+
+  discard sqlite3_exec(db.db, "COMMIT;".cstring, nil, nil, nil)
+
+  return jsonOk(%*{
+    "mode": mode,
+    "importedEvents": importedEvents,
+    "importedFiles": importedFiles,
+    "importedWiki": importedWiki,
+    "importedTickets": importedTickets
+  })
+
 proc registerDefaultRoutes*(server: var ApiServer) =
   server.routes.add ApiRoute(meth: "GET", path: "/api/v1/status", handler: handleStatus, requiresAuth: false)
   server.routes.add ApiRoute(meth: "GET", path: "/api/v1/timeline", handler: handleTimeline, requiresAuth: false)
@@ -2062,6 +2279,8 @@ proc registerDefaultRoutes*(server: var ApiServer) =
   server.routes.add ApiRoute(meth: "GET", path: "/.well-known/mcp", handler: handleMcpDiscovery, requiresAuth: false)
   server.routes.add ApiRoute(meth: "GET", path: "/api/v1/openapi", handler: handleOpenApi, requiresAuth: false)
   server.routes.add ApiRoute(meth: "GET", path: "/api/v1/csrf", handler: handleCsrf, requiresAuth: false)
+  server.routes.add ApiRoute(meth: "GET", path: "/api/v1/repo/export", handler: handleRepoExport, requiresAuth: false)
+  server.routes.add ApiRoute(meth: "POST", path: "/api/v1/repo/import", handler: handleRepoImport, requiresAuth: false)
 
 # --- Server ---
 

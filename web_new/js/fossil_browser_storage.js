@@ -116,6 +116,82 @@ class IndexedDbStorage {
       req.onerror = () => resolve(0);
     });
   }
+
+  async clearAll() {
+    return new Promise((resolve) => {
+      const stores = ["files", "events", "wiki", "tickets", "artifacts", "meta"];
+      const tx = this.db.transaction(stores, "readwrite");
+      for (const s of stores) {
+        tx.objectStore(s).clear();
+      }
+      tx.oncomplete = () => resolve(true);
+      tx.onerror = () => resolve(false);
+    });
+  }
+
+  async importBundle(bundle, mode = "merge") {
+    return new Promise((resolve, reject) => {
+      const stores = ["files", "events", "wiki", "tickets", "meta"];
+      const tx = this.db.transaction(stores, "readwrite");
+
+      if (mode === "replace") {
+        for (const s of stores) {
+          tx.objectStore(s).clear();
+        }
+      }
+
+      let countFiles = 0, countEvents = 0, countWiki = 0, countTickets = 0;
+
+      if (Array.isArray(bundle.events)) {
+        const eventStore = tx.objectStore("events");
+        for (const ev of bundle.events) {
+          eventStore.put(ev);
+          countEvents++;
+        }
+      }
+
+      if (Array.isArray(bundle.files)) {
+        const fileStore = tx.objectStore("files");
+        for (const f of bundle.files) {
+          fileStore.put(f);
+          countFiles++;
+        }
+      }
+
+      if (Array.isArray(bundle.wiki)) {
+        const wikiStore = tx.objectStore("wiki");
+        for (const w of bundle.wiki) {
+          wikiStore.put(w);
+          countWiki++;
+        }
+      } else if (bundle.wiki && typeof bundle.wiki === "object") {
+        const wikiStore = tx.objectStore("wiki");
+        for (const [name, text] of Object.entries(bundle.wiki)) {
+          wikiStore.put({ name, text: typeof text === "string" ? text : (text.text || ""), author: "imported", mtime: Date.now() });
+          countWiki++;
+        }
+      }
+
+      if (Array.isArray(bundle.tickets)) {
+        const tktStore = tx.objectStore("tickets");
+        for (const t of bundle.tickets) {
+          tktStore.put(t);
+          countTickets++;
+        }
+      }
+
+      tx.oncomplete = () => {
+        resolve({
+          mode,
+          importedFiles: countFiles,
+          importedEvents: countEvents,
+          importedWiki: countWiki,
+          importedTickets: countTickets
+        });
+      };
+      tx.onerror = () => reject(tx.error);
+    });
+  }
 }
 
 // =========================================================================
@@ -204,6 +280,89 @@ class SqliteWasmStorage {
     if (!this.db) return new Uint8Array();
     return this.db.export();
   }
+
+  importBinary(uint8Array, mode = "merge") {
+    if (!this.db || mode === "replace") {
+      this.db = new this.sqlModule.Database(uint8Array);
+      return { mode: "replace", success: true };
+    }
+    try {
+      const incomingDb = new this.sqlModule.Database(uint8Array);
+      this.db.run("BEGIN TRANSACTION;");
+
+      const events = incomingDb.exec("SELECT * FROM event");
+      if (events.length > 0 && events[0].values) {
+        const cols = events[0].columns;
+        for (const row of events[0].values) {
+          const obj = {};
+          cols.forEach((c, idx) => obj[c] = row[idx]);
+          this.db.run("INSERT OR IGNORE INTO event(objid, type, mtime, user, comment, branch) VALUES(?, ?, ?, ?, ?, ?)",
+            [obj.objid, obj.type, obj.mtime, obj.user, obj.comment, obj.branch || "trunk"]);
+        }
+      }
+
+      const wiki = incomingDb.exec("SELECT * FROM wiki");
+      if (wiki.length > 0 && wiki[0].values) {
+        const cols = wiki[0].columns;
+        for (const row of wiki[0].values) {
+          const obj = {};
+          cols.forEach((c, idx) => obj[c] = row[idx]);
+          this.db.run("INSERT OR REPLACE INTO wiki(name, text, author, mtime) VALUES(?, ?, ?, ?)",
+            [obj.name, obj.text, obj.author, obj.mtime]);
+        }
+      }
+
+      const fn = incomingDb.exec("SELECT * FROM filename");
+      if (fn.length > 0 && fn[0].values) {
+        for (const row of fn[0].values) {
+          this.db.run("INSERT OR IGNORE INTO filename(fnid, name) VALUES(?, ?)", [row[0], row[1]]);
+        }
+      }
+
+      this.db.run("COMMIT;");
+      incomingDb.close();
+      return { mode: "merge", success: true };
+    } catch (e) {
+      try { this.db.run("ROLLBACK;"); } catch (_) {}
+      console.error("Merge error in SQLite WASM:", e);
+      throw e;
+    }
+  }
+
+  importBundle(bundle, mode = "merge") {
+    if (!this.db) return { success: false };
+    if (mode === "replace") {
+      this.db.run("DELETE FROM event; DELETE FROM wiki; DELETE FROM filename; DELETE FROM ticket; DELETE FROM blob;");
+    }
+    this.db.run("BEGIN TRANSACTION;");
+    let countEvents = 0, countWiki = 0, countFiles = 0;
+
+    if (Array.isArray(bundle.events)) {
+      for (const ev of bundle.events) {
+        this.db.run("INSERT OR IGNORE INTO event(type, mtime, user, comment, branch) VALUES(?, ?, ?, ?, ?)",
+          [ev.type || "ci", (ev.mtime > 10000000000 ? ev.mtime / 1000 : ev.mtime) || Date.now() / 1000, ev.user || "admin", ev.comment || "", ev.branch || "trunk"]);
+        countEvents++;
+      }
+    }
+
+    if (Array.isArray(bundle.wiki)) {
+      for (const w of bundle.wiki) {
+        this.db.run("INSERT OR REPLACE INTO wiki(name, text, author, mtime) VALUES(?, ?, ?, ?)",
+          [w.name, w.text, w.author || "imported", Date.now() / 1000]);
+        countWiki++;
+      }
+    }
+
+    if (Array.isArray(bundle.files)) {
+      for (const f of bundle.files) {
+        this.db.run("INSERT OR IGNORE INTO filename(name) VALUES(?)", [f.path]);
+        countFiles++;
+      }
+    }
+
+    this.db.run("COMMIT;");
+    return { mode, success: true, countEvents, countWiki, countFiles };
+  }
 }
 
 // =========================================================================
@@ -251,6 +410,33 @@ class CdbMemoryStorage {
     if (!this.handle || !window.FossilCore) return "";
     return window.FossilCore.cdbSerialize(this.handle);
   }
+
+  importCdb(cdbString, mode = "merge") {
+    if (!window.FossilCore) return { success: false };
+    this.handle = window.FossilCore.cdbLoad(cdbString);
+    return { mode: "replace", success: true };
+  }
+
+  importBundle(bundle, mode = "merge") {
+    if (!window.FossilCore) return { success: false };
+    if (mode === "replace" || !this.handle) {
+      this.handle = window.FossilCore.cdbCreate();
+    }
+    let countFiles = 0, countWiki = 0;
+    if (Array.isArray(bundle.files)) {
+      for (const f of bundle.files) {
+        window.FossilCore.cdbPut(this.handle, "file:" + f.path, f.content || "");
+        countFiles++;
+      }
+    }
+    if (Array.isArray(bundle.wiki)) {
+      for (const w of bundle.wiki) {
+        window.FossilCore.cdbPut(this.handle, "wiki:" + w.name, w.text || "");
+        countWiki++;
+      }
+    }
+    return { mode, success: true, countFiles, countWiki };
+  }
 }
 
 // Global Storage Manager instance
@@ -279,5 +465,94 @@ window.FossilStorageManager = {
       await this.cdb.init(data);
     }
     return this.getActiveBackend();
+  },
+
+  async hasExistingData() {
+    if (this.backendType === "indexeddb") {
+      const fc = await this.indexedDB.count("files");
+      const ec = await this.indexedDB.count("events");
+      return (fc > 0 || ec > 0);
+    } else if (this.backendType === "sqlite_wasm") {
+      if (!this.sqliteWasm.db) return false;
+      const rows = this.sqliteWasm.exec("SELECT count(*) as c FROM event;");
+      return rows.length > 0 && rows[0].c > 0;
+    } else if (this.backendType === "cdb") {
+      return !!this.cdb.handle;
+    }
+    return false;
+  },
+
+  async importRepo(data, filename, mode = "merge") {
+    const isFossilBinary = filename.endsWith(".fossil") || (data instanceof Uint8Array && String.fromCharCode(...data.slice(0, 15)).includes("SQLite format 3"));
+    const isCdb = filename.endsWith(".cdb");
+
+    if (isFossilBinary) {
+      if (this.backendType !== "sqlite_wasm") {
+        await this.switchBackend("sqlite_wasm");
+      }
+      return this.sqliteWasm.importBinary(data instanceof Uint8Array ? data : new Uint8Array(data), mode);
+    } else if (isCdb) {
+      if (this.backendType !== "cdb") {
+        await this.switchBackend("cdb");
+      }
+      return this.cdb.importCdb(typeof data === "string" ? data : new TextDecoder().decode(data), mode);
+    } else {
+      let bundle;
+      if (typeof data === "string") {
+        bundle = JSON.parse(data);
+      } else if (data instanceof Uint8Array) {
+        bundle = JSON.parse(new TextDecoder().decode(data));
+      } else {
+        bundle = data;
+      }
+
+      if (this.backendType === "indexeddb") {
+        return await this.indexedDB.importBundle(bundle, mode);
+      } else if (this.backendType === "sqlite_wasm") {
+        return this.sqliteWasm.importBundle(bundle, mode);
+      } else if (this.backendType === "cdb") {
+        return this.cdb.importBundle(bundle, mode);
+      }
+    }
+  },
+
+  async exportRepo() {
+    if (this.backendType === 'sqlite_wasm') {
+      const bin = this.sqliteWasm.exportBinary();
+      return {
+        type: 'binary',
+        filename: 'repository.fossil',
+        mimeType: 'application/x-sqlite3',
+        data: bin
+      };
+    } else if (this.backendType === 'cdb') {
+      const ser = this.cdb.serialize();
+      return {
+        type: 'text',
+        filename: 'repository.cdb',
+        mimeType: 'text/plain',
+        data: ser
+      };
+    } else {
+      const files = await this.indexedDB.getAll('files');
+      const events = await this.indexedDB.getAll('events');
+      const wiki = await this.indexedDB.getAll('wiki');
+      const tickets = await this.indexedDB.getAll('tickets');
+      const bundle = {
+        format: 'fossil-nim-bundle',
+        version: '1.0',
+        files,
+        events,
+        wiki,
+        tickets,
+        exportedAt: new Date().toISOString()
+      };
+      return {
+        type: 'json',
+        filename: 'fossil_backup.json',
+        mimeType: 'application/json',
+        data: bundle
+      };
+    }
   }
 };

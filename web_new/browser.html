@@ -29,6 +29,8 @@
           </select>
         </div>
         <button id="btn-export-repo" class="btn btn-secondary btn-sm" title="Download repository snapshot">💾 Export</button>
+        <button id="btn-import-repo" class="btn btn-primary btn-sm" title="Import repository snapshot (.json, .fossil, .cdb)">📥 Import</button>
+        <input type="file" id="file-import-input" accept=".fossil,.cdb,.json" style="display:none;">
         <button id="theme-toggle-btn" class="btn btn-icon" title="Toggle Theme">🌙</button>
         <a href="/" class="btn btn-secondary btn-sm" title="Go to Server UI">🖥️ Server UI</a>
       </div>
@@ -373,6 +375,52 @@ proc processTask(id: int): string =
           <button type="submit" class="btn btn-primary">Save Ticket</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Modal: Import Repository & Conflict Resolution -->
+  <div id="modal-import-confirm" class="modal hidden">
+    <div class="modal-content" style="max-width:540px;">
+      <div class="modal-header">
+        <h2>📥 Import Repository</h2>
+        <button class="btn btn-icon" id="btn-import-cancel">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="import-file-details" class="card" style="margin-bottom:1rem; padding:0.75rem; background:var(--color-bg-code);">
+          <div style="font-weight:600; font-size:0.95rem;" id="import-filename-label">filename.json</div>
+          <div style="font-size:0.85rem; color:var(--color-text-muted);" id="import-meta-label">Detected bundle</div>
+        </div>
+
+        <p style="font-size:0.9rem; margin-bottom:1rem;">
+          Your current repository already contains data. How would you like to handle the imported content?
+        </p>
+
+        <div style="display:flex; flex-direction:column; gap:0.75rem;">
+          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1.5px solid var(--color-border); border-radius:8px; cursor:pointer;">
+            <input type="radio" name="import-mode-choice" value="merge" checked style="margin-top:0.25rem;">
+            <div>
+              <div style="font-weight:600; font-size:0.92rem;">🔄 Merge / Continue Project (Слияние / Дополнить)</div>
+              <div style="font-size:0.82rem; color:var(--color-text-muted);">
+                Preserves all existing check-ins and data. Appends new commits, updates modified files, and merges wiki & tickets without loss.
+              </div>
+            </div>
+          </label>
+
+          <label style="display:flex; align-items:flex-start; gap:0.75rem; padding:0.75rem; border:1.5px solid var(--color-border); border-radius:8px; cursor:pointer;">
+            <input type="radio" name="import-mode-choice" value="replace" style="margin-top:0.25rem;">
+            <div>
+              <div style="font-weight:600; font-size:0.92rem; color:var(--color-danger);">⚠️ Clean Overwrite (Заменить полностью)</div>
+              <div style="font-size:0.82rem; color:var(--color-text-muted);">
+                Wipes existing files, commits, wiki, and tickets in current storage, replacing everything with the imported snapshot.
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-import-abort">Cancel</button>
+        <button class="btn btn-primary" id="btn-import-confirm-execute">Proceed with Import</button>
+      </div>
     </div>
   </div>
 
