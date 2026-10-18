@@ -83,6 +83,10 @@ qbe: build-qbe-c
 		echo "Built bin/fossil-qbe-gcc with gcc" && ./bin/fossil-qbe-gcc version && ./bin/fossil-qbe-gcc help | head -n 20 || true; \
 	fi
 
+qbe-minimal: build-qbe-c-minimal
+	@bash scripts/compile_qbe.sh $(CGEN_DIR) bin/fossil-qbe
+
+
 qbe-static: build-qbe-c
 	@echo "Static build with vendored sqlite..."
 	@ls cinterop/sqlite/sqlite3.c || echo "Warning: sqlite3.c not vendored, using -lsqlite3"
