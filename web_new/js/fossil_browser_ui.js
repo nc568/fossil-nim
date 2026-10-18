@@ -29,14 +29,14 @@
       "nav.import": "📥 Импорт",
       "nav.server_ui": "🖥️ Серверный UI",
       "nav.settings": "⚙️ Настройки",
-      "tab.timeline": "📜 Таймлайн",
-      "tab.files": "📁 Файлы и редактор",
-      "tab.diff": "🔍 Myers Diff",
-      "tab.wiki": "📖 Wiki и документация",
-      "tab.tickets": "🎫 Тикеты",
-      "tab.mcp": "🤖 ИИ-агент MCP (89)",
-      "tab.storage": "💾 Мульти-БД диагностика",
-      "tab.about": "ℹ️ О проекте",
+      "tab.timeline": "Таймлайн",
+      "tab.files": "Файлы и редактор",
+      "tab.diff": "Myers Diff",
+      "tab.wiki": "Wiki и документация",
+      "tab.tickets": "Тикеты",
+      "tab.mcp": "ИИ-агент MCP (89)",
+      "tab.storage": "Мульти-БД диагностика",
+      "tab.about": "О проекте",
       "sidebar.workspace": "Рабочая область",
       "sidebar.info": "Информация",
       "sidebar.collapse": "Свернуть панель",
@@ -153,14 +153,14 @@
       "nav.import": "📥 Import",
       "nav.server_ui": "🖥️ Server UI",
       "nav.settings": "⚙️ Settings",
-      "tab.timeline": "📜 Timeline",
-      "tab.files": "📁 Files & Editor",
-      "tab.diff": "🔍 Myers Diff",
-      "tab.wiki": "📖 Wiki & Docs",
-      "tab.tickets": "🎫 Tickets",
-      "tab.mcp": "🤖 AI Agent MCP (89)",
-      "tab.storage": "💾 Multi-DB Diagnostics",
-      "tab.about": "ℹ️ About Project",
+      "tab.timeline": "Timeline",
+      "tab.files": "Files & Editor",
+      "tab.diff": "Myers Diff",
+      "tab.wiki": "Wiki & Docs",
+      "tab.tickets": "Tickets",
+      "tab.mcp": "AI Agent MCP (89)",
+      "tab.storage": "Multi-DB Diagnostics",
+      "tab.about": "About Project",
       "sidebar.workspace": "Workspace",
       "sidebar.info": "Information",
       "sidebar.collapse": "Collapse sidebar",
@@ -298,7 +298,11 @@
     applyAll() {
       document.querySelectorAll('[data-i18n]').forEach(el => {
         const key = el.getAttribute('data-i18n');
-        el.innerText = this.t(key, el.innerText);
+        let translation = this.t(key, el.innerText);
+        if (el.classList.contains('sidebar-text') && el.previousElementSibling && el.previousElementSibling.classList.contains('sidebar-icon')) {
+          translation = translation.replace(/^[\p{Extended_Pictographic}\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\s]+/u, '').trim();
+        }
+        el.innerText = translation;
       });
       document.querySelectorAll('[data-i18n-title]').forEach(el => {
         const key = el.getAttribute('data-i18n-title');
@@ -470,6 +474,33 @@
     }, duration);
   }
 
+  function computeMyersDiff(textA, textB, fileName) {
+    const a = textA || '';
+    const b = textB || '';
+    const fn = fileName || 'diff';
+    if (window.FossilCore) {
+      if (typeof window.FossilCore.myersDiff === 'function') {
+        try { return window.FossilCore.myersDiff(a, b, fn); } catch (e) { console.warn("Myers diff error:", e); }
+      }
+      if (typeof window.FossilCore.diffUnified === 'function') {
+        try { return window.FossilCore.diffUnified(a, b, fn); } catch (e) { console.warn("diffUnified error:", e); }
+      }
+    }
+    const aLines = a.split('\n');
+    const bLines = b.split('\n');
+    const out = ['--- a/' + fn, '+++ b/' + fn, '@@ -1,' + aLines.length + ' +1,' + bLines.length + ' @@'];
+    const max = Math.max(aLines.length, bLines.length);
+    for (let i = 0; i < max; i++) {
+      if (aLines[i] === bLines[i]) {
+        out.push(' ' + (aLines[i] !== undefined ? aLines[i] : ''));
+      } else {
+        if (aLines[i] !== undefined) out.push('-' + aLines[i]);
+        if (bLines[i] !== undefined) out.push('+' + bLines[i]);
+      }
+    }
+    return out.join('\n');
+  }
+
   function formatDiffHtml(unifiedDiff) {
     if (!unifiedDiff) return `<div class="empty">${window.FossilI18n.t('diff.identical', 'No differences found (files are identical)')}</div>`;
     const lines = unifiedDiff.split('\n');
@@ -552,7 +583,8 @@
       const runtime = this.detectRuntime();
       const versionEl = $('dyn-version-label');
       const runtimeEl = $('dyn-runtime-label');
-      if (versionEl) versionEl.innerText = `v${runtime.version}`;
+      const verStr = String(runtime.version || '2.26.0').replace(/^v+/, 'v');
+      if (versionEl) versionEl.innerText = verStr;
       if (runtimeEl) runtimeEl.innerText = runtime.runtimeType;
 
       const mgr = window.FossilStorageManager;
@@ -590,7 +622,7 @@
       if (aboutDynMcpTotal) aboutDynMcpTotal.innerText = `${toolCount} Tools (Registered)`;
 
       const aboutDynVersion = $('about-dyn-version');
-      if (aboutDynVersion) aboutDynVersion.innerText = `Fossil-Nim v${runtime.version}`;
+      if (aboutDynVersion) aboutDynVersion.innerText = `Fossil-Nim ${verStr}`;
 
       const aboutDynTarget = $('about-dyn-target');
       if (aboutDynTarget) aboutDynTarget.innerText = runtime.engineName;
@@ -715,8 +747,14 @@
       const menuBtn = $('btn-mobile-menu');
       const navActions = document.querySelector('.navbar-actions');
       if (menuBtn && navActions) {
-        menuBtn.addEventListener('click', () => {
+        menuBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
           navActions.classList.toggle('open');
+        });
+        document.addEventListener('click', (e) => {
+          if (!navActions.contains(e.target) && e.target !== menuBtn) {
+            navActions.classList.remove('open');
+          }
         });
       }
 
@@ -1055,16 +1093,19 @@
       if (diffBtn) {
         diffBtn.addEventListener('click', () => {
           const current = textarea.value;
-          const diffOutput = window.FossilCore.myersDiff(state.fileOriginalContent, current);
+          const diffOutput = computeMyersDiff(state.fileOriginalContent, current, state.activeFile);
           const diffPreview = $('editor-diff-preview');
           if (diffPreview) {
             diffPreview.innerHTML = `
-              <div style="margin-bottom:0.5rem; font-weight:600; font-size:0.85rem; color:var(--color-text-secondary);">
-                ⚡ Myers Unified Diff Preview (${state.activeFile}):
+              <div style="margin-bottom:0.5rem; font-weight:600; font-size:0.85rem; color:var(--color-text-secondary); display:flex; justify-content:space-between; align-items:center;">
+                <span>⚡ Myers Unified Diff Preview (${escapeHtml(state.activeFile)}):</span>
+                <button id="btn-close-diff-preview" class="btn btn-secondary btn-sm" style="padding:0.15rem 0.5rem; font-size:0.75rem;">✕ Закрыть Diff</button>
               </div>
               ${formatDiffHtml(diffOutput)}
             `;
             diffPreview.classList.remove('hidden');
+            const closeBtn = $('btn-close-diff-preview');
+            if (closeBtn) closeBtn.onclick = () => diffPreview.classList.add('hidden');
           }
         });
       }
@@ -1185,7 +1226,7 @@
       if (runBtn && inputA && inputB && result) {
         runBtn.addEventListener('click', () => {
           const t0 = performance.now();
-          const diffOutput = window.FossilCore.myersDiff(inputA.value, inputB.value);
+          const diffOutput = computeMyersDiff(inputA.value, inputB.value, 'sample.nim');
           const t1 = performance.now();
           const elapsed = (t1 - t0).toFixed(2);
           result.innerHTML = `

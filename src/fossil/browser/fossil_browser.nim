@@ -82,12 +82,27 @@ proc cdbSerialize*(handle: int): cstring {.exportc: "fossilCdbSerialize".} =
     return cstring(gCdbHandles[handle].serializeMemory())
   return cstring("")
 
+proc myersDiff*(textA, textB, fileName: cstring): cstring {.exportc: "fossilMyersDiff".} =
+  let fn = if fileName.isNil: "file" else: $fileName
+  let bA = newBlob(if textA.isNil: "" else: $textA)
+  let bB = newBlob(if textB.isNil: "" else: $textB)
+  let res = fossilDiff.diffBlobs(bA, bB, fn)
+  cstring(fossilDiff.diffToUnified(res))
+
 echo "🦖 Fossil-Nim Web Engine initialized!"
 
 {.emit: """
 var _fc = {
-  diffUnified: fossilDiffUnified,
-  diffJson: fossilDiffJson,
+  version: 'v2.26.0',
+  diffUnified: function(a, b, fn) {
+    return fossilDiffUnified(a || '', b || '', fn || 'diff');
+  },
+  myersDiff: function(a, b, fn) {
+    return fossilDiffUnified(a || '', b || '', fn || 'diff');
+  },
+  diffJson: function(a, b, fn) {
+    return fossilDiffJson(a || '', b || '', fn || 'diff');
+  },
   deltaCreate: fossilDeltaCreate,
   deltaApply: fossilDeltaApply,
   markdownToHtml: fossilMarkdownToHtml,
@@ -104,3 +119,4 @@ if (typeof globalThis !== 'undefined') {
   globalThis.FossilCore = _fc;
 }
 """.}
+

@@ -238,11 +238,12 @@ class SqliteWasmStorage {
     if (!this.db) return;
     this.db.run(`
       CREATE TABLE IF NOT EXISTS blob (rid INTEGER PRIMARY KEY, rcvid INTEGER, size INTEGER, uuid TEXT UNIQUE, content BLOB);
-      CREATE TABLE IF NOT EXISTS event (objid INTEGER PRIMARY KEY, type TEXT, mtime REAL, user TEXT, comment TEXT, branch TEXT);
+      CREATE TABLE IF NOT EXISTS event (objid INTEGER PRIMARY KEY, type TEXT, mtime REAL, user TEXT, comment TEXT, branch TEXT, uuid TEXT);
       CREATE TABLE IF NOT EXISTS filename (fnid INTEGER PRIMARY KEY, name TEXT UNIQUE);
+      CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, content TEXT, mtime REAL);
       CREATE TABLE IF NOT EXISTS mlink (mid INTEGER, fid INTEGER, fnid INTEGER, pid INTEGER, mperm INTEGER);
       CREATE TABLE IF NOT EXISTS wiki (name TEXT PRIMARY KEY, text TEXT, author TEXT, mtime REAL);
-      CREATE TABLE IF NOT EXISTS ticket (tkt_uuid TEXT PRIMARY KEY, title TEXT, desc TEXT, status TEXT, type TEXT, priority TEXT);
+      CREATE TABLE IF NOT EXISTS ticket (tkt_uuid TEXT PRIMARY KEY, title TEXT, desc TEXT, status TEXT, type TEXT, priority TEXT, reporter TEXT, mtime REAL);
     `);
   }
 
@@ -251,7 +252,9 @@ class SqliteWasmStorage {
     for (const [name, text] of Object.entries(DEFAULT_WIKI_DOCS)) {
       this.db.run("INSERT OR REPLACE INTO wiki(name, text, author, mtime) VALUES(?, ?, 'system', ?)", [name, text, Date.now() / 1000]);
     }
-    this.db.run("INSERT OR REPLACE INTO event(objid, type, mtime, user, comment, branch) VALUES(1, 'ci', ?, 'admin', 'Initial check-in (SQLite WASM)', 'trunk')", [Date.now() / 1000]);
+    this.db.run("INSERT OR REPLACE INTO event(objid, type, mtime, user, comment, branch, uuid) VALUES(1, 'ci', ?, 'admin', 'Initial check-in (SQLite WASM)', 'trunk', 'ci-init-sqlite')", [Date.now() / 1000]);
+    this.db.run("INSERT OR REPLACE INTO files(path, content, mtime) VALUES('README.md', '# My Fossil-Nim Project (SQLite WASM)\n\nRunning on SQLite in WebAssembly!\n', ?)", [Date.now() / 1000]);
+    this.db.run("INSERT OR IGNORE INTO filename(name) VALUES('README.md')");
   }
 
   exec(sql, params = []) {
@@ -372,17 +375,36 @@ class CdbMemoryStorage {
   constructor() {
     this.name = "Pure-Nim CDB";
     this.handle = 0;
+    this.fileList = new Set(["README.md"]);
+    this.ticketList = [];
+    this.eventsList = [];
   }
 
   async init(existingBinaryString) {
     if (window.FossilCore) {
       if (existingBinaryString) {
         this.handle = window.FossilCore.cdbLoad(existingBinaryString);
+        this.restoreMeta();
       } else {
         this.handle = window.FossilCore.cdbCreate();
         this.seedDefaults();
       }
     }
+  }
+
+  restoreMeta() {
+    if (!this.handle || !window.FossilCore) return;
+    try {
+      const fl = window.FossilCore.cdbGet(this.handle, "meta:file_list");
+      if (fl) {
+        const arr = JSON.parse(fl);
+        this.fileList = new Set(arr);
+      }
+      const tl = window.FossilCore.cdbGet(this.handle, "meta:ticket_list");
+      if (tl) this.ticketList = JSON.parse(tl);
+      const el = window.FossilCore.cdbGet(this.handle, "meta:event_list");
+      if (el) this.eventsList = JSON.parse(el);
+    } catch (_) {}
   }
 
   seedDefaults() {
@@ -394,6 +416,52 @@ class CdbMemoryStorage {
     window.FossilCore.cdbPut(this.handle, "meta:user", "admin");
     window.FossilCore.cdbPut(this.handle, "meta:branch", "trunk");
     window.FossilCore.cdbPut(this.handle, "file:README.md", "# Fossil-Nim in CDB Memory\nHigh-performance immutable KV VCS storage.");
+    this.fileList = new Set(["README.md"]);
+    this.eventsList = [{
+      type: "ci",
+      branch: "trunk",
+      user: "admin",
+      comment: "Initial check-in (Pure-Nim CDB)",
+      mtime: Date.now(),
+      uuid: "ci-init-cdb"
+    }];
+    this.ticketList = [];
+    this.syncMeta();
+  }
+
+  getFiles() {
+    return Array.from(this.fileList);
+  }
+
+  addFile(path) {
+    this.fileList.add(path);
+    this.syncMeta();
+  }
+
+  getTickets() {
+    return this.ticketList;
+  }
+
+  addTicket(tkt) {
+    this.ticketList.push(tkt);
+    this.syncMeta();
+  }
+
+  getEvents() {
+    return this.eventsList;
+  }
+
+  addEvent(ev) {
+    this.eventsList.unshift(ev);
+    this.syncMeta();
+  }
+
+  syncMeta() {
+    if (this.handle && window.FossilCore) {
+      window.FossilCore.cdbPut(this.handle, "meta:file_list", JSON.stringify(Array.from(this.fileList)));
+      window.FossilCore.cdbPut(this.handle, "meta:ticket_list", JSON.stringify(this.ticketList));
+      window.FossilCore.cdbPut(this.handle, "meta:event_list", JSON.stringify(this.eventsList));
+    }
   }
 
   get(key) {
@@ -414,6 +482,7 @@ class CdbMemoryStorage {
   importCdb(cdbString, mode = "merge") {
     if (!window.FossilCore) return { success: false };
     this.handle = window.FossilCore.cdbLoad(cdbString);
+    this.restoreMeta();
     return { mode: "replace", success: true };
   }
 
@@ -421,11 +490,15 @@ class CdbMemoryStorage {
     if (!window.FossilCore) return { success: false };
     if (mode === "replace" || !this.handle) {
       this.handle = window.FossilCore.cdbCreate();
+      this.fileList.clear();
+      this.ticketList = [];
+      this.eventsList = [];
     }
     let countFiles = 0, countWiki = 0;
     if (Array.isArray(bundle.files)) {
       for (const f of bundle.files) {
         window.FossilCore.cdbPut(this.handle, "file:" + f.path, f.content || "");
+        this.fileList.add(f.path);
         countFiles++;
       }
     }
@@ -435,6 +508,17 @@ class CdbMemoryStorage {
         countWiki++;
       }
     }
+    if (Array.isArray(bundle.tickets)) {
+      for (const t of bundle.tickets) {
+        this.ticketList.push(t);
+      }
+    }
+    if (Array.isArray(bundle.events)) {
+      for (const e of bundle.events) {
+        this.eventsList.push(e);
+      }
+    }
+    this.syncMeta();
     return { mode, success: true, countFiles, countWiki };
   }
 }

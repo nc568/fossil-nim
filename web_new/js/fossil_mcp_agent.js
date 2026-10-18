@@ -68,7 +68,13 @@ class BrowserMcpServer {
           if (mgr.backendType === "indexeddb") {
             files = await backend.getAll("files");
           } else if (mgr.backendType === "sqlite_wasm") {
-            files = backend.exec("SELECT name FROM filename LIMIT 50");
+            files = backend.exec("SELECT path FROM files LIMIT 50");
+            if (!files || files.length === 0) {
+              files = backend.exec("SELECT name AS path FROM filename LIMIT 50");
+            }
+          } else if (mgr.backendType === "cdb") {
+            const list = backend.getFiles ? backend.getFiles() : ["README.md"];
+            files = list.map(p => ({ path: p }));
           }
           return {
             status: "clean",
@@ -84,25 +90,36 @@ class BrowserMcpServer {
           if (mgr.backendType === "indexeddb") {
             const f = await backend.get("files", params.path);
             return { path: params.path, content: f ? f.content : null };
+          } else if (mgr.backendType === "sqlite_wasm") {
+            const rows = backend.exec("SELECT content FROM files WHERE path = ?", [params.path]);
+            if (rows.length > 0 && rows[0].content !== null && rows[0].content !== undefined) {
+              return { path: params.path, content: rows[0].content };
+            }
+            return { path: params.path, content: "" };
           } else if (mgr.backendType === "cdb") {
             const val = backend.get("file:" + params.path);
-            return { path: params.path, content: val };
+            return { path: params.path, content: val !== null && val !== undefined ? val : "" };
           }
           return { path: params.path, content: `# File: ${params.path}\nContent in ${mgr.backendType}` };
         }
 
         case "vcs_file_write": {
           if (!params.path) throw new Error("path is required");
+          const content = params.content || "";
           if (mgr.backendType === "indexeddb") {
             await backend.put("files", {
               path: params.path,
-              content: params.content || "",
+              content: content,
               mtime: Date.now()
             });
+          } else if (mgr.backendType === "sqlite_wasm") {
+            backend.run("INSERT OR REPLACE INTO files(path, content, mtime) VALUES(?, ?, ?)", [params.path, content, Date.now() / 1000]);
+            backend.run("INSERT OR IGNORE INTO filename(name) VALUES(?)", [params.path]);
           } else if (mgr.backendType === "cdb") {
-            backend.put("file:" + params.path, params.content || "");
+            backend.put("file:" + params.path, content);
+            if (backend.addFile) backend.addFile(params.path);
           }
-          return { success: true, path: params.path, bytes: (params.content || "").length };
+          return { success: true, path: params.path, bytes: content.length };
         }
 
         case "vcs_file_list": {
@@ -112,10 +129,25 @@ class BrowserMcpServer {
               files: files.map(f => typeof f === 'string' ? { path: f } : (f.path ? f : { path: f.name || String(f) })),
               filePaths: files.map(f => typeof f === 'string' ? f : (f.path || f.name || String(f)))
             };
+          } else if (mgr.backendType === "sqlite_wasm") {
+            let rows = backend.exec("SELECT path FROM files ORDER BY path ASC");
+            if (!rows || rows.length === 0) {
+              rows = backend.exec("SELECT name AS path FROM filename ORDER BY name ASC");
+            }
+            return {
+              files: rows.map(r => ({ path: r.path })),
+              filePaths: rows.map(r => r.path)
+            };
+          } else if (mgr.backendType === "cdb") {
+            const list = backend.getFiles ? backend.getFiles() : ["README.md"];
+            return {
+              files: list.map(p => ({ path: p })),
+              filePaths: list
+            };
           }
           return {
-            files: [{ path: "README.md" }, { path: "src/main.nim" }, { path: "tests/test.nim" }],
-            filePaths: ["README.md", "src/main.nim", "tests/test.nim"]
+            files: [{ path: "README.md" }],
+            filePaths: ["README.md"]
           };
         }
 
@@ -131,22 +163,25 @@ class BrowserMcpServer {
         }
 
         case "vcs_commit": {
-          const msg = params.message || "Commit by Browser AI Agent";
+          const msg = params.message || params.comment || "Commit by Browser AI Agent";
           const branch = params.branch || "trunk";
+          const user = params.user || "admin";
           const uuid = "ci-" + Math.random().toString(16).substring(2, 12);
           if (mgr.backendType === "indexeddb") {
             await backend.put("events", {
               type: "ci",
               branch,
-              user: "ai-agent",
+              user,
               comment: msg,
               mtime: Date.now(),
               uuid
             });
           } else if (mgr.backendType === "sqlite_wasm") {
-            backend.run("INSERT INTO event(type, mtime, user, comment, branch) VALUES('ci', ?, 'ai-agent', ?, ?)", [Date.now() / 1000, msg, branch]);
+            backend.run("INSERT INTO event(type, mtime, user, comment, branch, uuid) VALUES('ci', ?, ?, ?, ?, ?)", [Date.now() / 1000, user, msg, branch, uuid]);
           } else if (mgr.backendType === "cdb") {
-            backend.put("commit:" + uuid, JSON.stringify({ user: "ai-agent", comment: msg, branch, mtime: Date.now() }));
+            const ev = { type: "ci", branch, user, comment: msg, mtime: Date.now(), uuid };
+            if (backend.addEvent) backend.addEvent(ev);
+            backend.put("commit:" + uuid, JSON.stringify(ev));
           }
           return { success: true, commitUuid: uuid, branch, message: msg };
         }
@@ -161,6 +196,9 @@ class BrowserMcpServer {
           } else if (mgr.backendType === "sqlite_wasm") {
             const events = backend.exec("SELECT * FROM event ORDER BY mtime DESC LIMIT ?", [limit]);
             return { count: events.length, events, timeline: events };
+          } else if (mgr.backendType === "cdb") {
+            const evs = backend.getEvents ? backend.getEvents() : [{ comment: "Initial check-in (Pure-Nim CDB)", branch: "trunk", user: "admin", mtime: Date.now() }];
+            return { count: evs.length, events: evs.slice(0, limit), timeline: evs.slice(0, limit) };
           }
           const defaultEvents = [{ comment: "Timeline in CDB", branch: "trunk", user: "admin", mtime: Date.now() }];
           return { count: 1, events: defaultEvents, timeline: defaultEvents };
@@ -182,6 +220,8 @@ class BrowserMcpServer {
           } else if (mgr.backendType === "sqlite_wasm") {
             const pages = backend.exec("SELECT name, author, mtime FROM wiki");
             return { pages };
+          } else if (mgr.backendType === "cdb") {
+            return { pages: Object.keys(DEFAULT_WIKI_DOCS).map(name => ({ name, author: "system" })) };
           }
           return { pages: Object.keys(DEFAULT_WIKI_DOCS).map(name => ({ name, author: "system" })) };
         }
@@ -191,6 +231,10 @@ class BrowserMcpServer {
           if (mgr.backendType === "indexeddb") {
             const page = await backend.get("wiki", params.name);
             return page || { name: params.name, text: "# Not Found" };
+          } else if (mgr.backendType === "sqlite_wasm") {
+            const rows = backend.exec("SELECT name, text, author, mtime FROM wiki WHERE name = ?", [params.name]);
+            if (rows.length > 0) return rows[0];
+            return { name: params.name, text: DEFAULT_WIKI_DOCS[params.name] || "# Empty page" };
           } else if (mgr.backendType === "cdb") {
             const val = backend.get("wiki:" + params.name);
             return { name: params.name, text: val || DEFAULT_WIKI_DOCS[params.name] || "# Empty page" };
@@ -207,6 +251,8 @@ class BrowserMcpServer {
               author: "ai-agent",
               mtime: Date.now()
             });
+          } else if (mgr.backendType === "sqlite_wasm") {
+            backend.run("INSERT OR REPLACE INTO wiki(name, text, author, mtime) VALUES(?, ?, 'ai-agent', ?)", [params.name, params.content || "", Date.now() / 1000]);
           } else if (mgr.backendType === "cdb") {
             backend.put("wiki:" + params.name, params.content || "");
           }
@@ -216,6 +262,12 @@ class BrowserMcpServer {
         case "ticket_list": {
           if (mgr.backendType === "indexeddb") {
             const list = await backend.getAll("tickets");
+            return { tickets: list };
+          } else if (mgr.backendType === "sqlite_wasm") {
+            const list = backend.exec("SELECT tkt_uuid AS id, title, desc, status, priority, reporter, mtime FROM ticket ORDER BY mtime DESC");
+            return { tickets: list };
+          } else if (mgr.backendType === "cdb") {
+            const list = backend.getTickets ? backend.getTickets() : [];
             return { tickets: list };
           }
           return { tickets: [] };
@@ -234,6 +286,11 @@ class BrowserMcpServer {
           };
           if (mgr.backendType === "indexeddb") {
             await backend.put("tickets", tkt);
+          } else if (mgr.backendType === "sqlite_wasm") {
+            backend.run("INSERT INTO ticket(tkt_uuid, title, desc, status, type, priority, reporter, mtime) VALUES(?, ?, ?, ?, 'code', ?, ?, ?)",
+              [id, tkt.title, tkt.desc, tkt.status, tkt.priority, tkt.reporter, Date.now() / 1000]);
+          } else if (mgr.backendType === "cdb") {
+            if (backend.addTicket) backend.addTicket(tkt);
           }
           return { success: true, ticket: tkt };
         }

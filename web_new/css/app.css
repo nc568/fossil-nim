@@ -16,6 +16,7 @@ html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 body {
@@ -145,7 +146,7 @@ pre code {
   z-index: 100;
   box-shadow: var(--shadow);
   backdrop-filter: blur(8px);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .navbar-brand {
@@ -242,23 +243,49 @@ pre code {
   cursor: pointer;
 }
 
-@media (max-width: 1100px) {
+@media (max-width: 1550px) {
+  .dyn-status-group #dyn-runtime-pill {
+    display: none;
+  }
+}
+
+@media (max-width: 1350px) {
+  .dyn-status-group {
+    display: none;
+  }
+  .navbar-brand .badge {
+    display: none;
+  }
+}
+
+@media (max-width: 1200px) {
   .navbar-actions {
     display: none;
   }
   .navbar-actions.open {
-    display: flex;
-    position: fixed;
-    top: var(--nav-height, 56px);
-    left: 0;
-    right: 0;
+    display: flex !important;
+    position: absolute;
+    top: 100%;
+    right: 0.75rem;
+    left: auto;
+    width: 290px;
+    max-width: calc(100vw - 1.5rem);
     background: var(--color-bg-card);
     flex-direction: column;
-    padding: 1.25rem;
-    gap: 0.75rem;
-    border-bottom: 1px solid var(--color-border);
-    box-shadow: var(--shadow-lg);
-    z-index: 99;
+    padding: 1rem;
+    gap: 0.65rem;
+    border: 1px solid var(--color-border);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+    box-shadow: 0 14px 35px rgba(0, 0, 0, 0.5);
+    z-index: 1100;
+  }
+  .navbar-actions.open > * {
+    width: 100%;
+    justify-content: center;
+  }
+  .navbar-actions.open .storage-selector-group {
+    justify-content: space-between;
   }
   .mobile-menu-toggle {
     display: block;
@@ -513,18 +540,9 @@ pre code {
   }
 }
 
-/* On Desktop, hide horizontal tabs since GitLab sidebar is active */
-@media (min-width: 901px) {
-  .tabs-nav {
-    display: none !important;
-  }
-}
-/* On Mobile/Tablet, show horizontal touch-scrollable tabs */
-@media (max-width: 900px) {
-  .tabs-nav {
-    display: flex;
-    margin-bottom: 1rem;
-  }
+/* GitLab sidebar handles 100% of navigation on all viewports (sidebar on desktop, sliding drawer on mobile) */
+.tabs-nav {
+  display: none !important;
 }
 
 /* 5. Buttons */
