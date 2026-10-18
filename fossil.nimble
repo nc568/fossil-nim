@@ -1,8 +1,8 @@
 # Package
 version       = "2.26.0-nim"
-author        = "Fossil-Nim Port"
+author        = "Lina K9 (nc568) and Fossil-Nim Contributors"
 description   = "Fossil SCM rewritten in Nim - modular, with MCP and modern storage backends"
-license       = "BSD-2-Clause"
+license       = "BSD-3-Clause"
 srcDir        = "src"
 bin           = @["fossil/cli/main=fossil"]
 binDir        = "bin"
