@@ -263,6 +263,17 @@ proc callScalar*(name: string; args: openArray[Value]; nowIso: string;
                  randState: var uint64): Value =
   template a(i: int): Value = args[i]
   case name
+  of "min", "max":
+    ## Scalar form: `min(a, b, ...)`. NULL if any argument is NULL, because SQL
+    ## says an unknown input makes the answer unknown. One-argument calls never
+    ## reach here — they are aggregates and the engine routes them elsewhere.
+    if args.len == 0: return nullValue()
+    result = a(0)
+    for i in 1 ..< args.len:
+      if result.kind == vkNull or a(i).kind == vkNull: return nullValue()
+      let c = compare(a(i), result)
+      if (name == "min" and c < 0) or (name == "max" and c > 0): result = a(i)
+    return
   of "abs":
     if a(0).kind == vkNull: return nullValue()
     case a(0).kind

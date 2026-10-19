@@ -221,8 +221,12 @@ proc arith(op: string; a, b: Value): Value =
       return intValue(x * y)
     of "/":
       if y == 0: return nullValue()
-      if x mod y == 0: return intValue(x div y)   # SQLite: int/int stays int
-      return realValue(float64(x) / float64(y))
+      # int / int truncates in SQL. The first version only kept the integer type
+      # when the division came out exact, so `7 / 2` returned 3.5 while `8 / 2`
+      # returned 4 — and the comment above it claimed the opposite. Found by the
+      # differential corpus against real SQLite, which is the only way this class
+      # of divergence gets found at all.
+      return intValue(x div y)
     of "%":
       if y == 0: return nullValue()
       return intValue(x mod y)
@@ -436,8 +440,8 @@ proc eval(c: Ctx; e: Expr): Value =
     let v = c.eval(e.args[0])
     if v.kind == vkNull: return nullValue()
     case affinityOf(e.typeName)
-    of affInteger: intValue(v.asInt)
-    of affReal: realValue(v.asFloat)
+    of affInteger: intValue(castToInt(v))
+    of affReal: realValue(castToFloat(v))
     of affText: textValue(v.toText)
     of affBool: boolValue(v.truthy())
     of affBlob: blobValue(v.toBlob)
@@ -487,7 +491,12 @@ proc eval(c: Ctx; e: Expr): Value =
 # ===========================================================================
 
 func isAggCall(e: Expr): bool =
-  e.kind == exCall and e.name in AggregateNames
+  ## `min(a, b)` and `max(a, b)` are scalar in SQL; only the one-argument form
+  ## aggregates. Treating every `max(...)` as an aggregate made `max(1, 2)`
+  ## return 1 — the first row's value instead of the larger one.
+  if e.kind != exCall or e.name notin AggregateNames: return false
+  if (e.name == "min" or e.name == "max") and e.args.len > 1: return false
+  true
 
 proc collectAggs(e: Expr; acc: var seq[Expr]): bool =
   ## Depth-first scan assigning a stable aggregate slot index to each call.

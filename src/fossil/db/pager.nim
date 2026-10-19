@@ -59,22 +59,32 @@ proc readI32(s: string; at: int): int32 =
   var v: uint32 = 0
   for i in 0 .. 3:
     v = (v shl 8) or uint32(uint8(s[at + i]))
-  int32(v)
+  # `cast`, not a conversion: `int32(0x87_00_00_01)` is a *checked* conversion
+  # and raises RangeDefect on exactly the inputs a corrupt file produces. A
+  # defect is not a DbError, so the checked version turned a corrupt header field
+  # into a process kill — the same bug the page parser had, one layer up.
+  cast[int32](v)
 
 proc writeI32(s: var string; at: int; v: int32) =
-  let u = uint32(v)
+  let u = cast[uint32](v)
   s[at + 0] = char((u shr 24) and 0xFF)
   s[at + 1] = char((u shr 16) and 0xFF)
   s[at + 2] = char((u shr 8) and 0xFF)
   s[at + 3] = char(u and 0xFF)
 
 proc makeHeader(nPages, freeHead, root: int): string   # forward
-proc parseHeader(p: Pager; hdr: string): bool           # forward
+proc parseHeader(p: Pager; hdr: string; againstFile = true): bool   # forward
 
 proc applyHeaderPage*(p: Pager; data: string) =
   ## Used by log replay: the header travels through the log as page 0 and has to
   ## be written back through the header path, not as an ordinary page.
-  if data.len != PageSize or not parseHeader(p, data):
+  ##
+  ## Not checked against the size of the file, and that is not an oversight: at
+  ## recovery time the main file is one commit behind by definition, so a header
+  ## from the log legitimately describes pages that are not on disk yet. This is
+  ## exactly the check that turned every crash into an unreadable database when
+  ## it was first written in the wrong place.
+  if data.len != PageSize or not parseHeader(p, data, againstFile = false):
     fail(corrupt, "log holds an unreadable header page")
 
 proc headerPage*(p: Pager): string =
@@ -89,7 +99,7 @@ proc makeHeader(nPages, freeHead, root: int): string =
   writeI32(result, 16, int32(freeHead))
   writeI32(result, 20, int32(root))
 
-proc parseHeader(p: Pager; hdr: string): bool =
+proc parseHeader(p: Pager; hdr: string; againstFile = true): bool =
   for i in 0 ..< DbMagic.len:
     if hdr[i] != DbMagic[i]: return false
   if readI32(hdr, 8) != DbVersion: return false
@@ -97,6 +107,17 @@ proc parseHeader(p: Pager; hdr: string): bool =
   p.freeHead = int(readI32(hdr, 16))
   p.root = int(readI32(hdr, 20))
   if p.nPages < 0 or p.freeHead < 0 or p.root < 0: return false
+  # The file is the only authority on how many pages exist. A header claiming
+  # more than the file can hold would send the next allocation to an offset
+  # nobody wrote, and a memory-backed VFS would try to materialise the gap:
+  # `nPages = 0x7FFFFFFF` is an 8 TB allocation ordered by four bytes of file.
+  if againstFile:
+    let filePages = (p.vfs.size + PageSize - 1) div PageSize
+    if p.nPages > filePages:
+      return false
+  # Every page pointer a header can carry has to point inside the file.
+  if p.root >= p.nPages and p.root != 0: return false
+  if p.freeHead >= p.nPages and p.freeHead != 0: return false
   true
 
 # ---------------------------------------------------------------------------

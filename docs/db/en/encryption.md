@@ -120,6 +120,49 @@ predictable nonce is worse than a failed write.
 | randomness | 24 bytes per sealed page from `std/sysrand` |
 | new wasm constants | 0 |
 
+## Page integrity without a key
+
+Encryption must not be the only thing that detects bit rot. A database that is
+never encrypted is exactly as exposed to a failing disk as an encrypted one, and
+"you get corruption detection when you buy the encryption module" is not a
+security posture, it is an upsell.
+
+So the page layout is fixed **once**, now, in a way that both modes share:
+
+```
+block 4096 = [ payload 4032 ][ trailer 64 ]
+```
+
+| mode | trailer | check |
+|---|---|---|
+| plain | `[crc32 4][zeros 60]` | CRC32 of the 4032-byte payload |
+| encrypted | `[nonce 24][gen 8][tag 32]` | HMAC-SHA256 over `pageId ‖ gen ‖ nonce ‖ ct` |
+
+Both modes have the same payload size, the same stride, and the same page count,
+which is the whole point: turning encryption on becomes a re-encryption pass, not
+a format change, and a file never has to be migrated between layouts. The cost to
+an unencrypted database is 64 bytes per page — 1.5% — paid once instead of paying
+a format migration later.
+
+A mismatch is a `DbError` with code `CORRUPT`, never a `Defect`: the difference
+matters because a defect escapes every handler in the program (see
+`audit-lessons.md`). The pager treats a page that fails its check the way it
+treats a torn write — the log may still hold a good image of it.
+
+CRC32 rather than CRC32C: the WAL already computes CRC32 over every frame and has
+tested it, and one checksum implementation that is exercised in two places beats
+two implementations where one is exercised.
+
+What this does and does not buy:
+
+- **buys**: a flipped bit anywhere in a page is refused instead of returned as
+  data — the gap that `audit-lessons.md` calls the strongest non-confidentiality
+  argument for this work;
+- **does not buy**: any protection against an attacker who rewrites *both* the
+  page and its CRC. That needs the MAC, which needs a key, which is the
+  encryption story above. With no key there is no secret to authenticate with;
+  integrity without a key is a defence against accident, not against intent.
+
 ## Known limitation: rollback of a single page
 
 The MAC makes a page tamper-evident, but a page can still be replaced by an

@@ -89,6 +89,54 @@ func asInt*(v: Value): int64 =
   of vkBool: (if v.bo: 1'i64 else: 0'i64)
   else: 0'i64
 
+func numericPrefixLen(s: string): int =
+  ## Length of the longest numeric prefix: `-12.5abc` -> 5, `abc` -> 0.
+  ## SQL's cast is defined this way — it takes what it can and stops — which is
+  ## why `cast('42' AS INTEGER)` is 42 and `cast('42abc' AS INTEGER)` is 42 too,
+  ## while `cast('abc' AS INTEGER)` is 0.
+  var i = 0
+  if i < s.len and (s[i] == '-' or s[i] == '+'): inc i
+  var digits = 0
+  while i < s.len and s[i] in Digits: inc i; inc digits
+  if i < s.len and s[i] == '.':
+    inc i
+    while i < s.len and s[i] in Digits: inc i; inc digits
+  if digits == 0: 0 else: i
+
+func castToInt*(v: Value): int64 =
+  ## SQLite's CAST(x AS INTEGER), which is *not* `asInt`: `asInt` answers "how
+  ## would this value index an array" and returns 0 for text, which silently
+  ## turned `cast('42' AS INTEGER)` into 0. The differential corpus against real
+  ## SQLite caught it on the first run.
+  case v.kind
+  of vkInt: v.i
+  of vkBool: (if v.bo: 1'i64 else: 0'i64)
+  of vkReal:
+    if v.r != v.r or v.r > 9.2e18 or v.r < -9.2e18: 0'i64 else: int64(v.r)
+  of vkText:
+    let s = v.t.strip()
+    let n = numericPrefixLen(s)
+    if n == 0: return 0'i64
+    let head = s[0 ..< n]
+    try:
+      if '.' in head: int64(parseFloat(head))
+      else: int64(parseBiggestInt(head))
+    except ValueError: 0'i64
+  else: 0'i64
+
+func castToFloat*(v: Value): float64 =
+  case v.kind
+  of vkInt: float64(v.i)
+  of vkBool: (if v.bo: 1.0 else: 0.0)
+  of vkReal: v.r
+  of vkText:
+    let s = v.t.strip()
+    let n = numericPrefixLen(s)
+    if n == 0: return 0.0
+    try: parseFloat(s[0 ..< n])
+    except ValueError: 0.0
+  else: 0.0
+
 func truthy*(v: Value): bool =
   ## SQL three-valued logic treats NULL as "unknown"; callers that need
   ## two-valued semantics (WHERE) must use `whereTrue`.
