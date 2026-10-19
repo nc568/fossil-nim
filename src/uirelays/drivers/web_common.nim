@@ -326,7 +326,7 @@ proc webOpenFont*(path: string; size: int; style: FontStyles;
                   metrics: var FontMetrics): Font =
   let pxSize = max(6, size)
   let baseCharW = max(4, int(float(pxSize) * 0.6 + 0.5))
-  let charW = if FontStyle.bold in style: baseCharW + max(0, pxSize div 24) else: baseCharW
+  let charW = baseCharW
   let ascent = max(4, int(float(pxSize) * 0.8 + 0.5))
   let descent = max(2, int(float(pxSize) * 0.25 + 0.5))
   let lineHeight = ascent + descent + max(2, pxSize div 8)
@@ -1028,6 +1028,7 @@ when defined(js):
         var vp = getVp();
         if (!vp || !window.__uirActive) return;
         if (e.target !== vp && !vp.contains(e.target)) return;
+        e.preventDefault();
         if (vp.focus) vp.focus();
         var p = relPos(e, vp);
         window.__uirActive.mouse("mousedown", p.x, p.y, e.button || 0, e.detail || 1,

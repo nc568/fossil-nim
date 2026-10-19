@@ -90,13 +90,95 @@ proc utf8StepAt(s: string; i: int): int {.inline.} =
   elif (b and 0xF8) == 0xF0: 4
   else: 1
 
-proc removeLastRune(s: var string) =
+proc prevRunePos(s: string; pos: int): int =
+  result = clamp(pos, 0, s.len)
+  if result <= 0:
+    return 0
+  dec result
+  while result > 0 and (ord(s[result]) and 0xC0) == 0x80:
+    dec result
+
+proc nextRunePos(s: string; pos: int): int =
+  let p = clamp(pos, 0, s.len)
+  if p >= s.len:
+    return s.len
+  result = min(s.len, p + utf8StepAt(s, p))
+
+proc isWordByte(ch: char): bool {.inline.} =
+  ch notin {' ', '\t', '\n', '\r', ',', '.', ';', ':', '!', '?', '-', '/', '(', ')', '[', ']'}
+
+proc prevWordPos(s: string; pos: int): int =
+  result = clamp(pos, 0, s.len)
+  while result > 0 and not isWordByte(s[result - 1]):
+    result = prevRunePos(s, result)
+  while result > 0 and isWordByte(s[result - 1]):
+    result = prevRunePos(s, result)
+
+proc nextWordPos(s: string; pos: int): int =
+  result = clamp(pos, 0, s.len)
+  while result < s.len and isWordByte(s[result]):
+    result = nextRunePos(s, result)
+  while result < s.len and not isWordByte(s[result]):
+    result = nextRunePos(s, result)
+
+proc wordBoundsAt(s: string; pos: int): tuple[a, b: int] =
   if s.len == 0:
-    return
-  var n = s.len - 1
-  while n > 0 and (ord(s[n]) and 0xC0) == 0x80:
-    dec n
-  s.setLen(n)
+    return (0, 0)
+  var p = clamp(pos, 0, s.len)
+  if p == s.len and p > 0:
+    p = prevRunePos(s, p)
+  var a = p
+  var b = p
+  if isWordByte(s[p]):
+    while a > 0 and isWordByte(s[a - 1]):
+      a = prevRunePos(s, a)
+    while b < s.len and isWordByte(s[b]):
+      b = nextRunePos(s, b)
+  else:
+    while a > 0 and not isWordByte(s[a - 1]):
+      a = prevRunePos(s, a)
+    while b < s.len and not isWordByte(s[b]):
+      b = nextRunePos(s, b)
+  result = (a, b)
+
+proc bytePosFromRelX(font: Font; s: string; relX: int): int =
+  if relX <= 0 or s.len == 0:
+    return 0
+  var pos = 0
+  var prevW = 0
+  while pos < s.len:
+    let nextP = nextRunePos(s, pos)
+    let curW = measureText(font, s[0 ..< nextP]).w
+    if prevW + max(1, curW - prevW) div 2 > relX:
+      return pos
+    prevW = curW
+    pos = nextP
+  result = s.len
+
+proc hasTextSelection(caretPos, selAnchor: int): bool {.inline.} =
+  selAnchor >= 0 and selAnchor != caretPos
+
+proc selectionBounds(s: string; caretPos, selAnchor: int): tuple[a, b: int] {.inline.} =
+  let a = clamp(min(caretPos, selAnchor), 0, s.len)
+  let b = clamp(max(caretPos, selAnchor), 0, s.len)
+  (a, b)
+
+proc deleteTextSelection(s: var string; caretPos, selAnchor: var int): bool =
+  if not hasTextSelection(caretPos, selAnchor):
+    return false
+  let (a, b) = selectionBounds(s, caretPos, selAnchor)
+  if b > a:
+    s = s[0 ..< a] & s[b .. ^1]
+  caretPos = a
+  selAnchor = -1
+  result = true
+
+proc insertAtCursor(s: var string; caretPos, selAnchor: var int; entered: string) =
+  discard deleteTextSelection(s, caretPos, selAnchor)
+  let p = clamp(caretPos, 0, s.len)
+  s = s[0 ..< p] & entered & s[p .. ^1]
+  caretPos = p + entered.len
+  selAnchor = -1
 
 proc truncateText(font: Font; text: string; maxWidth: int): string =
   if maxWidth <= 0:
@@ -225,6 +307,10 @@ proc main() {.uirApp.} =
     TodoItem(text: "Prepare tomorrow's notes", done: false)
   ]
   var inputText = ""
+  var caretPos = 0
+  var selAnchor = -1
+  var draggingInput = false
+  var lastCaretTick = getTicks()
   var focus = ComposerFocus
   var selectedIndex = if items.len > 0: 0 else: -1
   var scrollIndex = 0
@@ -241,6 +327,9 @@ proc main() {.uirApp.} =
     let rowHeight = rowHeightFor(fm)
     let visibleRows = visibleRowsFor(listInner, rowHeight)
     clampSelection(items, selectedIndex, scrollIndex, visibleRows)
+    caretPos = clamp(caretPos, 0, inputText.len)
+    if selAnchor > inputText.len:
+      selAnchor = inputText.len
 
     let inputFlags = if focus == ComposerFocus: {WantTextInput} else: {}
     var e = default Event
@@ -254,6 +343,16 @@ proc main() {.uirApp.} =
       of MouseMoveEvent:
         mouseX = e.x
         mouseY = e.y
+        if draggingInput and focus == ComposerFocus:
+          caretPos = bytePosFromRelX(font, inputText, e.x - (composerRect.x + 10))
+          lastCaretTick = getTicks()
+      of MouseUpEvent:
+        mouseX = e.x
+        mouseY = e.y
+        if draggingInput:
+          draggingInput = false
+          if selAnchor == caretPos:
+            selAnchor = -1
       of MouseWheelEvent:
         if listInner.contains(point(mouseX, mouseY)):
           let maxScroll = max(0, items.len - visibleRows)
@@ -263,15 +362,39 @@ proc main() {.uirApp.} =
         mouseY = e.y
         let p = point(e.x, e.y)
         if addBtnRect.contains(p):
+          draggingInput = false
           let trimmed = strutils.strip(inputText)
           let taskTitle = if trimmed.len > 0: trimmed else: "Follow up task #" & $(items.len + 1)
           items.add TodoItem(text: taskTitle, done: false)
           inputText.setLen(0)
+          caretPos = 0
+          selAnchor = -1
           selectedIndex = items.high
           clampSelection(items, selectedIndex, scrollIndex, visibleRows)
         elif composerRect.contains(p):
           focus = ComposerFocus
+          lastCaretTick = getTicks()
+          let clickedPos = bytePosFromRelX(font, inputText, e.x - (composerRect.x + 10))
+          if e.clicks >= 3:
+            selAnchor = 0
+            caretPos = inputText.len
+            draggingInput = false
+          elif e.clicks == 2:
+            let (wa, wb) = wordBoundsAt(inputText, clickedPos)
+            selAnchor = wa
+            caretPos = wb
+            draggingInput = false
+          elif ShiftPressed in e.mods:
+            if selAnchor < 0:
+              selAnchor = caretPos
+            caretPos = clickedPos
+            draggingInput = true
+          else:
+            caretPos = clickedPos
+            selAnchor = clickedPos
+            draggingInput = true
         else:
+          draggingInput = false
           let hover = hitList(listInner, rowHeight, scrollIndex, items, e.x, e.y)
           case hover.kind
           of HoverDelete:
@@ -295,13 +418,20 @@ proc main() {.uirApp.} =
         if focus == ComposerFocus:
           let entered = eventText(e.text)
           if entered.len > 0:
-            inputText.add entered
+            insertAtCursor(inputText, caretPos, selAnchor, entered)
+            lastCaretTick = getTicks()
       of KeyDownEvent:
+        let ctrl = CtrlPressed in e.mods or GuiPressed in e.mods
+        let shift = ShiftPressed in e.mods
+        lastCaretTick = getTicks()
         case e.key
         of KeyEsc:
-          running = false
+          if focus == ComposerFocus and hasTextSelection(caretPos, selAnchor):
+            selAnchor = -1
+          else:
+            running = false
         of KeyQ:
-          if CtrlPressed in e.mods:
+          if ctrl:
             running = false
         of KeyTab:
           if focus == ComposerFocus:
@@ -316,6 +446,8 @@ proc main() {.uirApp.} =
             if trimmed.len > 0:
               items.add TodoItem(text: trimmed, done: false)
               inputText.setLen(0)
+              caretPos = 0
+              selAnchor = -1
               selectedIndex = items.high
               clampSelection(items, selectedIndex, scrollIndex, visibleRows)
           elif selectedIndex >= 0 and selectedIndex < items.len:
@@ -323,14 +455,71 @@ proc main() {.uirApp.} =
         of KeySpace:
           if focus == ListFocus and selectedIndex >= 0 and selectedIndex < items.len:
             items[selectedIndex].done = not items[selectedIndex].done
+        of KeyLeft:
+          if focus == ComposerFocus:
+            if shift:
+              if selAnchor < 0:
+                selAnchor = caretPos
+              caretPos = if ctrl: prevWordPos(inputText, caretPos) else: prevRunePos(inputText, caretPos)
+              if selAnchor == caretPos:
+                selAnchor = -1
+            elif hasTextSelection(caretPos, selAnchor):
+              caretPos = min(caretPos, selAnchor)
+              selAnchor = -1
+            else:
+              caretPos = if ctrl: prevWordPos(inputText, caretPos) else: prevRunePos(inputText, caretPos)
+        of KeyRight:
+          if focus == ComposerFocus:
+            if shift:
+              if selAnchor < 0:
+                selAnchor = caretPos
+              caretPos = if ctrl: nextWordPos(inputText, caretPos) else: nextRunePos(inputText, caretPos)
+              if selAnchor == caretPos:
+                selAnchor = -1
+            elif hasTextSelection(caretPos, selAnchor):
+              caretPos = max(caretPos, selAnchor)
+              selAnchor = -1
+            else:
+              caretPos = if ctrl: nextWordPos(inputText, caretPos) else: nextRunePos(inputText, caretPos)
+        of KeyHome:
+          if focus == ComposerFocus:
+            if shift:
+              if selAnchor < 0:
+                selAnchor = caretPos
+              caretPos = 0
+              if selAnchor == caretPos:
+                selAnchor = -1
+            else:
+              caretPos = 0
+              selAnchor = -1
+        of KeyEnd:
+          if focus == ComposerFocus:
+            if shift:
+              if selAnchor < 0:
+                selAnchor = caretPos
+              caretPos = inputText.len
+              if selAnchor == caretPos:
+                selAnchor = -1
+            else:
+              caretPos = inputText.len
+              selAnchor = -1
         of KeyBackspace:
           if focus == ComposerFocus:
-            removeLastRune(inputText)
+            if not deleteTextSelection(inputText, caretPos, selAnchor):
+              let p = if ctrl: prevWordPos(inputText, caretPos) else: prevRunePos(inputText, caretPos)
+              if p < caretPos:
+                inputText = inputText[0 ..< p] & inputText[caretPos .. ^1]
+                caretPos = p
           elif focus == ListFocus and selectedIndex >= 0 and selectedIndex < items.len:
             items.delete(selectedIndex)
             clampSelection(items, selectedIndex, scrollIndex, visibleRows)
         of KeyDelete:
-          if focus == ListFocus and selectedIndex >= 0 and selectedIndex < items.len:
+          if focus == ComposerFocus:
+            if not deleteTextSelection(inputText, caretPos, selAnchor):
+              let n = if ctrl: nextWordPos(inputText, caretPos) else: nextRunePos(inputText, caretPos)
+              if n > caretPos:
+                inputText = inputText[0 ..< caretPos] & inputText[n .. ^1]
+          elif focus == ListFocus and selectedIndex >= 0 and selectedIndex < items.len:
             items.delete(selectedIndex)
             clampSelection(items, selectedIndex, scrollIndex, visibleRows)
         of KeyUp:
@@ -342,9 +531,27 @@ proc main() {.uirApp.} =
             if selectedIndex < 0: selectedIndex = 0 else: inc selectedIndex
             clampSelection(items, selectedIndex, scrollIndex, visibleRows)
         else:
-          if focus == ComposerFocus:
-            if e.key == KeyV and CtrlPressed in e.mods:
-              inputText.add getClipboardText()
+          if focus == ComposerFocus and ctrl:
+            case e.key
+            of KeyA:
+              if inputText.len > 0:
+                selAnchor = 0
+                caretPos = inputText.len
+            of KeyC:
+              if hasTextSelection(caretPos, selAnchor):
+                let (a, b) = selectionBounds(inputText, caretPos, selAnchor)
+                putClipboardText(inputText[a ..< b])
+            of KeyX:
+              if hasTextSelection(caretPos, selAnchor):
+                let (a, b) = selectionBounds(inputText, caretPos, selAnchor)
+                putClipboardText(inputText[a ..< b])
+                discard deleteTextSelection(inputText, caretPos, selAnchor)
+            of KeyV:
+              let clip = getClipboardText()
+              if clip.len > 0:
+                insertAtCursor(inputText, caretPos, selAnchor, clip)
+            else:
+              discard
       else:
         discard
 
@@ -397,19 +604,28 @@ proc main() {.uirApp.} =
 
     let composerTextX = composerBox.x + 10
     let composerTextY = composerBox.y + (composerBox.h - fm.lineHeight) div 2
+    saveState()
+    setClipRect(insetRect(composerBox, 2))
     if inputText.len == 0:
       discard drawText(font, composerTextX, composerTextY,
-        "Add a task", placeholderColor, composerBg)
+        "Add a task", placeholderColor, color(0, 0, 0, 0))
     else:
-      let shown = truncateText(font, inputText, composerBox.w - 20)
+      if focus == ComposerFocus and hasTextSelection(caretPos, selAnchor):
+        let (selA, selB) = selectionBounds(inputText, caretPos, selAnchor)
+        let xA = composerTextX + measureText(font, inputText[0 ..< selA]).w
+        let xB = composerTextX + measureText(font, inputText[0 ..< selB]).w
+        if xB > xA:
+          fillRect(rect(xA, composerTextY - 1, xB - xA, fm.lineHeight + 2), color(196, 221, 252))
       discard drawText(font, composerTextX, composerTextY,
-        shown, textColor, composerBg)
+        inputText, textColor, color(0, 0, 0, 0))
 
     if focus == ComposerFocus:
-      let caretText = truncateText(font, inputText, composerBox.w - 20)
-      let caretX = composerTextX + measureText(font, caretText).w + 1
-      if (getTicks() div 500) mod 2 == 0:
-        drawLine(caretX, composerBox.y + 7, caretX, composerBox.y + composerBox.h - 8, accentColor)
+      let clampedCaret = clamp(caretPos, 0, inputText.len)
+      let caretX = composerTextX + measureText(font, inputText[0 ..< clampedCaret]).w
+      let elapsed = getTicks() - lastCaretTick
+      if elapsed < 500 or ((elapsed div 500) mod 2 == 0):
+        fillRect(rect(caretX, composerBox.y + 6, 2, composerBox.h - 12), accentColor)
+    restoreState()
 
     fillRect(listRect, panelColor)
     drawLine(listRect.x + 14, listRect.y, listRect.x + listRect.w - 14, listRect.y, dividerColor)

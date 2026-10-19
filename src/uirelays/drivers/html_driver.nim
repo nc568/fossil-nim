@@ -734,7 +734,8 @@ proc htmlDrawLine(x1, y1, x2, y2: int; color: Color) =
 proc buildFontCssStyle(slot: WebFontSlot; fg, bg: Color): string =
   result = "font-family:" & slot.family & ";font-size:" & $slot.size &
     "px;line-height:" & $slot.metrics.lineHeight & "px;height:" &
-    $slot.metrics.lineHeight & "px;color:" & toCssRgba(fg) & ";"
+    $slot.metrics.lineHeight & "px;font-variant-ligatures:none;letter-spacing:calc(" &
+    $slot.charWidth & "px - 1ch);color:" & toCssRgba(fg) & ";"
   if FontStyle.bold in slot.style:
     result.add "font-weight:700;"
   if FontStyle.italics in slot.style:
@@ -750,7 +751,7 @@ proc htmlDrawText(f: Font; x, y: int; text: string; fg, bg: Color): TextExtent =
   inc htmlCurrentNodeCount
   let slot = webGetFontSlot(f)
   htmlFrameBuffer.add "<span class=\"uir-text\" style=\"left:" & $x &
-    "px;top:" & $y & "px;" & buildFontCssStyle(slot, fg, bg) & "\">" &
+    "px;top:" & $y & "px;width:" & $result.w & "px;" & buildFontCssStyle(slot, fg, bg) & "\">" &
     htmlEscape(text) & "</span>"
 
 proc htmlDrawMeasuredText(f: Font; x, y: int; text: string; fg, bg: Color;

@@ -136,10 +136,10 @@ proc main() {.uirApp.} =
 
   addBuffer("[config]", makeConfigText(curTheme), langNone, {rfColorLiterals}, lineNums = true)
   addBuffer("[layout]", DefaultLayoutText, langNone, {}, lineNums = true)
-  addBuffer("README.md", ReadmeContent, langMarkdown, {rfMarkdownImages, rfColorLiterals}, lineNums = true)
-  addBuffer("examples/calculator.nim", CalcContent, langNim, {rfColorLiterals}, lineNums = true)
-  addBuffer("examples/snake.nim", SnakeContent, langNim, {rfColorLiterals}, lineNums = true)
-  addBuffer("examples/twenty48.nim", T2048Content, langNim, {rfColorLiterals}, lineNums = true)
+  addBuffer("README.md", ReadmeContent, langMarkdown, {rfMarkdownImages}, lineNums = true)
+  addBuffer("examples/calculator.nim", CalcContent, langNim, {}, lineNums = true)
+  addBuffer("examples/snake.nim", SnakeContent, langNim, {}, lineNums = true)
+  addBuffer("examples/twenty48.nim", T2048Content, langNim, {}, lineNums = true)
 
   # Place initial cursor at the end of line 1 in README.md so typing or Backspace works immediately
   openTabs[2].ed.gotoLine(1, 7)
@@ -327,10 +327,12 @@ proc main() {.uirApp.} =
               setCursor(curHand)
             else:
               setCursor(curDefault)
-          # Forward hover to active cells
+          # Forward hover / drag to active cells
           for cellName, r in cells:
             if cellName == "tabs":
               discard tabsEd.draw(e, r, false)
+            elif cellName == "terminal":
+              discard termEd.draw(e, r, focusedCell == "terminal")
             elif cellName.isEditor:
               openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, cellName))
               discard openTabs[activeTabIdx].ed.draw(e, r, focusedCell == cellName)
@@ -373,7 +375,7 @@ proc main() {.uirApp.} =
                       newName,
                       "# " & newName & " — Type Nim code here!\n\nproc greet(name: string): string =\n  \"Hello, \" & name & \"!\"\n\necho greet(\"focim\")\n",
                       langNim,
-                      {rfColorLiterals},
+                      {},
                       lineNums = true
                     )
                     activeTabIdx = openTabs.high

@@ -11,3 +11,4 @@ nim.cfg
 nimble.develop
 nimble.paths
 nimbledeps
+.github/

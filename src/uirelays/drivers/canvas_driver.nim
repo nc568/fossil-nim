@@ -258,6 +258,13 @@ const CanvasDriverPageTemplate = """<!DOCTYPE html>
             ctx.fillRect(cmd.x, cmd.y, cmd.w, cmd.h);
           }
           ctx.font = cmd.font;
+          if ("letterSpacing" in ctx) {
+            ctx.letterSpacing = "0px";
+            if (cmd.cw > 0) {
+              const mAdv = ctx.measureText("M").width;
+              ctx.letterSpacing = (cmd.cw - mAdv) + "px";
+            }
+          }
           ctx.fillStyle = cmd.fg;
           ctx.textBaseline = "alphabetic";
           ctx.fillText(cmd.t, cmd.x, cmd.y + (cmd.ascent || 12));
@@ -825,6 +832,7 @@ proc canvasDrawText(f: Font; x, y: int; text: string; fg, bg: Color): TextExtent
     "y": y,
     "w": result.w,
     "h": result.h,
+    "cw": slot.charWidth,
     "t": text,
     "font": buildCanvasFontShorthand(slot),
     "ascent": slot.metrics.ascent,
@@ -844,6 +852,7 @@ proc canvasDrawMeasuredText(f: Font; x, y: int; text: string; fg, bg: Color;
     "y": y,
     "w": size.w,
     "h": size.h,
+    "cw": slot.charWidth,
     "t": text,
     "font": buildCanvasFontShorthand(slot),
     "ascent": slot.metrics.ascent,

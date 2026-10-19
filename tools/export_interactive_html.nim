@@ -351,11 +351,16 @@ proc main() =
   createDir("/tmp/uir_js")
   createDir("/home/user/uirelays/exported_html")
 
+  let nimBin = block:
+    let found = findExe("nim")
+    if found.len > 0: found else: "/tmp/nim-2.2.2/bin/nim"
+
   var compiled: seq[tuple[app: AppEntry, js: string]] = @[]
   for app in Apps:
     let outJs = "/tmp/uir_js/" & app.id & ".js"
-    let cmd = "/tmp/nim-2.2.2/bin/nim js --mm:arc -d:danger --opt:size -d:html " &
-              "--path:/home/user/uirelays/src --path:/home/user/focim/src " &
+    let cmd = nimBin & " js --mm:arc -d:danger --opt:size -d:html " &
+              "--path:/home/user/uirelays/src --path:/home/user/uirelays/focim_web_port " &
+              "--path:src --path:focim_web_port " &
               "-o:" & outJs & " " & app.srcPath
     echo "Compiling JS for ", app.id, " ..."
     let code = execShellCmd(cmd)

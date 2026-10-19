@@ -168,10 +168,27 @@ async function runAllInteractiveChecks() {
   }
   await sleepMs(60);
   var hasScratchEdited = vp.textContent.indexOf("SCRATCH_777") !== -1;
+  // Verify exact 8.000px per-character cell alignment (0.000px drift / 0px line shift)
+  var scratchNode = findElementWithText("SCRATCH_777");
+  var exactCellAlign = false;
+  if (scratchNode && scratchNode.firstChild && scratchNode.textContent.length >= 5) {
+    var rng = document.createRange();
+    rng.setStart(scratchNode.firstChild, 0);
+    rng.setEnd(scratchNode.firstChild, 5);
+    var rw = rng.getBoundingClientRect().width;
+    exactCellAlign = Math.abs(rw - 40.0) < 0.05;
+  }
+  // Test Shift+ArrowLeft selection and replacement in focim
+  for (var sl = 0; sl < 3; sl++) {
+    window.__uirActive.key("keydown", "ArrowLeft", "ArrowLeft", true, false, false, false);
+  }
+  window.__uirActive.key("keydown", "9", "Digit9", false, false, false, false);
+  await sleepMs(60);
+  var hasSelReplaced = vp.textContent.indexOf("SCRATCH_9") !== -1 && vp.textContent.indexOf("SCRATCH_777") === -1;
   testResizeTo(1160, 720);
   await sleepMs(80);
   var focimResized = vp.style.width === "1160px";
-  results.push("focim:theme=" + themeClicked + ":split=" + splitClicked + ":tab=" + (tabClicked && hasCalcCode) + ":edit=" + (hasEditedCode && hasDirtyStar && scratchClicked && hasScratchEdited) + ":resize=" + focimResized);
+  results.push("focim:theme=" + themeClicked + ":split=" + splitClicked + ":tab=" + (tabClicked && hasCalcCode) + ":edit=" + (hasEditedCode && hasDirtyStar && scratchClicked && hasScratchEdited && hasSelReplaced) + ":align=" + exactCellAlign + ":resize=" + focimResized);
 
   // 5. Web Showcase: click +1 on Widgets tab, then switch to 2. Graphics & Clip + resize
   switchUirApp("web_showcase");
@@ -187,19 +204,40 @@ async function runAllInteractiveChecks() {
   var showcaseResized = vp.style.width === "1020px";
   results.push("web_showcase:inc=" + (incClicked && count1) + ":tab=" + (gfxTab && hasBlit) + ":resize=" + showcaseResized);
 
-  // 6. Todo: type task + click + Add + resize
+  // 6. Todo: type text, move cursor left into middle with ArrowLeft, insert text,
+  //    select with Shift+ArrowLeft, replace selection, click + Add + resize
   switchUirApp("todo");
   await sleepMs(80);
-  window.__uirActive.key("keydown", "X", "KeyX", false, false, false, false);
-  window.__uirActive.key("keydown", "Y", "KeyY", false, false, false, false);
+  var todoStart = "AlphaGamma";
+  for (var qi = 0; qi < todoStart.length; qi++) {
+    var qch = todoStart.charAt(qi);
+    window.__uirActive.key("keydown", qch, "KeyA", false, false, false, false);
+  }
+  // Move cursor 5 characters left (between Alpha and Gamma)
+  for (var ql = 0; ql < 5; ql++) {
+    window.__uirActive.key("keydown", "ArrowLeft", "ArrowLeft", false, false, false, false);
+  }
+  // Insert Beta in the middle -> AlphaBetaGamma
+  var todoMid = "Beta";
+  for (var qm = 0; qm < todoMid.length; qm++) {
+    var mch = todoMid.charAt(qm);
+    window.__uirActive.key("keydown", mch, "KeyB", false, false, false, false);
+  }
+  await sleepMs(40);
+  var hasMidInsert = vp.textContent.indexOf("AlphaBetaGamma") !== -1;
+  // Select "Beta" with Shift+ArrowLeft x4 and replace with "_" -> Alpha_Gamma
+  for (var qs = 0; qs < 4; qs++) {
+    window.__uirActive.key("keydown", "ArrowLeft", "ArrowLeft", true, false, false, false);
+  }
+  window.__uirActive.key("keydown", "_", "Minus", true, false, false, false);
   await sleepMs(50);
   var addClicked = clickElementWithText("+ Add");
   await sleepMs(60);
-  var hasXY = vp.textContent.indexOf("XY") !== -1;
+  var hasReplacedTask = vp.textContent.indexOf("Alpha_Gamma") !== -1;
   testResizeTo(940, 620);
   await sleepMs(60);
   var todoResized = vp.style.width === "940px";
-  results.push("todo:addBtn=" + (addClicked && hasXY) + ":resize=" + todoResized);
+  results.push("todo:cursorMove=" + hasMidInsert + ":selReplace=" + hasReplacedTask + ":addBtn=" + (addClicked && hasReplacedTask) + ":resize=" + todoResized);
 
   // 7. Paint: click Brush +, drag on canvas, click Clear + resize
   switchUirApp("paint");
