@@ -37,6 +37,7 @@ type
     limit = 1_0004
     badParam = 1_0005
     injection = 1_0006   ## dynamic SQL rejected by the strict-SQL guard
+    cryptoErr = 1_0007   ## authentication failed, key rejected, sealed data torn
 
   DbError* = object of CatchableError
     code*: DbCode
@@ -86,3 +87,4 @@ proc codeName*(c: DbCode): string =
   of limit: "LIMIT"
   of badParam: "PARAM"
   of injection: "INJECTION"
+  of cryptoErr: "CRYPTO"
