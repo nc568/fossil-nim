@@ -32,6 +32,7 @@ const
   CellHdr* = 8
   MaxKeySize* = 512
   InlineValueMax* = 1024
+  MaxValueSize* = 64 * 1024 * 1024   ## the ceiling a value may claim on disk
   MaxLeafCell* = CellHdr + MaxKeySize + InlineValueMax
   MaxIntCell* = CellHdr + MaxKeySize
   OverflowHdr* = 8
@@ -114,15 +115,49 @@ doAssert 2 * MaxLeafCell + NodeHeader + 4 <= PageSize, "a leaf must hold two ful
 doAssert 2 * MaxIntCell + NodeHeader + 4 <= PageSize, "an internal node must hold two cells"
 
 proc parseNode(page: string): Node =
+  ## Every field here comes from a file an attacker may fully control, so none of
+  ## it is trusted. Without these checks a single flipped byte in the cell count
+  ## or in an offset walks the offset table off the end of the page and raises an
+  ## `IndexDefect` — a defect, not a `DbError`, which means it escapes every
+  ## `except DbError` in the program and takes the process with it. A database
+  ## that crashes on a corrupt page is a database that loses the *good* pages
+  ## around it.
+  if page.len != PageSize: failf(corrupt, "page is $1 bytes, not $2", page.len, PageSize)
   result.kind = int(uint8(page[0]))
+  if result.kind != KindLeaf and result.kind != KindInternal:
+    failf(corrupt, "page kind $1 is neither leaf nor internal", result.kind)
   result.left = page.getI32(8)
   result.right = page.getI32(4)
   let n = page.getU16(2)
+  let firstCell = NodeHeader + 2 * n
+  if firstCell > PageSize:
+    failf(corrupt, "page claims $1 cells, the offset table alone would not fit", n)
   for i in 0 ..< n:
     # cells are packed end to end, so the next cell's offset is our end
     let off = page.getU16(NodeHeader + 2 * i)
     let endOff = if i + 1 < n: page.getU16(NodeHeader + 2 * (i + 1)) else: PageSize
+    if off < firstCell or off > PageSize:
+      failf(corrupt, "cell $1 starts at $2, outside the cell area", i, off)
+    if endOff < off or endOff > PageSize:
+      failf(corrupt, "cell $1 ends at $2, before it starts or past the page", i, endOff)
     let cell = page[off ..< endOff]
+    if cell.len < CellHdr:
+      failf(corrupt, "cell $1 is $2 bytes, shorter than its own header", i, cell.len)
+    let klen = if result.kind == KindLeaf: cell.getU16(0) else: cell.getU16(4)
+    if klen > MaxKeySize:
+      failf(corrupt, "cell $1 claims a $2-byte key", i, klen)
+    if CellHdr + klen > cell.len:
+      failf(corrupt, "cell $1 claims a key longer than the cell", i)
+    if result.kind == KindLeaf:
+      let kind = cell.cellValKind
+      let vlen = cell.cellValLen
+      if kind != ValInline and kind != ValOverflow:
+        failf(corrupt, "cell $1 has value kind $2", i, kind)
+      if vlen < 0 or vlen > MaxValueSize:
+        failf(corrupt, "cell $1 claims a $2-byte value", i, vlen)
+      let need = CellHdr + klen + (if kind == ValOverflow: 4 else: vlen)
+      if need > cell.len:
+        failf(corrupt, "cell $1 needs $2 bytes but the cell is $3", i, need, cell.len)
     result.cells.add cell
     result.keys.add cellKey(cell, result.kind)
 
@@ -165,19 +200,42 @@ proc writeOverflow(b: Btree; val: string): int =
     pos += take
 
 proc readOverflow(b: Btree; first, total: int): string =
+  ## `total` is read from the cell, and the cell comes from a file an attacker may
+  ## control: an unchecked `newString(total)` is a request to allocate whatever
+  ## the file says, which is the zip-bomb class wearing a database costume. The
+  ## cap is the first line of defence; the progress check below is the second,
+  ## because a chain whose every page claims zero bytes would loop forever
+  ## without ever finishing and without ever allocating anything.
+  if total < 0 or total > MaxValueSize:
+    failf(corrupt, "value claims $1 bytes, the limit is $2", total, MaxValueSize)
   result = newString(total)
   var pid = first
   var pos = 0
+  var visited = 0
   while pid != 0 and pos < total:
+    inc visited
+    if visited > total div OverflowUsable + 2:
+      failf(corrupt, "overflow chain is longer than the value it holds")
     let page = b.p.readPage(pid)
-    let take = min(page.getU16(4), total - pos)
+    let take = min(int(page.getU16(4)), total - pos)
+    if take <= 0:
+      failf(corrupt, "overflow chain made no progress at page $1", pid)
     for i in 0 ..< take: result[pos + i] = page[OverflowHdr + i]
     pos += take
     pid = page.getI32(0)
+  if pos != total:
+    failf(corrupt, "overflow chain ended after $1 of $2 bytes", pos, total)
 
 proc freeOverflow(b: Btree; first: int) =
+  ## A corrupt chain that points at itself would free pages until the freelist
+  ## contains everything twice. The budget is the number of pages in the file:
+  ## no chain can be longer than that.
   var pid = first
+  var budget = b.p.nPages + 1
   while pid != 0:
+    dec budget
+    if budget < 0:
+      failf(corrupt, "overflow chain does not terminate")
     let next = b.p.readPage(pid).getI32(0)
     b.p.freePage(pid)
     pid = next
@@ -351,6 +409,10 @@ proc insertRec(b: Btree; pid: int; key, val: string):
   (true, sep, newPid, n.keys[0])
 
 proc put*(b: Btree; key, val: string) =
+  # The same ceiling as on read: a value that could never be read back is better
+  # rejected at the door than written and discovered later.
+  if val.len > MaxValueSize:
+    failf(range, "value of $1 bytes exceeds the $2-byte limit", val.len, MaxValueSize)
   let r = b.insertRec(b.root, key, val)
   if not r.split: return
   var root = emptyNode(KindInternal)

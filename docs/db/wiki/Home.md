@@ -19,12 +19,13 @@ WebAssembly. Not a port of SQLite — a rewrite with the legacy cut out.
 | [B+tree](../en/btree.md) | page format, per-child minimums, overflow values, verification |
 | [Crash recovery](../en/recovery.md) | write-through log, checkpoint ordering, 1000-iteration crash fuzzer |
 | [Encryption](../en/encryption.md) | XChaCha20 + HMAC-SHA256, random nonces, what is not wired yet |
+| [Audit lessons](../en/audit-lessons.md) | the seven bug shapes from the fossil-nim audit, mapped to the engine |
 
 ## Quick facts
 
 ```
 Engine size        4 492 LOC          (SQLite: ~150 000)
-Tests              26 core + 20 security + 17 storage + 18 WAL + 24 btree + 3 crash + 34 crypto
+Tests              26 core + 20 security + 17 storage + 18 WAL + 24 btree + 3 crash + 34 crypto + 10 corrupt
 Backend parity     native == JS, byte for byte (md5 0376a7c4…)
 wasm              328 KB, no emscripten, no wasi-sdk
 Point lookup      185 842 q/s  (was 56 q/s before the index planner)
