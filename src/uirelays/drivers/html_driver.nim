@@ -678,7 +678,12 @@ proc htmlSetClipRect(r: Rect) =
 proc htmlFillRect(r: Rect; color: Color) =
   if r.w <= 0 or r.h <= 0 or color.a == 0'u8:
     return
-  if not webCore.currentClip.enabled and r.x <= 0 and r.y <= 0 and
+  # "A full-window opaque fill covers everything, so drop what we have."
+  # True only at the start of a frame. Halfway through, the same call is an
+  # overlay (a lock screen, a scene painted over its backdrop) and silently
+  # discarding the frame so far paints a blank screen.
+  if htmlFrameBuffer.len == 0 and not webCore.currentClip.enabled and
+     r.x <= 0 and r.y <= 0 and
      r.w >= webCore.layout.width and r.h >= webCore.layout.height and
      color.a == 255'u8:
     resetHtmlFrameBuffer()
@@ -732,10 +737,21 @@ proc htmlDrawLine(x1, y1, x2, y2: int; color: Color) =
       "\" stroke=\"" & cssCol & "\" stroke-width=\"1.25\" stroke-linecap=\"round\"/></svg>"
 
 proc buildFontCssStyle(slot: WebFontSlot; fg, bg: Color): string =
+  ## `letter-spacing: calc(charWidth - 1ch)` is what makes a monospace cell
+  ## land exactly on `charWidth` pixels: every glyph already advances by `1ch`,
+  ## so the correction is the same for all of them and the row adds up.
+  ## For a proportional font that is false -- each glyph has its own advance,
+  ## so a constant correction makes the row drift off the measured width and
+  ## the text slides over its neighbours. There the advance *is* the layout,
+  ## so leave letter-spacing alone and use the width `measureText` returned.
+  let spacing = if slot.isMonospace:
+      "letter-spacing:calc(" & $slot.charWidth & "px - 1ch);"
+    else:
+      "letter-spacing:normal;"
   result = "font-family:" & slot.family & ";font-size:" & $slot.size &
     "px;line-height:" & $slot.metrics.lineHeight & "px;height:" &
-    $slot.metrics.lineHeight & "px;font-variant-ligatures:none;letter-spacing:calc(" &
-    $slot.charWidth & "px - 1ch);color:" & toCssRgba(fg) & ";"
+    $slot.metrics.lineHeight & "px;font-variant-ligatures:none;" & spacing &
+    "color:" & toCssRgba(fg) & ";"
   if FontStyle.bold in slot.style:
     result.add "font-weight:700;"
   if FontStyle.italics in slot.style:
