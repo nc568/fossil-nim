@@ -1066,7 +1066,8 @@ when defined(js):
         if (!window.__uirActive) return;
         var clipIn = document.getElementById("uir-clipboard-input");
         if (clipIn && document.activeElement === clipIn) return;
-        if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Backspace"].indexOf(e.code) !== -1) {
+        if (["Tab", "Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Backspace", "Delete", "Home", "End", "PageUp", "PageDown"].indexOf(e.code) !== -1 ||
+            ((e.ctrlKey || e.metaKey) && ["KeyS", "KeyP", "KeyF", "KeyW", "KeyA", "KeyZ", "KeyY"].indexOf(e.code) !== -1)) {
           e.preventDefault();
         }
         window.__uirActive.key("keydown", e.key || "", e.code || "",
@@ -1078,6 +1079,18 @@ when defined(js):
         if (clipIn && document.activeElement === clipIn) return;
         window.__uirActive.key("keyup", e.key || "", e.code || "",
                                !!e.shiftKey, !!e.ctrlKey, !!e.altKey, !!e.metaKey);
+      });
+      window.addEventListener("paste", function(e) {
+        if (!window.__uirActive) return;
+        var clipIn = document.getElementById("uir-clipboard-input");
+        if (clipIn && document.activeElement === clipIn) return;
+        var cd = e.clipboardData || window.clipboardData;
+        if (cd) {
+          var txt = cd.getData("text");
+          if (txt) {
+            window.__uirActive.clip(txt);
+          }
+        }
       });
 
       var btnClip = document.getElementById("uir-btn-clip-sync");
@@ -1447,13 +1460,9 @@ proc webSleep*(ms: int) =
 
 proc popNextMatchingEvent(e: var Event; flags: set[InputFlag]): bool =
   webCore.wantTextInput = WantTextInput in flags
-  var idx = 0
-  while idx < webCore.eventQueue.len:
-    let ev = webCore.eventQueue[idx]
-    webCore.eventQueue.delete(idx)
-    if ev.kind == TextInputEvent and WantTextInput notin flags:
-      continue
-    e = ev
+  if webCore.eventQueue.len > 0:
+    e = webCore.eventQueue[0]
+    webCore.eventQueue.delete(0)
     inc webCore.totalEventsProcessed
     return true
   return false

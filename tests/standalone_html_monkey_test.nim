@@ -133,20 +133,45 @@ async function runAllInteractiveChecks() {
   var t2048Resized = vp.style.width === "980px";
   results.push("twenty48:dpad=" + (bRight && bDown && bLeft && bUp) + ":moved=" + hasMoves + ":resize=" + t2048Resized);
 
-  // 4. Focim IDE: click [Theme: paper], click [Split Editor], click calculator.nim tab + resize
+  // 4. Focim IDE: click [Theme: paper], click calculator.nim tab,
+  //    click inside editor to position cursor, type code, press Backspace & Enter,
+  //    click [Split Editor], AND click [+ New Scratch File] and type into it + resize
   switchUirApp("focim");
   await sleepMs(100);
   var themeClicked = clickElementWithText("[Theme: paper]");
-  await sleepMs(80);
-  var splitClicked = clickElementWithText("[Split Editor]");
-  await sleepMs(80);
+  await sleepMs(60);
   var tabClicked = clickElementWithText("examples/calculator.nim");
-  await sleepMs(80);
+  await sleepMs(60);
   var hasCalcCode = vp.textContent.indexOf("Calculator") !== -1;
+  // Click inside editor pane to place cursor and type text directly into calculator.nim
+  clickAt(260, 14);
+  await sleepMs(40);
+  var editToken = "FOCIM_EDIT_OKX";
+  for (var ti = 0; ti < editToken.length; ti++) {
+    var ch = editToken.charAt(ti);
+    window.__uirActive.key("keydown", ch, "Key" + ch.toUpperCase(), false, false, false, false);
+  }
+  window.__uirActive.key("keydown", "Backspace", "Backspace", false, false, false, false);
+  window.__uirActive.key("keydown", "Enter", "Enter", false, false, false, false);
+  await sleepMs(80);
+  var hasEditedCode = vp.textContent.indexOf("FOCIM_EDIT_OK") !== -1 && vp.textContent.indexOf("FOCIM_EDIT_OKX") === -1;
+  var hasDirtyStar = vp.textContent.indexOf("examples/calculator.nim*") !== -1;
+  var splitClicked = clickElementWithText("[Split Editor]");
+  await sleepMs(60);
+  // Click [+ New Scratch File] and type into it
+  var scratchClicked = clickElementWithText("[+ New Scratch File]");
+  await sleepMs(60);
+  var scratchCode = "SCRATCH_777";
+  for (var si = 0; si < scratchCode.length; si++) {
+    var sch = scratchCode.charAt(si);
+    window.__uirActive.key("keydown", sch, "KeyA", false, false, false, false);
+  }
+  await sleepMs(60);
+  var hasScratchEdited = vp.textContent.indexOf("SCRATCH_777") !== -1;
   testResizeTo(1160, 720);
   await sleepMs(80);
   var focimResized = vp.style.width === "1160px";
-  results.push("focim:theme=" + themeClicked + ":split=" + splitClicked + ":tab=" + (tabClicked && hasCalcCode) + ":resize=" + focimResized);
+  results.push("focim:theme=" + themeClicked + ":split=" + splitClicked + ":tab=" + (tabClicked && hasCalcCode) + ":edit=" + (hasEditedCode && hasDirtyStar && scratchClicked && hasScratchEdited) + ":resize=" + focimResized);
 
   // 5. Web Showcase: click +1 on Widgets tab, then switch to 2. Graphics & Clip + resize
   switchUirApp("web_showcase");

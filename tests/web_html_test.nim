@@ -144,10 +144,11 @@ check("poll KeyDownEvent Ctrl+C", pollEvent(ev, {WantTextInput}) and ev.kind == 
 check("Ctrl+C did NOT emit TextInputEvent, next is KeyUpEvent", pollEvent(ev, {WantTextInput}) and ev.kind == KeyUpEvent and ev.key == KeyC)
 check("poll WindowResizeEvent", pollEvent(ev, {WantTextInput}) and ev.kind == WindowResizeEvent and ev.x == 1024 and ev.y == 768 and ev.uiScale == 125)
 
-# Test WantTextInput filtering: when WantTextInput is omitted, TextInputEvent is skipped
+# Test TextInputEvent delivery even when WantTextInput is omitted (matches X11/SDL3 drivers)
 webInjectText("Z")
 webInjectKey(KeyEnter)
-check("without WantTextInput, TextInputEvent is skipped and KeyEnter arrives",
+check("TextInputEvent 'Z' is delivered and KeyEnter follows",
+      pollEvent(ev, {}) and ev.kind == TextInputEvent and ev.text[0] == 'Z' and
       pollEvent(ev, {}) and ev.kind == KeyDownEvent and ev.key == KeyEnter)
 discard pollEvent(ev, {})
 

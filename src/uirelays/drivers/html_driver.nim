@@ -678,6 +678,10 @@ proc htmlSetClipRect(r: Rect) =
 proc htmlFillRect(r: Rect; color: Color) =
   if r.w <= 0 or r.h <= 0 or color.a == 0'u8:
     return
+  if not webCore.currentClip.enabled and r.x <= 0 and r.y <= 0 and
+     r.w >= webCore.layout.width and r.h >= webCore.layout.height and
+     color.a == 255'u8:
+    resetHtmlFrameBuffer()
   syncClipDiv()
   inc htmlCurrentNodeCount
   htmlFrameBuffer.add "<div class=\"uir-rect\" style=\"left:" & $r.x &

@@ -317,7 +317,10 @@ function switchUirApp(appId) {
     tabs[i].classList.remove("active");
   }
   var btn = document.getElementById("tab-btn-" + appId);
-  if (btn) btn.classList.add("active");
+  if (btn) {
+    btn.classList.add("active");
+    if (btn.blur) btn.blur();
+  }
   var meta = window.UIR_APP_META[appId];
   if (meta) {
     var descEl = document.getElementById("uir-app-desc");
@@ -331,6 +334,10 @@ function switchUirApp(appId) {
   if (window.UIR_APPS && window.UIR_APPS[appId]) {
     window.UIR_APPS[appId]();
   }
+  setTimeout(function() {
+    var v = document.getElementById("uir-viewport");
+    if (v && v.focus) v.focus();
+  }, 10);
 }
 window.addEventListener("DOMContentLoaded", function() {
   switchUirApp("calculator");

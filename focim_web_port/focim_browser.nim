@@ -70,8 +70,9 @@ type
 
 proc rebuildTabsView(tabsEd: var SynEdit; openTabs: seq[TabItem]; activeIdx: int; th: Theme) =
   var lines: seq[string] = @[]
-  for t in openTabs:
-    lines.add t.name
+  for i, t in openTabs:
+    let dirtyMark = if i >= 2 and t.ed.changed: " *" else: ""
+    lines.add t.name & dirtyMark
   let oldLine = tabsEd.firstLine.int
   tabsEd.setLabel(lines.join("\n"))
   tabsEd.setActionLines(0)
@@ -91,6 +92,23 @@ proc rebuildClipView(clipEd: var SynEdit; clips: seq[string]) =
 proc rebuildHistoryView(histEd: var SynEdit; cmds: seq[string]) =
   histEd.setLabel(cmds.join("\n"))
   histEd.setActionLines(0)
+
+proc editorSeatOf(cells: Table[string, Rect]; targetCell: string): int =
+  var seat = 0
+  for cellName in cells.keys:
+    if cellName.isEditor:
+      if cellName == targetCell:
+        return seat
+      inc seat
+  result = 0
+
+proc firstEditorCell(cells: Table[string, Rect]): string =
+  if "editor" in cells:
+    return "editor"
+  for cellName in cells.keys:
+    if cellName.isEditor:
+      return cellName
+  result = "editor"
 
 proc main() {.uirApp.} =
   let win = createWindow(1080, 680)
@@ -123,7 +141,11 @@ proc main() {.uirApp.} =
   addBuffer("examples/snake.nim", SnakeContent, langNim, {rfColorLiterals}, lineNums = true)
   addBuffer("examples/twenty48.nim", T2048Content, langNim, {rfColorLiterals}, lineNums = true)
 
+  # Place initial cursor at the end of line 1 in README.md so typing or Backspace works immediately
+  openTabs[2].ed.gotoLine(1, 7)
+
   var activeTabIdx = 2 # Start on README.md so markdown + syntax + image are immediately visible!
+  var scratchCounter = 1
 
   var tabsEd = createSynEdit(font, curTheme)
   tabsEd.lang = langNone
@@ -132,6 +154,7 @@ proc main() {.uirApp.} =
 
   let explorerItems = @[
     "/home/user/focim",
+    "[+ New Scratch File]",
     "[Theme: dark]",
     "[Theme: paper]",
     "[Theme: amber]",
@@ -179,15 +202,16 @@ proc main() {.uirApp.} =
   termEd.theme.bg = curTheme.panelBg
   termEd.appendOutput(
     "focim interactive terminal (Pure Nim --mm:arc on UIRelays)\n" &
-    "Hint: Click any tab, file, theme button, or drag panel borders! [Ready]\n" &
+    "Hint: Click any file or type directly in the editor! [Ready]\n" &
     "$ ")
 
   var statusEd = createSynEdit(font, curTheme)
   statusEd.lang = langNone
   statusEd.theme.bg = curTheme.panelBg
 
+  var activeEditorCell = "editor"
   var focusedCell = "editor"
-  var statusMsg = "Ready — click tabs/explorer items, edit code or [config]/[layout], or drag borders!"
+  var statusMsg = "Ready — click in editor & type to edit files, or click tabs/explorer!"
   var lastConfigVer = openTabs[0].ed.textVersion
   var lastLayoutVer = openTabs[1].ed.textVersion
 
@@ -212,9 +236,9 @@ proc main() {.uirApp.} =
     for i in 0 ..< openTabs.len:
       if openTabs[i].name == targetName:
         activeTabIdx = i
-        focusedCell = "editor"
+        focusedCell = activeEditorCell
         rebuildTabsView(tabsEd, openTabs, activeTabIdx, curTheme)
-        statusMsg = "Switched to tab '" & targetName & "'"
+        statusMsg = "Editing '" & targetName & "' — type to edit"
         return
 
   proc executeCommand(rawCmd: string) =
@@ -270,9 +294,13 @@ proc main() {.uirApp.} =
       uiScale: win.uiScale
     )
     var cells = parsedLayout.resolve(metrics)
+    if activeEditorCell notin cells or not activeEditorCell.isEditor:
+      activeEditorCell = firstEditorCell(cells)
+    if focusedCell != "terminal" and (focusedCell notin cells or not focusedCell.isEditor):
+      focusedCell = activeEditorCell
 
     var e = default Event
-    while pollEvent(e):
+    while pollEvent(e, {WantTextInput}):
       case e.kind
       of QuitEvent, WindowCloseEvent:
         running = false
@@ -292,13 +320,21 @@ proc main() {.uirApp.} =
           if sp.found:
             setCursor(if sp.vertical: curSizeNS else: curSizeWE)
           else:
-            setCursor(curDefault)
+            let hit = cells.hitTest(e.x, e.y)
+            if hit.name.isEditor or hit.name == "terminal":
+              setCursor(curIbeam)
+            elif hit.name in ["tabs", "explorer", "clipboard", "history"]:
+              setCursor(curHand)
+            else:
+              setCursor(curDefault)
           # Forward hover to active cells
           for cellName, r in cells:
             if cellName == "tabs":
-              discard tabsEd.draw(e, r, focusedCell == "tabs")
+              discard tabsEd.draw(e, r, false)
             elif cellName.isEditor:
+              openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, cellName))
               discard openTabs[activeTabIdx].ed.draw(e, r, focusedCell == cellName)
+          openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, activeEditorCell))
       of MouseDownEvent:
         if e.button == LeftButton:
           let sp = parsedLayout.splitterAt(metrics, e.x, e.y, slack = 4)
@@ -308,10 +344,10 @@ proc main() {.uirApp.} =
           else:
             let hit = cells.hitTest(e.x, e.y)
             if hit.name.len > 0:
-              focusedCell = hit.name
               let cellRect = cells[hit.name]
               if hit.name == "tabs":
                 let act = tabsEd.draw(e, cellRect, true)
+                discard tabsEd.draw(Event(kind: MouseUpEvent), cellRect, false)
                 if act.kind == closeLine and act.line >= 2 and act.line < openTabs.len:
                   let closedName = openTabs[act.line].name
                   openTabs.delete(act.line)
@@ -321,15 +357,30 @@ proc main() {.uirApp.} =
                 else:
                   let clickedLine = clamp(tabsEd.currentLine, 0, openTabs.high)
                   activeTabIdx = clickedLine
-                  focusedCell = "editor"
                   rebuildTabsView(tabsEd, openTabs, activeTabIdx, curTheme)
-                  statusMsg = "Active tab: " & openTabs[activeTabIdx].name
+                  statusMsg = "Active tab: " & openTabs[activeTabIdx].name & " — type to edit"
+                focusedCell = activeEditorCell
               elif hit.name == "explorer":
                 discard explorerEd.draw(e, cellRect, true)
+                discard explorerEd.draw(Event(kind: MouseUpEvent), cellRect, false)
                 let lineIdx = explorerEd.currentLine
                 if lineIdx >= 1 and lineIdx < explorerItems.len:
                   let item = explorerItems[lineIdx]
-                  if item.startsWith("[Theme: "):
+                  if item == "[+ New Scratch File]":
+                    let newName = "scratch_" & $scratchCounter & ".nim"
+                    inc scratchCounter
+                    addBuffer(
+                      newName,
+                      "# " & newName & " — Type Nim code here!\n\nproc greet(name: string): string =\n  \"Hello, \" & name & \"!\"\n\necho greet(\"focim\")\n",
+                      langNim,
+                      {rfColorLiterals},
+                      lineNums = true
+                    )
+                    activeTabIdx = openTabs.high
+                    openTabs[activeTabIdx].ed.gotoLine(3, 1)
+                    rebuildTabsView(tabsEd, openTabs, activeTabIdx, curTheme)
+                    statusMsg = "Created and focused '" & newName & "' — start typing!"
+                  elif item.startsWith("[Theme: "):
                     let tName = item[8 .. ^2]
                     var th = default(Theme)
                     if findTheme(tName, th):
@@ -339,7 +390,7 @@ proc main() {.uirApp.} =
                       statusMsg = "Applied '" & tName & "' theme across all panels!"
                   elif item == "[Split Editor]":
                     let newCell = freeName(parsedLayout.cellNames(), EditorStem)
-                    if parsedLayout.splitCell("editor", newCell, asColumn = true):
+                    if parsedLayout.splitCell(activeEditorCell, newCell, asColumn = true):
                       openTabs[1].ed.setText($parsedLayout)
                       lastLayoutVer = openTabs[1].ed.textVersion
                       cells = parsedLayout.resolve(metrics)
@@ -349,49 +400,70 @@ proc main() {.uirApp.} =
                     openTabs[1].ed.setText(DefaultLayoutText)
                     lastLayoutVer = openTabs[1].ed.textVersion
                     cells = parsedLayout.resolve(metrics)
+                    activeEditorCell = "editor"
                     statusMsg = "Reset layout to default"
                   else:
                     switchOrOpenTab(item)
+                focusedCell = activeEditorCell
               elif hit.name == "clipboard":
                 discard clipEd.draw(e, cellRect, true)
+                discard clipEd.draw(Event(kind: MouseUpEvent), cellRect, false)
                 let lineIdx = clipEd.currentLine
                 if lineIdx >= 0 and lineIdx < clips.len:
                   let chosen = clips[lineIdx]
                   putClipboardText(chosen)
+                  openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, activeEditorCell))
                   openTabs[activeTabIdx].ed.insertText(chosen)
-                  focusedCell = "editor"
+                  rebuildTabsView(tabsEd, openTabs, activeTabIdx, curTheme)
                   statusMsg = "Pasted clipboard entry #" & $(lineIdx + 1) & " into " & openTabs[activeTabIdx].name
+                focusedCell = activeEditorCell
               elif hit.name == "history":
                 discard histEd.draw(e, cellRect, true)
+                discard histEd.draw(Event(kind: MouseUpEvent), cellRect, false)
                 let lineIdx = histEd.currentLine
                 if lineIdx >= 0 and lineIdx < cmdHistory.len:
                   let cmd = cmdHistory[lineIdx]
                   termEd.appendOutput(cmd)
                   executeCommand(cmd)
-                  focusedCell = "terminal"
+                focusedCell = "terminal"
               elif hit.name == "terminal":
+                focusedCell = "terminal"
                 discard termEd.draw(e, cellRect, true)
+                statusMsg = "Terminal focused — type a command (help, ls, theme paper) and press Enter"
               elif hit.name.isEditor:
+                activeEditorCell = hit.name
+                focusedCell = hit.name
+                openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, hit.name))
                 let act = openTabs[activeTabIdx].ed.draw(e, cellRect, true)
                 if act.kind == ctrlClick and openTabs[activeTabIdx].ed.lang == langMarkdown:
                   let (url, _, _) = openTabs[activeTabIdx].ed.extractMarkdownLink(act.pos)
                   if url.startsWith("#"):
                     discard openTabs[activeTabIdx].ed.gotoMarkdownHeading(url[1 .. ^1])
                     statusMsg = "Jumped to heading " & url
+                else:
+                  statusMsg = "Editing " & openTabs[activeTabIdx].name &
+                    " at Ln " & $(openTabs[activeTabIdx].ed.currentLine + 1) &
+                    ", Col " & $(openTabs[activeTabIdx].ed.currentCol + 1)
+              else:
+                focusedCell = activeEditorCell
       of MouseUpEvent:
         isDraggingSplitter = false
         activeSplitter = Splitter()
+        discard tabsEd.draw(e, cells.getOrDefault("tabs", rect(0, 0, 10, 10)), false)
+        discard explorerEd.draw(e, cells.getOrDefault("explorer", rect(0, 0, 10, 10)), false)
+        discard clipEd.draw(e, cells.getOrDefault("clipboard", rect(0, 0, 10, 10)), false)
+        discard histEd.draw(e, cells.getOrDefault("history", rect(0, 0, 10, 10)), false)
+        discard termEd.draw(e, cells.getOrDefault("terminal", rect(0, 0, 10, 10)), focusedCell == "terminal")
         for cellName, r in cells:
           if cellName.isEditor:
+            openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, cellName))
             discard openTabs[activeTabIdx].ed.draw(e, r, focusedCell == cellName)
+        openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, activeEditorCell))
       of MouseWheelEvent:
-        if focusedCell == "tabs":
-          tabsEd.wheelScroll(e.y)
-        elif focusedCell == "explorer":
-          explorerEd.wheelScroll(e.y)
-        elif focusedCell == "terminal":
+        if focusedCell == "terminal":
           termEd.wheelScroll(e.y)
         else:
+          openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, activeEditorCell))
           openTabs[activeTabIdx].ed.wheelScroll(e.y)
       of KeyDownEvent, TextInputEvent:
         if focusedCell == "terminal":
@@ -402,14 +474,27 @@ proc main() {.uirApp.} =
           else:
             discard termEd.draw(e, cells.getOrDefault("terminal", rect(0, 0, 100, 100)), true)
         else:
-          let edRect = cells.getOrDefault(focusedCell, cells.getOrDefault("editor", rect(0, 0, width, height)))
-          discard openTabs[activeTabIdx].ed.draw(e, edRect, true)
-          if e.kind == KeyDownEvent and e.key == KeyC and (CtrlPressed in e.mods or GuiPressed in e.mods):
-            let cb = getClipboardText()
-            if cb.len > 0 and (clips.len == 0 or clips[0] != cb):
-              clips.insert(cb, 0)
-              rebuildClipView(clipEd, clips)
-              statusMsg = "Copied selection to clipboard history"
+          let cmdMod = CtrlPressed in e.mods or GuiPressed in e.mods
+          if e.kind == KeyDownEvent and cmdMod and e.key == KeyS:
+            openTabs[activeTabIdx].ed.markSaved()
+            rebuildTabsView(tabsEd, openTabs, activeTabIdx, curTheme)
+            statusMsg = "Saved buffer '" & openTabs[activeTabIdx].name & "' [OK]"
+          else:
+            let edRect = cells.getOrDefault(activeEditorCell, cells.getOrDefault("editor", rect(0, 0, width, height)))
+            openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, activeEditorCell))
+            let beforeVer = openTabs[activeTabIdx].ed.textVersion
+            discard openTabs[activeTabIdx].ed.draw(e, edRect, true)
+            if openTabs[activeTabIdx].ed.textVersion != beforeVer:
+              rebuildTabsView(tabsEd, openTabs, activeTabIdx, curTheme)
+              statusMsg = "Edited " & openTabs[activeTabIdx].name &
+                " (Ln " & $(openTabs[activeTabIdx].ed.currentLine + 1) &
+                ", Col " & $(openTabs[activeTabIdx].ed.currentCol + 1) & ")"
+            if e.kind == KeyDownEvent and cmdMod and e.key == KeyC:
+              let cb = getClipboardText()
+              if cb.len > 0 and (clips.len == 0 or clips[0] != cb):
+                clips.insert(cb, 0)
+                rebuildClipView(clipEd, clips)
+                statusMsg = "Copied selection to clipboard history"
       else:
         discard
 
@@ -431,6 +516,10 @@ proc main() {.uirApp.} =
       if candidate.error.len == 0 and panelsOf(candidate.cellNames(), EditorStem).len > 0:
         parsedLayout = candidate
         cells = parsedLayout.resolve(metrics)
+        if activeEditorCell notin cells or not activeEditorCell.isEditor:
+          activeEditorCell = firstEditorCell(cells)
+        if focusedCell != "terminal":
+          focusedCell = activeEditorCell
         statusMsg = "Applied live [layout] update!"
       elif candidate.error.len > 0:
         statusMsg = "[layout] " & candidate.error
@@ -439,29 +528,32 @@ proc main() {.uirApp.} =
     fillRect(rect(0, 0, width, height), curTheme.panelBg)
 
     let noEv = Event(kind: NoEvent)
-    var editorSeat = 0
     for cellName, r in cells:
       if cellName == "tabs":
-        discard tabsEd.draw(noEv, r, focusedCell == "tabs")
+        discard tabsEd.draw(noEv, r, false)
       elif cellName == "explorer":
-        discard explorerEd.draw(noEv, r, focusedCell == "explorer")
+        discard explorerEd.draw(noEv, r, false)
       elif cellName == "clipboard":
-        discard clipEd.draw(noEv, r, focusedCell == "clipboard")
+        discard clipEd.draw(noEv, r, false)
       elif cellName == "history":
-        discard histEd.draw(noEv, r, focusedCell == "history")
+        discard histEd.draw(noEv, r, false)
       elif cellName == "terminal":
         discard termEd.draw(noEv, r, focusedCell == "terminal")
       elif cellName == "status":
-        let curEd = openTabs[activeTabIdx].ed
-        let label = " " & openTabs[activeTabIdx].name &
-          "  Ln " & $(curEd.currentLine + 1) & ", Col " & $(curEd.currentCol + 1) &
+        openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, activeEditorCell))
+        let ln = openTabs[activeTabIdx].ed.currentLine + 1
+        let col = openTabs[activeTabIdx].ed.currentCol + 1
+        let dirtyTag = if openTabs[activeTabIdx].ed.changed: "*" else: ""
+        let focusTag = if focusedCell == "terminal": "[TERM]" else: "[EDIT]"
+        let label = " " & focusTag & " " & openTabs[activeTabIdx].name & dirtyTag &
+          "  Ln " & $ln & ", Col " & $col &
           "  |  " & statusMsg & "  (" & $width & "×" & $height & ")"
         statusEd.setLabel(label)
         discard statusEd.draw(noEv, r, false)
       elif cellName.isEditor:
-        openTabs[activeTabIdx].ed.enter(editorSeat)
+        openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, cellName))
         discard openTabs[activeTabIdx].ed.draw(noEv, r, focusedCell == cellName)
-        inc editorSeat
+    openTabs[activeTabIdx].ed.enter(editorSeatOf(cells, activeEditorCell))
 
     refresh()
     sleep(16)

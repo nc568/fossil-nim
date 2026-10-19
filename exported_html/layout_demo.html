@@ -1420,15 +1420,15 @@ function nsuToLowerAsciiStr(s_p0) {
     result_838860896 = nimCopy(null, mnewString((s_p0).length), NTI33554449);
     Label1: {
       var iHEX60gensym7_838860902 = 0;
-      var colontmp__822085217 = 0;
-      colontmp__822085217 = ((s_p0).length - 1);
-      var res_822085218 = 0;
+      var colontmp__822085207 = 0;
+      colontmp__822085207 = ((s_p0).length - 1);
+      var res_822085208 = 0;
       Label2: {
           Label3: while (true) {
-          if (!(res_822085218 <= colontmp__822085217)) break Label3;
-            iHEX60gensym7_838860902 = res_822085218;
+          if (!(res_822085208 <= colontmp__822085207)) break Label3;
+            iHEX60gensym7_838860902 = res_822085208;
             result_838860896[iHEX60gensym7_838860902] = nsuToLowerAsciiChar(s_p0[iHEX60gensym7_838860902]);
-            res_822085218 += 1;
+            res_822085208 += 1;
           }
       };
     };
@@ -1564,15 +1564,15 @@ function substr__system_u3708(s_p0, first_p1, last_p2) {
     result_33558144 = nimCopy(null, mnewString(L_33558146), NTI33554449);
     Label1: {
       var i_33558151 = 0;
-      var colontmp__822085223 = 0;
-      colontmp__822085223 = (L_33558146 - 1);
-      var res_822085224 = 0;
+      var colontmp__822085213 = 0;
+      colontmp__822085213 = (L_33558146 - 1);
+      var res_822085214 = 0;
       Label2: {
           Label3: while (true) {
-          if (!(res_822085224 <= colontmp__822085223)) break Label3;
-            i_33558151 = res_822085224;
+          if (!(res_822085214 <= colontmp__822085213)) break Label3;
+            i_33558151 = res_822085214;
             result_33558144[i_33558151] = s_p0[(i_33558151 + first_33558145)];
-            res_822085224 += 1;
+            res_822085214 += 1;
           }
       };
     };
@@ -2314,13 +2314,13 @@ function HEX5BHEX5D__pureZstrutils_u1273(s_p0, x_p1) {
     result_838862078 = nimCopy(null, mnewString(L_838862082), NTI33554449);
     Label1: {
       var i_838862087 = 0;
-      var i_822085231 = 0;
+      var i_822085221 = 0;
       Label2: {
           Label3: while (true) {
-          if (!(i_822085231 < L_838862082)) break Label3;
-            i_838862087 = i_822085231;
+          if (!(i_822085221 < L_838862082)) break Label3;
+            i_838862087 = i_822085221;
             result_838862078[i_838862087] = s_p0[(i_838862087 + a_838862080)];
-            i_822085231 += 1;
+            i_822085221 += 1;
           }
       };
     };
@@ -2345,13 +2345,13 @@ function makeTextInputEvent__OOZsrcZuirelaysZdriversZweb95common_u916(utf8Rune_p
     var n_822084503 = nimMin(4, (utf8Rune_p0).length);
     Label1: {
       var i_822084508 = 0;
-      var i_822085234 = 0;
+      var i_822085224 = 0;
       Label2: {
           Label3: while (true) {
-          if (!(i_822085234 < n_822084503)) break Label3;
-            i_822084508 = i_822085234;
+          if (!(i_822085224 < n_822084503)) break Label3;
+            i_822084508 = i_822085224;
             result_822084502.text[i_822084508] = utf8Rune_p0[i_822084508];
-            i_822085234 += 1;
+            i_822085224 += 1;
           }
       };
     };
@@ -2517,7 +2517,7 @@ function HEX24__systemZdollars_u8(x_p0) {
 
 }
 
-function initWebCore__OOZsrcZuirelaysZdriversZweb95common_u1422(kind_p0, pageHtml_p1) {
+function initWebCore__OOZsrcZuirelaysZdriversZweb95common_u1412(kind_p0, pageHtml_p1) {
     stopWebServer__OOZsrcZuirelaysZdriversZweb95common_u1351();
     webCore_822083639[0] = nimCopy(webCore_822083639[0], {backendKind: kind_p0, initialized: true, startMs: performance.now(), layout: {width: 800, height: 600, scaleX: 1, scaleY: 1, uiScale: 100, pitch: 0, fullScreen: false}, windowTitle: ([85,73,82,101,108,97,121,115,32,87,101,98,32,40]).concat(reprEnum(kind_p0, NTI822083587),[41]), currentCursor: 0, clipboardText: [], wantTextInput: false, clipStack: [], currentClip: {enabled: false, rect: ({x: 0, y: 0, w: 0, h: 0})}, fonts: [], images: [], eventQueue: [], frameId: 0, lastPayloadHash: 0n, lastFrameJson: [], pageHtml: nimCopy(null, pageHtml_p1, NTI33554449), totalFramesRendered: 0, totalEventsProcessed: 0, domNodeCount: 0, canvasCommandCount: 0, monkeyReportJson: [], serverEnabled: false, serverPort: 0}, NTI822083592);
 
@@ -2646,7 +2646,8 @@ function bindJsBrowserListeners__OOZsrcZuirelaysZdriversZweb95common_u1346() {
         if (!window.__uirActive) return;
         var clipIn = document.getElementById("uir-clipboard-input");
         if (clipIn && document.activeElement === clipIn) return;
-        if (["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Backspace"].indexOf(e.code) !== -1) {
+        if (["Tab", "Enter", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space", "Backspace", "Delete", "Home", "End", "PageUp", "PageDown"].indexOf(e.code) !== -1 ||
+            ((e.ctrlKey || e.metaKey) && ["KeyS", "KeyP", "KeyF", "KeyW", "KeyA", "KeyZ", "KeyY"].indexOf(e.code) !== -1)) {
           e.preventDefault();
         }
         window.__uirActive.key("keydown", e.key || "", e.code || "",
@@ -2658,6 +2659,18 @@ function bindJsBrowserListeners__OOZsrcZuirelaysZdriversZweb95common_u1346() {
         if (clipIn && document.activeElement === clipIn) return;
         window.__uirActive.key("keyup", e.key || "", e.code || "",
                                !!e.shiftKey, !!e.ctrlKey, !!e.altKey, !!e.metaKey);
+      });
+      window.addEventListener("paste", function(e) {
+        if (!window.__uirActive) return;
+        var clipIn = document.getElementById("uir-clipboard-input");
+        if (clipIn && document.activeElement === clipIn) return;
+        var cd = e.clipboardData || window.clipboardData;
+        if (cd) {
+          var txt = cd.getData("text");
+          if (txt) {
+            window.__uirActive.clip(txt);
+          }
+        }
       });
 
       var btnClip = document.getElementById("uir-btn-clip-sync");
@@ -2718,7 +2731,7 @@ function startWebServer__OOZsrcZuirelaysZdriversZweb95common_u1348(preferredPort
   
 }
 
-function webCreateWindowCommon__OOZsrcZuirelaysZdriversZweb95common_u1605(layout_p0, icon_p1, icon_p1_Idx, iconLen_p2) {
+function webCreateWindowCommon__OOZsrcZuirelaysZdriversZweb95common_u1595(layout_p0, icon_p1, icon_p1_Idx, iconLen_p2) {
     var Temporary1;
     var Temporary2;
 
@@ -2731,7 +2744,7 @@ function webCreateWindowCommon__OOZsrcZuirelaysZdriversZweb95common_u1605(layout
     Temporary1 = layout_p0.width;
     }
     
-    var reqW_822085193 = Temporary1;
+    var reqW_822085183 = Temporary1;
     if ((layout_p0.height <= 0)) {
     Temporary2 = 768;
     }
@@ -2739,15 +2752,15 @@ function webCreateWindowCommon__OOZsrcZuirelaysZdriversZweb95common_u1605(layout
     Temporary2 = layout_p0.height;
     }
     
-    var reqH_822085194 = Temporary2;
+    var reqH_822085184 = Temporary2;
         var st = document.getElementById("uir-stage");
     if (st && st.clientWidth > 300 && st.clientHeight > 220 && !window.__uirFixedSizeMode) {
-      reqW_822085193 = Math.floor(st.clientWidth - 4);
-      reqH_822085194 = Math.floor(st.clientHeight - 4);
+      reqW_822085183 = Math.floor(st.clientWidth - 4);
+      reqH_822085184 = Math.floor(st.clientHeight - 4);
     }
     
-    layout_p0.width = reqW_822085193;
-    layout_p0.height = reqH_822085194;
+    layout_p0.width = reqW_822085183;
+    layout_p0.height = reqH_822085184;
     if ((layout_p0.scaleX <= 0)) {
     layout_p0.scaleX = 1;
     }
@@ -2770,7 +2783,7 @@ function webCreateWindowCommon__OOZsrcZuirelaysZdriversZweb95common_u1605(layout
 }
 
 function htmlCreateWindow__OOZsrcZuirelaysZdriversZhtml95driver_u39(layout_p0, icon_p1, icon_p1_Idx, iconLen_p2) {
-    webCreateWindowCommon__OOZsrcZuirelaysZdriversZweb95common_u1605(layout_p0, icon_p1, icon_p1_Idx, iconLen_p2);
+    webCreateWindowCommon__OOZsrcZuirelaysZdriversZweb95common_u1595(layout_p0, icon_p1, icon_p1_Idx, iconLen_p2);
     resetHtmlFrameBuffer__OOZsrcZuirelaysZdriversZhtml95driver_u38();
 
   
@@ -3503,6 +3516,10 @@ function htmlFillRect__OOZsrcZuirelaysZdriversZhtml95driver_u47(r_p0, color_p1) 
     break BeforeRet;
     }
     
+    if ((((((!(webCore_822083639[0].currentClip.enabled) && (r_p0.x <= 0)) && (r_p0.y <= 0)) && (webCore_822083639[0].layout.width <= r_p0.w)) && (webCore_822083639[0].layout.height <= r_p0.h)) && (color_p1.a == 255))) {
+    resetHtmlFrameBuffer__OOZsrcZuirelaysZdriversZhtml95driver_u38();
+    }
+    
     syncClipDiv__OOZsrcZuirelaysZdriversZhtml95driver_u11();
     htmlCurrentNodeCount_805306376[0] += 1;
     htmlFrameBuffer_805306373[0].push.apply(htmlFrameBuffer_805306373[0], ([60,100,105,118,32,99,108,97,115,115,61,34,117,105,114,45,114,101,99,116,34,32,115,116,121,108,101,61,34,108,101,102,116,58]).concat(HEX24__systemZdollars_u8(r_p0.x),[112,120,59,116,111,112,58],HEX24__systemZdollars_u8(r_p0.y),[112,120,59,119,105,100,116,104,58],HEX24__systemZdollars_u8(r_p0.w),[112,120,59,104,101,105,103,104,116,58],HEX24__systemZdollars_u8(r_p0.h),[112,120,59,98,97,99,107,103,114,111,117,110,100,58],toCssRgba__OOZsrcZuirelaysZdriversZweb95common_u68(color_p1),[59,34,62,60,47,100,105,118,62]));;
@@ -3939,7 +3956,7 @@ function unhandledException(e_p0) {
   
 }
 
-function delete__OOZsrcZuirelaysZdriversZweb95common_u1372(x_p0, x_p0_Idx, i_p1) {
+function delete__OOZsrcZuirelaysZdriversZweb95common_u1370(x_p0, x_p0_Idx, i_p1) {
     if (((x_p0[x_p0_Idx]).length - 1 < i_p1)) {
     raiseException({message: ([105,110,100,101,120,32,111,117,116,32,111,102,32,98,111,117,110,100,115,58,32,39]).concat(HEX24__systemZdollars_u8(i_p1),[39,32,60,32,39],HEX24__systemZdollars_u8((x_p0[x_p0_Idx]).length),[39,32,102,97,105,108,101,100]), m_type: NTI134217749, parent: null, name: null, trace: [], up: null}, "IndexDefect");
     }
@@ -3954,24 +3971,14 @@ function popNextMatchingEvent__OOZsrcZuirelaysZdriversZweb95common_u1358(e_p0, f
 
   BeforeRet: {
     webCore_822083639[0].wantTextInput = (flags_p1[0] != undefined);
-    var idx_822084951 = 0;
-    Label1: {
-        Label2: while (true) {
-        if (!(idx_822084951 < (webCore_822083639[0].eventQueue).length)) break Label2;
-          Label3: {
-            var ev_822084955 = nimCopy(null, webCore_822083639[0].eventQueue[idx_822084951], NTI738197512);
-            delete__OOZsrcZuirelaysZdriversZweb95common_u1372(webCore_822083639[0], "eventQueue", idx_822084951);
-            if (((ev_822084955.kind == 3) && !((flags_p1[0] != undefined)))) {
-            break Label3;
-            }
-            
-            e_p0 = nimCopy(e_p0, ev_822084955, NTI738197512);
-            webCore_822083639[0].totalEventsProcessed += 1;
-            result_822084945 = true;
-            break BeforeRet;
-          };
-        }
-    };
+    if ((0 < (webCore_822083639[0].eventQueue).length)) {
+    e_p0 = nimCopy(e_p0, webCore_822083639[0].eventQueue[0], NTI738197512);
+    delete__OOZsrcZuirelaysZdriversZweb95common_u1370(webCore_822083639[0], "eventQueue", 0);
+    webCore_822083639[0].totalEventsProcessed += 1;
+    result_822084945 = true;
+    break BeforeRet;
+    }
+    
     result_822084945 = false;
     break BeforeRet;
   };
@@ -3980,26 +3987,26 @@ function popNextMatchingEvent__OOZsrcZuirelaysZdriversZweb95common_u1358(e_p0, f
 
 }
 
-function webPollEvent__OOZsrcZuirelaysZdriversZweb95common_u1413(e_p0, flags_p1) {
-  var result_822085000 = false;
+function webPollEvent__OOZsrcZuirelaysZdriversZweb95common_u1403(e_p0, flags_p1) {
+  var result_822084990 = false;
 
     webPumpServer__OOZsrcZuirelaysZdriversZweb95common_u1350();
-    result_822085000 = popNextMatchingEvent__OOZsrcZuirelaysZdriversZweb95common_u1358(e_p0, flags_p1);
+    result_822084990 = popNextMatchingEvent__OOZsrcZuirelaysZdriversZweb95common_u1358(e_p0, flags_p1);
 
-  return result_822085000;
+  return result_822084990;
 
 }
 
-function webWaitEvent__OOZsrcZuirelaysZdriversZweb95common_u1417(e_p0, timeoutMs_p1, flags_p2) {
-  var result_822085005 = false;
+function webWaitEvent__OOZsrcZuirelaysZdriversZweb95common_u1407(e_p0, timeoutMs_p1, flags_p2) {
+  var result_822084995 = false;
 
   BeforeRet: {
     (timeoutMs_p1);
-    result_822085005 = webPollEvent__OOZsrcZuirelaysZdriversZweb95common_u1413(e_p0, flags_p2);
+    result_822084995 = webPollEvent__OOZsrcZuirelaysZdriversZweb95common_u1403(e_p0, flags_p2);
     break BeforeRet;
   };
 
-  return result_822085005;
+  return result_822084995;
 
 }
 
@@ -4018,7 +4025,7 @@ function webSleep__OOZsrcZuirelaysZdriversZweb95common_u1356(ms_p0) {
   
 }
 
-function webShutdownCommon__OOZsrcZuirelaysZdriversZweb95common_u1615() {
+function webShutdownCommon__OOZsrcZuirelaysZdriversZweb95common_u1605() {
     stopWebServer__OOZsrcZuirelaysZdriversZweb95common_u1351();
     if (webCore_822083639[0].clipStack.length < 0) { for (var i = webCore_822083639[0].clipStack.length ; i < 0 ; ++i) webCore_822083639[0].clipStack.push(({enabled: false, rect: ({x: 0, y: 0, w: 0, h: 0})})); }
                else { webCore_822083639[0].clipStack.length = 0; };
@@ -4035,7 +4042,7 @@ function webShutdownCommon__OOZsrcZuirelaysZdriversZweb95common_u1615() {
 
 function htmlShutdown__OOZsrcZuirelaysZdriversZhtml95driver_u186() {
     resetHtmlFrameBuffer__OOZsrcZuirelaysZdriversZhtml95driver_u38();
-    webShutdownCommon__OOZsrcZuirelaysZdriversZweb95common_u1615();
+    webShutdownCommon__OOZsrcZuirelaysZdriversZweb95common_u1605();
 
   
 }
@@ -4056,12 +4063,12 @@ function webPutClipboardText__OOZsrcZuirelaysZdriversZweb95common_u891(text_p0) 
 }
 
 function initHtmlDriver__OOZsrcZuirelaysZdriversZhtml95driver_u187() {
-    initWebCore__OOZsrcZuirelaysZdriversZweb95common_u1422(0, []);
+    initWebCore__OOZsrcZuirelaysZdriversZweb95common_u1412(0, []);
     resetHtmlFrameBuffer__OOZsrcZuirelaysZdriversZhtml95driver_u38();
     windowRelays_721420474[0] = nimCopy(windowRelays_721420474[0], {createWindow: htmlCreateWindow__OOZsrcZuirelaysZdriversZhtml95driver_u39, getWindowLayout: webGetWindowLayout__OOZsrcZuirelaysZdriversZweb95common_u887, refresh: htmlRefresh__OOZsrcZuirelaysZdriversZhtml95driver_u165, saveState: htmlSaveState__OOZsrcZuirelaysZdriversZhtml95driver_u43, restoreState: htmlRestoreState__OOZsrcZuirelaysZdriversZhtml95driver_u44, setClipRect: htmlSetClipRect__OOZsrcZuirelaysZdriversZhtml95driver_u45, setCursor: webSetCursor__OOZsrcZuirelaysZdriversZweb95common_u867, setWindowTitle: webSetWindowTitle__OOZsrcZuirelaysZdriversZweb95common_u885}, NTI721420300);
     fontRelays_721420548[0] = nimCopy(fontRelays_721420548[0], {openFont: webOpenFont__OOZsrcZuirelaysZdriversZweb95common_u497, closeFont: webCloseFont__OOZsrcZuirelaysZdriversZweb95common_u586, getFontMetrics: webGetFontMetrics__OOZsrcZuirelaysZdriversZweb95common_u599, measureText: webMeasureText__OOZsrcZuirelaysZdriversZweb95common_u669, drawText: htmlDrawText__OOZsrcZuirelaysZdriversZhtml95driver_u101, drawMeasuredText: htmlDrawMeasuredText__OOZsrcZuirelaysZdriversZhtml95driver_u115}, NTI721420301);
     drawRelays_721420586[0] = nimCopy(drawRelays_721420586[0], {fillRect: htmlFillRect__OOZsrcZuirelaysZdriversZhtml95driver_u47, drawLine: htmlDrawLine__OOZsrcZuirelaysZdriversZhtml95driver_u64, drawPoint: htmlDrawPoint__OOZsrcZuirelaysZdriversZhtml95driver_u55, loadImage: webLoadImage__OOZsrcZuirelaysZdriversZweb95common_u739, freeImage: webFreeImage__OOZsrcZuirelaysZdriversZweb95common_u750, drawImage: htmlDrawImage__OOZsrcZuirelaysZdriversZhtml95driver_u129, imageSize: webImageSize__OOZsrcZuirelaysZdriversZweb95common_u756, blitRGBA: htmlBlitRGBA__OOZsrcZuirelaysZdriversZhtml95driver_u147}, NTI721420302);
-    inputRelays_738197672[0] = nimCopy(inputRelays_738197672[0], {pollEvent: webPollEvent__OOZsrcZuirelaysZdriversZweb95common_u1413, waitEvent: webWaitEvent__OOZsrcZuirelaysZdriversZweb95common_u1417, getTicks: webGetTicks__OOZsrcZuirelaysZdriversZweb95common_u1354, sleep: webSleep__OOZsrcZuirelaysZdriversZweb95common_u1356, shutdown: htmlShutdown__OOZsrcZuirelaysZdriversZhtml95driver_u186}, NTI738197514);
+    inputRelays_738197672[0] = nimCopy(inputRelays_738197672[0], {pollEvent: webPollEvent__OOZsrcZuirelaysZdriversZweb95common_u1403, waitEvent: webWaitEvent__OOZsrcZuirelaysZdriversZweb95common_u1407, getTicks: webGetTicks__OOZsrcZuirelaysZdriversZweb95common_u1354, sleep: webSleep__OOZsrcZuirelaysZdriversZweb95common_u1356, shutdown: htmlShutdown__OOZsrcZuirelaysZdriversZhtml95driver_u186}, NTI738197514);
     clipboardRelays_738197657[0] = nimCopy(clipboardRelays_738197657[0], {getText: webGetClipboardText__OOZsrcZuirelaysZdriversZweb95common_u889, putText: webPutClipboardText__OOZsrcZuirelaysZdriversZweb95common_u891}, NTI738197513);
 
   
