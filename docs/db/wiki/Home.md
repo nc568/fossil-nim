@@ -23,16 +23,18 @@ WebAssembly. Not a port of SQLite — a rewrite with the legacy cut out.
 | [Status sheet](../en/status.md) | one row per stage: what is real, what is only self-tested, cproc state |
 | [Page integrity](../en/page-integrity.md) | the plain-file checksum: layout, CRC parameters, mismatch behaviour, measured cost |
 | [Differential tests](../en/difftest.md) | the same SQL through this engine and real SQLite; what differs and why |
+| [Divergences](../en/divergences.md) | every conscious difference from SQLite, with the reason and the cost |
 
 ## Quick facts
 
 ```
-Engine size        4 492 LOC          (SQLite: ~150 000)
-Tests              26 core + 20 security + 17 storage + 18 WAL + 24 btree + 3 crash + 34 crypto + 10 corrupt
+Engine size        5 254 LOC          (SQLite: ~150 000)
+Tests              26 core + 20 security + 17 storage + 18 WAL + 24 btree + 3 crash + 34 crypto + 20 corrupt + 14 disk
 Backend parity     native == JS, byte for byte (md5 0376a7c4…)
-wasm              328 KB, no emscripten, no wasi-sdk
+wasm              425 768 B, no emscripten, no wasi-sdk
 Point lookup      185 842 q/s  (was 56 q/s before the index planner)
-Biggest win       cproc/QBE → musl now passes: 22/22 units, and the built binary runs
+Rows on disk      one B+tree, 56/56 difftest queries identical in memory, on disk and after reopen
+Biggest win       cproc/QBE → musl now passes: 34/34 units, and the built binary runs
 ```
 
 ## How to run

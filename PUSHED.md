@@ -1,7 +1,7 @@
 # Push state
 
 Repository: `nc568/fossil-nim`
-Branch under development: **`feat/foccil-db-v0.1`** — currently **`8bc38a1`**
+Branch under development: **`feat/foccil-db-v0.1`** — currently **`2734a8a`** locally (see "pending push" below)
 `main` stays at `dd7630e` and is not merged until the implementation is complete.
 
 PR / diff for review:
@@ -113,3 +113,22 @@ point. Until then the branch on GitHub stops at `1b77b9d`.
 Branch `feat/foccil-db-v0.1`: `1fe3511` — storage input validation + `t_corrupt`
 + `docs/db/{ru,en}/audit-lessons.md`. Gate: 26 + 20 + 17 + 18 + 24 + 3 + 34 + 10
 = **152 tests**.
+
+## Pending push (2026-10-19)
+
+Commit `2734a8a` (K9L-67) exists **locally only**. The session that made it had
+no token available, and the token policy says a PAT never lands in a file, a
+commit message, a remote or a shell history — so the push is left to a human
+rather than done with a credential written somewhere it does not belong.
+
+```
+git -C fossil-nim push origin feat/foccil-db-v0.1
+```
+
+After it lands, `git log -1 --format=%H` should print
+`2734a8a…` (the full hash is in `git log`), and `git ls-remote origin
+feat/foccil-db-v0.1` must agree.
+
+What is in that commit: the engine on the B+tree and the log (K9L-67), one new
+fuzzer (`tools/db/crash_fuzz_engine.nim`), `docs/db/{en,ru}/divergences.md`,
+the CI workflow copy at `tools/db/ci/ci.yml`, and the gate at 19 stages green.
