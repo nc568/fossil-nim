@@ -30,7 +30,7 @@ Tests              26 core + 20 security + 17 storage + 18 WAL + 24 btree + 3 cr
 Backend parity     native == JS, byte for byte (md5 0376a7c4…)
 wasm              328 KB, no emscripten, no wasi-sdk
 Point lookup      185 842 q/s  (was 56 q/s before the index planner)
-Biggest open item  cproc/QBE compilation — blocked upstream, reproducer attached
+Biggest win       cproc/QBE → musl now passes: 22/22 units, and the built binary runs
 ```
 
 ## How to run
@@ -40,7 +40,7 @@ sh tools/bootstrap.sh   # Nim, qbe, cproc, musl, zig into ~/.cache/tc
 sh tools/test.sh        # 6-stage gate
 nim c -r -d:release --mm:arc tools/bench.nim
 sh tools/wasm/build.sh && node tools/wasm/run.js
-sh tools/cproc/check.sh # compatibility scoreboard
+sh tools/db/cproc/check.sh # cproc/QBE gate: compile + link + run
 ```
 
 ## Conventions

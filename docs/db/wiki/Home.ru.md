@@ -30,7 +30,7 @@ WebAssembly. Это не порт SQLite, а переписывание с вы�
 Паритет бэкендов   native == JS, байт в байт (md5 0376a7c4…)
 wasm              328 КБ, без emscripten и wasi-sdk
 Точечный поиск     185 842 запроса/с  (было 56 до планировщика индексов)
-Главный открытый   сборка через cproc/QBE — блокер в апстриме, репродьюсер приложен
+Главная победа     cproc/QBE → musl проходит: 22/22 TU, собранный бинарник работает
 ```
 
 ## Как запустить
@@ -40,7 +40,7 @@ sh tools/bootstrap.sh   # Nim, qbe, cproc, musl, zig в ~/.cache/tc
 sh tools/test.sh        # гейт из 6 стадий
 nim c -r -d:release --mm:arc tools/bench.nim
 sh tools/wasm/build.sh && node tools/wasm/run.js
-sh tools/cproc/check.sh # таблица совместимости
+sh tools/db/cproc/check.sh # гейт cproc/QBE: компиляция + линковка + запуск
 ```
 
 ## Соглашения

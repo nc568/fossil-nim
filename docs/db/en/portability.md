@@ -7,7 +7,7 @@
 | Native C (gcc/clang) | `nim c --mm:arc` | ✅ 26 + 18 tests |
 | JavaScript (V8/Node) | `nim js` | ✅ digest identical to native, byte for byte |
 | wasm32 | `sh tools/wasm/build.sh` | ✅ 328 KB, runs under Node |
-| cproc → QBE | `sh tools/cproc/check.sh` | ⚠️ 1/22 TUs, blockers live in cproc |
+| cproc → QBE → musl | `sh tools/db/cproc/check.sh` | ✅ 22/22 TUs, and the smoke binary links and runs |
 
 ## 2. C ↔ JS parity
 
@@ -87,60 +87,76 @@ Next targets: 150 KB (own bump allocator instead of wasi-libc), 100 KB
 
 ## 4. cproc / QBE
 
-### 4.1 What exists
+### 4.1 The result
 
-* `tools/cproc/build.sh` builds **qbe 1.2**, **cproc** (git `d1c53dd`) and **musl 1.2.5**.
-  musl is mandatory: glibc headers use GNU extensions cproc cannot parse.
-* `tools/cproc/nimbase_cproc.h` turns `nimbase.h` into clean C11: `__GNUC__` is not
-  defined, `__attribute__` is neutralised, overflow intrinsics degrade to plain arithmetic
-  (the engine checks overflow itself).
-* `tools/cproc/check.sh` is a **measurable gate**: it compiles every TU with cproc and
-  groups failures by root cause, so progress is a number, not an opinion.
-* The `-d:foccilMinimalFloat` profile removed the libm dependency (own `round`, `fmod`,
-  `pow10`), which **eliminated** the `long double` blocker entirely.
+```
+$ sh tools/db/cproc/check.sh
+cproc gate: 22/22 translation units compiled
+PASS: cproc->QBE->musl binary compiles, links and runs correctly
+```
 
-### 4.2 Current state: 1/22 TUs
+Every translation unit of the engine goes through **cproc → QBE → musl**, and the result
+is not just an object file: a real program (`tools/db/cproc/smoke.nim`) is built, linked
+and executed, and its output is compared against the expected one. A compile that
+produces a binary which does not work would not be a gate.
 
-| Cause | TUs | Whose |
+### 4.2 Why it used to be 1/22 — three separate causes, none of them in the engine
+
+| # | Symptom | TUs | Real cause |
+|---|---|---|---|
+| 1 | `qbe:-: unknown keyword extern` | 18 | **wrong QBE version.** cproc `d1c53dd` emits `extern $g` for globals with external linkage. That is valid **QBE 1.3**, not QBE 1.2 — `build.sh` was pinned to 1.2. cproc is not buggy; the two halves of the toolchain were from different years. |
+| 2 | `assignment to pointer discards qualifiers` | 7 | **Nim codegen.** Nim passes `const` globals by pointer where C says the object is const (`&DefaultOptions`, RTTI tables, const sets). GCC warns; cproc rejects. |
+| 3 | `long double`, `__uint128_t`, `case 48 ... 57` | 3 | **Nim's standard library** assumes GCC: musl's `math.h` declares `sqrtl`/`powl`, `pure/hashes.nim` emits a `__uint128_t` multiply, `pure/parseutils.nim` uses GNU case ranges. |
+
+After fixing the QBE version alone the gate went **1/22 → 12/22**. That is the whole story
+of issue K9L-35, and it is a *documentation* failure rather than a compiler bug: nothing in
+cproc's README says which QBE it needs, and nothing fails at `make` time — you find out
+much later, on a five-line C file.
+
+### 4.3 What the gate shims, and what it does not
+
+All three remaining causes are outside `src/`. The gate works around them, and every
+workaround is **derived at gate time**, never committed and never hand-edited:
+
+* **nimbase postlude** (`check.sh`): `#undef NIM_CONST` / `#define NIM_CONST` empty. Const
+  globals move from `.rodata` to `.data`; the engine never writes them, so nothing changes
+  semantically. This alone fixed 7 units.
+* **`math.h` shim** (`shimgen.py`): a minimal header with the double subset. Only `fabs`
+  is used today; anything else fails the gate loudly instead of silently pulling libm in.
+* **stdlib patch** (`shimgen.py --install`): `pure/hashes.nim` takes its own portable
+  128-bit fallback instead of the `__uint128_t` emit, and `pure/parseutils.nim` has its
+  five `of '0'..'9':` ranges expanded into plain case labels — exactly the expansion Nim
+  itself performs for compilers without the GNU extension. Originals are kept as
+  `*.foccil-orig`, and every run re-derives from those backups, so the patch is idempotent
+  and reversible. `shimgen.py --check` fails loudly if the stdlib no longer has the shape
+  it patches, instead of silently producing a no-op.
+
+`import std/x` resolves past the search path (and `patchFile()` ignores `std/` imports
+too), so these two files genuinely cannot be shadowed from the project — patching the
+installed toolchain is the only option that does not fork the stdlib into the repo.
+
+### 4.4 Cost, measured rather than claimed
+
+| | cproc → QBE → musl (static) | gcc (dynamic) |
 |---|---|---|
-| `qbe: unknown keyword extern` | 18 | **cproc** |
-| `assignment to pointer discards qualifiers` | 4 | cproc (const strictness) |
+| text | 418 KB | 376 KB |
+| data | 40 KB | 6.7 KB |
 
-### 4.3 Minimal cproc reproducer (ready to upstream)
+Not an apples-to-apples comparison — musl is linked statically, glibc is not — so read it
+as "the same order of magnitude", not as a regression budget. The `NIM_CONST` relaxation
+is the only part attributable to the shim, and it is a `.rodata` → `.data` move, not growth.
 
-```c
-/* min.c */
-extern int g_counter;
-int use(void) { return g_counter; }
-```
+### 4.5 What is still open
 
-```
-$ cproc -std=c11 -c -o min.o min.c
-qbe:-:5: unknown keyword extern
-cproc: codegen: process ... exited with status 1
-```
+* The three stdlib issues are reported as a single upstream note (K9L-36): a Nim project
+  cannot be built with a strict-C11 compiler without patching `parseutils` and `hashes`.
+  If Nim ever gains a `-d:strictC11` that selects its own fallbacks, the shim disappears.
+* `build.sh` now refuses to run with QBE < 1.3 instead of producing a toolchain that fails
+  a thousand lines later.
+* The gate is a *separate* build profile; `tools/test.sh` still uses gcc. A green gate does
+  not by itself prove the shipped builds are cproc-clean — the smoke binary does, which is
+  why it is part of the gate.
 
-Five lines of standard C, zero extensions, reproducible without Nim. Until this is fixed,
-no non-trivial project can use cproc.
-
-Second blocker, also reproducible in isolation:
-
-```c
-#include <math.h>
-double f(double x) { return sqrt(x); }
-```
-
-→ `cproc-qbe: long double is not yet supported` (cproc parses the `sqrtl`/`powl`
-prototypes from the musl header and gives up). We worked around it by dropping `math.h`
-from our cproc profile, but cproc will hit this for any libm user.
-
-### 4.4 Plan
-
-1. File both reproducers against `michaelforney/cproc` with draft patches.
-2. Until upstream fixes land, keep the gate informative (`exit 1` only in strict mode;
-   `tools/test.sh` does not block the build).
-3. Fallback if upstream stalls: a thin "Nim-C → QBE" backend for the subset this engine
-   emits. The core already uses nothing but C11 — enforced by a static test.
-
-**Bottom line:** "must compile with cproc/QBE" moved from *hope* to *measured*: causes are
-named, the culprit is cproc, there is a 5-line reproducer and a documented workaround path.
+**Bottom line:** "must compile with cproc/QBE" is now a measurement with a working binary
+at the end of it, and the three things that used to block it are documented, shimmed
+outside the engine, and self-checking.
