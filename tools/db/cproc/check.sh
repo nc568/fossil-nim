@@ -66,7 +66,8 @@ EOF
 #    repo-root config.nims, which links sqlite3 for the test builds, out)
 "$NIM" c --os:any --cpu:amd64 --mm:arc -d:danger -d:useMalloc \
   -d:noSignalHandler -d:foccilNoClock -d:foccilMinimalFloat --hints:off --warnings:off \
-  --cc:gcc --skipParentCfg:on --nimcache:"$OUT/nc" --compileOnly "$ENTRY"
+  --cc:gcc --skipParentCfg:on --path:"$ROOT/src" --nimcache:"$OUT/nc" \
+  --compileOnly "$ENTRY"
 
 # 4) compile every unit with cproc against musl headers
 total=0; ok=0

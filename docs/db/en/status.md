@@ -21,12 +21,14 @@ Snapshot: branch `feat/foccil-db-v0.1`, latest commit at the time of writing (`g
 | Crypto primitives (ChaCha20, HChaCha20, XChaCha20, HMAC-SHA256, KDF, constant-time compare) | done | 324 | **RFC 8439 and draft-irtf-cfrg-xchacha-03 test vectors**, incl. HChaCha20 subkey and 288-byte XChaCha20 keystream | t_crypto 34 (vectors + property tests) | compiles |
 | Page encryption in the pager (K9L-83) | **not started — parked by decision**, format fixed in `encryption.md` | 0 | layout decided: 4096 = 4032 payload + 64 trailer, CRC32 or HMAC | — | — |
 | Differential testing harness | done | 61 + SQL corpus | is itself the reference (SQLite 3) | — | — |
-| cproc → QBE → musl build | done | 312 | cproc 22/22 units, binary linked and its output compared | — | **is the gate** |
+| cproc → QBE → musl build | done | 312 | cproc 34/34 units, binary linked and its output compared | — | **is the gate** |
 | Plain JS backend | done | — | JS digest identical to native, byte for byte | t_crypto 34 on JS | n/a |
-| wasm32 | done | — | runs under Node, 328 KB | — | n/a |
-| Engine on real storage (K9L-67 → K9L-83) | **not started** (point 5) | 0 | — | — | — |
+| wasm32 | done | — | runs under Node, 425 768 B (grew from 344 327 B: the storage layer is now reachable from `api`) | — | n/a |
+| Row store: one B+tree, memory and disk backends (`rowstore.nim`) | done | 421 | — | t_disk 14 (encoding, key order, corrupt records → `DbError`) | compiles |
+| **Engine on real storage (K9L-67)** | **done** | 762 (`rowstore` + `dbfile` + engine changes) | **the 56-query corpus answers identically to the memory backend, live and after a reopen** | t_disk 14 | compiles (34/34 units now that storage is reachable) |
+| Engine-level crash fuzzing (`crash_fuzz_engine.nim`) | done | 133 | — | 60 crash points per full gate run: no half-applied transaction, no lost commit, catalog intact | n/a |
 | Audit duplicate cleanup (K9L-19..22 ↔ K9L-69..81) | **not started** (point 6) | 0 | — | — | — |
-| `tools/db/test.sh` | **broken** (K9L-39), suites are run one by one | 34 | — | — | n/a |
+| `tools/db/test.sh` | done (K9L-39) — 19 stages, one command | 34 | — | — | n/a |
 
 ## Totals
 

@@ -1,0 +1,75 @@
+# Foccil DB — the whole gate, in one job.
+#
+# This file is a *copy* kept next to the code it runs. The real workflow lives in
+# .github/workflows/ and is installed by a human with write access; the agent
+# that wrote this had contents-only rights and never touched .github.
+#
+# Copy it with:  cp tools/db/ci/ci.yml .github/workflows/db.yml
+#
+# Design notes, because CI is where a flaky gate becomes a gate nobody reads:
+#   * exactly one command is the gate: `sh tools/db/test.sh`. If it passes
+#     locally it must pass here, and if it fails here you can reproduce it with
+#     one command.
+#   * the toolchain is pinned by tools/db/cproc/versions.env and cached; a cache
+#     hit turns a ~3 minute toolchain build into a few seconds. The cache key
+#     includes the pins, so bumping a pin rebuilds instead of silently keeping
+#     yesterday's compiler.
+#   * the wasm module is uploaded as an artifact: it is the one build product
+#     whose *size* is part of the design, and a PR that doubles it should show
+#     up as a number in the run, not as a surprise later.
+
+name: db
+
+on:
+  push:
+    paths: ['src/**', 'tests/db/**', 'tools/db/**', '.github/workflows/db.yml']
+  pull_request:
+    paths: ['src/**', 'tests/db/**', 'tools/db/**', '.github/workflows/db.yml']
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # The pins are read *before* the cache step, so changing a version
+      # invalidates the cache by construction rather than by remembering to.
+      - name: Read toolchain pins
+        id: pins
+        run: |
+          set -a; . tools/db/cproc/versions.env; set +a
+          echo "key=nim${NIM_VERSION:-2.2.12}-qbe${QBE_VERSION:-1.3}-cproc${CPROC_COMMIT:-d1c53dd}-musl${MUSL_VERSION:-1.2.5}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/tc
+          key: tc-${{ runner.os }}-${{ steps.pins.outputs.key }}
+          restore-keys: tc-${{ runner.os }}-
+
+      - name: Build toolchain (cached)
+        run: sh tools/db/bootstrap.sh && sh tools/db/cproc/build.sh
+
+      - name: Toolchain versions
+        run: sh tools/db/cproc/versions.sh
+
+      - name: Gate
+        run: sh tools/db/test.sh
+
+      - name: wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: foccil-db-wasm
+          path: build/db/wasm/foccil.wasm
+          if-no-files-found: error
+
+      - name: Gate logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-logs
+          path: |
+            build/test/*.log
+            build/test/summary.txt
+          if-no-files-found: warn

@@ -25,6 +25,7 @@ rm -f "$OUT"/obj/*.o
 "$NIM" c --os:any --cpu:wasm32 --mm:arc -d:danger -d:useMalloc \
   -d:foccilNoClock -d:noSignalHandler -d:foccilMinimalFloat --hints:off --warnings:off \
   --cc:clang --clang.exe:"$ZIGCC" --clang.linkerexe:"$ZIGLD" \
+  --path:"$ROOT/src" \
   --nimcache:"$OUT/nimcache" --compileOnly \
   "$ROOT/src/fossil/wasm/bridge.nim"
 

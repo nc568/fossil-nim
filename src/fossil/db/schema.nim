@@ -8,7 +8,7 @@
 ## implement later, so swapping the backend does not touch the executor.
 
 import std/[tables, algorithm, strutils]
-import ./errors, ./values, ./ast
+import ./errors, ./values, ./ast, ./rowstore
 
 type
   Column* = object
@@ -45,8 +45,8 @@ type
     cols*: seq[Column]
     colIdx*: Table[string, int]
     pkCols*: seq[int]
-    rows*: OrderedTable[int64, Row]
-    order*: seq[int64]         ## live rowids in insertion order (scan order)
+    rs*: RowStore              ## rows, in memory or in a B+tree — see rowstore.nim
+    tid*: uint32               ## table id, the key prefix on disk (0 = memory)
     nextRowid*: int64
     indexes*: seq[Index]
     tableChecks*: seq[tuple[expr: Expr, name: string]]
@@ -74,8 +74,8 @@ proc buildColIdx*(t: TableDef) =
     t.colIdx[c.name.toLowerAscii()] = i
 
 proc newTable*(name: string): TableDef =
-  TableDef(name: name, rows: initOrderedTable[int64, Row](),
-        order: @[], nextRowid: 1, pkCols: @[], indexes: @[],
+  TableDef(name: name, rs: newMemStore(), tid: 0,
+        nextRowid: 1, pkCols: @[], indexes: @[],
         tableChecks: @[], strict: true)
 
 proc addColumn*(t: TableDef; c: Column) =
@@ -185,22 +185,18 @@ proc indexAll*(ix: Index): seq[int64] =
 proc insertRow*(t: TableDef; row: Row): int64 =
   let rid = t.nextRowid
   inc t.nextRowid
-  t.rows[rid] = row
-  t.order.add rid
+  t.rs.put(rid, row)
   rid
 
 proc deleteRow*(t: TableDef; rid: int64) =
-  if t.rows.hasKey(rid):
-    t.rows.del rid
-    let pos = t.order.find(rid)
-    if pos >= 0: t.order.delete(pos)
+  discard t.rs.del(rid)
 
 proc updateRow*(t: TableDef; rid: int64; row: Row) =
-  if t.rows.hasKey(rid): t.rows[rid] = row
+  t.rs.put(rid, row)
 
-proc scanRowids*(t: TableDef): seq[int64] = t.order
+proc scanRowids*(t: TableDef): seq[int64] = t.rs.rowids()
 
-proc rowCount*(t: TableDef): int = t.rows.len
+proc rowCount*(t: TableDef): int = t.rs.len
 
 # ---------------------------------------------------------------------------
 # Catalog

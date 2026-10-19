@@ -37,6 +37,16 @@ const
   MaxIntCell* = CellHdr + MaxKeySize
   OverflowHdr* = 8
   OverflowUsable* = PageSize - OverflowHdr
+
+  ## K9L-83 reserves the tail of every page for a checksum trailer: format
+  ## version, flags, and the CRC that is seeded with the page id. The two-cells
+  ## invariant is checked against the *usable* budget (4032 of 4096), not the
+  ## raw page size, so it stays true the day the trailer lands instead of
+  ## failing then. A tree that only fits two cells on a page with no trailer is
+  ## a tree whose splits stop working when the trailer arrives — the worst kind
+  ## of format change, because it is silent until someone opens an old file.
+  PageTrailer* = 64
+  NodeBytes* = PageSize - PageTrailer    ## 4032; the part a node may use
   ValInline = 0
   ValOverflow = 1
 
@@ -109,10 +119,22 @@ proc usedBytes(n: Node): int =
   result = NodeHeader + 2 * n.cells.len
   for c in n.cells: result += c.len
 
-proc fits(n: Node): bool = usedBytes(n) <= PageSize
+proc fits(n: Node): bool = usedBytes(n) <= NodeBytes
 
-doAssert 2 * MaxLeafCell + NodeHeader + 4 <= PageSize, "a leaf must hold two full cells"
-doAssert 2 * MaxIntCell + NodeHeader + 4 <= PageSize, "an internal node must hold two cells"
+doAssert 2 * MaxLeafCell + NodeHeader + 4 <= NodeBytes,
+  "a leaf must hold two full cells in the usable 4032 bytes"
+doAssert 2 * MaxIntCell + NodeHeader + 4 <= NodeBytes,
+  "an internal node must hold two cells in the usable 4032 bytes"
+
+const
+  ## The margin, written down so the next person does not have to recompute it:
+  ##   leaf: 2 * (8 + 512 + 1024) + 16 + 4 = 3108 of 4032  -> 924 bytes spare
+  ##   internal: 2 * (8 + 512) + 16 + 4   = 1060 of 4032  -> 2972 bytes spare
+  ## The key limit (512) and the inline-value ceiling (1024) are what keep this
+  ## true; raising either without raising PageSize breaks the invariant, and the
+  ## doAssert above is where that conversation happens.
+  LeafSpare* = NodeBytes - (2 * MaxLeafCell + NodeHeader + 4)
+  IntSpare* = NodeBytes - (2 * MaxIntCell + NodeHeader + 4)
 
 proc parseNode(page: string): Node =
   ## Every field here comes from a file an attacker may fully control, so none of
@@ -560,6 +582,23 @@ iterator range*(b: Btree; lo, hi: string): tuple[key, val: string] =
                   else: b.readOverflow(cell.cellOverflowPage, cell.cellValLen)
         yield (n.keys[i], val)
       pid = n.right
+
+proc eachPrefix*(b: Btree; prefix: string; fn: proc(key, val: string)) =
+  ## Call `fn` for every key that starts with `prefix`, in key order.
+  ##
+  ## The row store keys every table with a 4-byte table id, so a table scan is
+  ## exactly this call. An iterator cannot be handed to a proc, hence the
+  ## callback: the alternative (materialising the whole table into a seq) would
+  ## defeat the point of putting the rows on disk.
+  var hi = prefix
+  var i = hi.len - 1
+  while i >= 0 and uint8(hi[i]) == 0xFF: dec i
+  if i < 0:
+    for (k, v) in b.pairs: fn(k, v)          # prefix is all 0xFF: unbounded
+  else:
+    hi[i] = chr(int(uint8(hi[i])) + 1)
+    hi.setLen(i + 1)
+    for (k, v) in b.range(prefix, hi): fn(k, v)
 
 # ---------------------------------------------------------------------------
 # verification

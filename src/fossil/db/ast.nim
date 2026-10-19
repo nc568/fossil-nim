@@ -9,6 +9,7 @@
 ## A prepared statement is built once and executed many times, so AST footprint
 ## is not on the hot path; evaluation is.
 
+import std/strutils
 import ./values, ./errors
 
 type
@@ -244,3 +245,93 @@ func isConstExpr*(e: Expr): bool =
     for p in e.pairs:
       ok = ok and p.whenE.isConstExpr and p.thenE.isConstExpr
     ok and (e.e1 == nil or e.e1.isConstExpr) and e.sub == nil
+
+
+# ---------------------------------------------------------------------------
+# Printing an expression back to SQL
+# ---------------------------------------------------------------------------
+#
+# Why this exists: the catalog stores what the engine *built*, not the text the
+# user typed, so anything that survives a reopen has to be printable from the
+# model. A CHECK constraint or a partial-index predicate is a tree, not a
+# string. Printing is deliberately parenthesised and pedantic — the output is
+# read back by our own parser at open, and a redundant pair of brackets is
+# cheaper than a precedence bug that only shows up in stored schemas.
+#
+# Anything this cannot print raises. A schema that silently lost its CHECK
+# constraints on reload would be a data-integrity bug reported by the user as
+# "the database let bad rows in", months later.
+
+func litSql*(v: Value): string =
+  case v.kind
+  of vkNull: result = "NULL"
+  of vkInt: result = $v.i
+  of vkReal: result = formatReal(v.r)
+  of vkBool: result = (if v.bo: "1" else: "0")
+  of vkText: result = "'" & v.t.replace("'", "''") & "'"
+  of vkBlob:
+    result = "X'"
+    for b in v.bl: result.add toHex(b, 2)
+    result.add "'"
+
+proc toSql*(e: Expr): string =
+  if e == nil: return "NULL"
+  case e.kind
+  of exLit: return litSql(e.val)
+  of exParam: return "?"
+  of exCol: return (if e.tbl.len > 0: e.tbl & "." & e.name else: e.name)
+  of exStar: return "*"
+  of exUnary:
+    return "(" & (if e.op == "not": "NOT " else: e.op) & toSql(e.args[0]) & ")"
+  of exBinary:
+    let op = case e.op
+             of "isdistinct": "IS DISTINCT FROM"
+             of "isnotdistinct": "IS NOT DISTINCT FROM"
+             of "isnot": "IS NOT"
+             of "is": "IS"
+             of "and": "AND"
+             of "or": "OR"
+             else: e.op
+    return "(" & toSql(e.args[0]) & " " & op & " " & toSql(e.args[1]) & ")"
+  of exCall:
+    var parts: seq[string] = @[]
+    for a in e.args: parts.add toSql(a)
+    let inner = if e.star: "*"
+                elif e.isDistinctArg: "DISTINCT " & parts.join(", ")
+                else: parts.join(", ")
+    return e.name & "(" & inner & ")"
+  of exCase:
+    result = "CASE"
+    if e.args.len > 0: result.add " " & toSql(e.args[0])
+    for p in e.pairs:
+      result.add " WHEN " & toSql(p.whenE) & " THEN " & toSql(p.thenE)
+    if e.e1 != nil: result.add " ELSE " & toSql(e.e1)
+    result.add " END"
+  of exCast: return "CAST(" & toSql(e.args[0]) & " AS " & e.typeName & ")"
+  of exIn:
+    if e.sub != nil:
+      fail(unsupported, "cannot store an expression that contains a subquery")
+    var parts: seq[string] = @[]
+    for i in 1 ..< e.args.len: parts.add toSql(e.args[i])
+    return "(" & toSql(e.args[0]) &
+           (if e.negated: " NOT IN (" else: " IN (") & parts.join(", ") & "))"
+  of exExists, exScalarSub:
+    fail(unsupported, "cannot store an expression that contains a subquery")
+  of exBetween:
+    return "(" & toSql(e.args[0]) &
+           (if e.negated: " NOT BETWEEN " else: " BETWEEN ") &
+           toSql(e.args[1]) & " AND " & toSql(e.args[2]) & ")"
+  of exIsNull:
+    return "(" & toSql(e.args[0]) &
+           (if e.negated: " IS NOT NULL)" else: " IS NULL)")
+  of exLike:
+    result = "(" & toSql(e.args[0]) & (if e.negated: " NOT " else: " ") &
+             e.op.toUpperAscii() & " " & toSql(e.args[1])
+    if e.args.len > 2: result.add " ESCAPE " & toSql(e.args[2])
+    result.add ")"
+  of exTuple, exRowValue:
+    var parts: seq[string] = @[]
+    for a in e.args: parts.add toSql(a)
+    return "(" & parts.join(", ") & ")"
+  of exCollate:
+    return "(" & toSql(e.args[0]) & " COLLATE " & e.name & ")"

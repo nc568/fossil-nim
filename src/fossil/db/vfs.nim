@@ -16,6 +16,13 @@ when not defined(js):
   import std/os
 import fossil/db/errors
 
+const
+  HasFileVfs* = (not defined(js)) and declared(fileExists)
+    ## True when the target has a filesystem at all. `--os:any` targets (the
+    ## wasm module, the cproc matrix) have no `std/os` file API, so the file
+    ## backend is compiled out there instead of failing to build. The memory
+    ## VFS is always available, which is what the engine itself needs.
+
 type
   VfsKind* = enum
     vfsMemory = "memory"
@@ -26,7 +33,7 @@ type
     ## numbers: the pager owns the page layout, the VFS only moves bytes.
     kind*: VfsKind
     mem: string              ## memory backend (works everywhere, incl. JS/wasm)
-    when not defined(js):
+    when HasFileVfs:
       f: File                ## file backend (native only)
       path*: string
     isOpen*: bool
@@ -53,8 +60,8 @@ proc openFileVfs*(path: string): Vfs =
   ##
   ## Not available in the JS target, where there is no filesystem; a host that
   ## wants persistence in the browser supplies its own VFS implementation.
-  when defined(js):
-    fail(unsupported, "file VFS is not available on the JS target")
+  when not HasFileVfs:
+    fail(unsupported, "this target has no filesystem: use the memory VFS")
   else:
     result = Vfs(kind: vfsFile, path: path, isOpen: true)
     try:
@@ -69,7 +76,7 @@ proc openFileVfs*(path: string): Vfs =
 
 proc close*(v: Vfs) =
   if not v.isOpen: return
-  when not defined(js):
+  when HasFileVfs:
     if v.kind == vfsFile:
       flushFile(v.f)
       v.f.close()
@@ -81,7 +88,7 @@ proc size*(v: Vfs): int =
   of vfsMemory:
     result = v.mem.len
   of vfsFile:
-    when not defined(js):
+    when HasFileVfs:
       let cur = getFilePos(v.f)
       setFilePos(v.f, 0, fspEnd)
       result = int(getFilePos(v.f))
@@ -97,7 +104,7 @@ proc readAt*(v: Vfs; off: int; dst: var string; len: int): bool =
   of vfsMemory:
     dst = v.mem[off ..< off + len]
   of vfsFile:
-    when not defined(js):
+    when HasFileVfs:
       dst.setLen(len)
       setFilePos(v.f, off, fspSet)
       if readChars(v.f, dst, 0, len) != len: return false
@@ -128,7 +135,7 @@ proc writeAt*(v: Vfs; off: int; src: string): bool =
       for i in old ..< newLen: v.mem[i] = '\0'
     for i in 0 ..< body.len: v.mem[off + i] = body[i]
   of vfsFile:
-    when not defined(js):
+    when HasFileVfs:
       setFilePos(v.f, off, fspSet)
       if body.len > 0:
         if writeChars(v.f, body, 0, body.len) != body.len: return false
@@ -144,7 +151,7 @@ proc snapshot*(v: Vfs): string =
   case v.kind
   of vfsMemory: v.mem
   of vfsFile:
-    when not defined(js):
+    when HasFileVfs:
       var all = ""
       discard v.readAt(0, all, v.size)
       all
@@ -160,7 +167,7 @@ proc truncate*(v: Vfs; n: int) =
   of vfsMemory:
     if n < v.mem.len: v.mem.setLen(n)
   of vfsFile:
-    when not defined(js):
+    when HasFileVfs:
       # Portable enough: cut by rewriting the file through a temp copy.
       # Only used by tests and by explicit shrink; never on the hot path.
       var keep = ""
@@ -174,7 +181,7 @@ proc sync*(v: Vfs) =
   ## Make previous writes durable. This is the only call that costs a real
   ## fsync, so the pager calls it once per flush, not once per page.
   if not v.isOpen: return
-  when not defined(js):
+  when HasFileVfs:
     if v.kind == vfsFile:
       flushFile(v.f)
   inc v.syncs
@@ -183,5 +190,5 @@ proc kindName*(v: Vfs): string =
   case v.kind
   of vfsMemory: "memory"
   of vfsFile:
-    when defined(js): "file:unavailable"
-    else: "file:" & v.path
+    when HasFileVfs: "file:" & v.path
+    else: "file:unavailable"

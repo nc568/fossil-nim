@@ -40,6 +40,7 @@ difftest() { sh tools/db/difftest/run.sh; }
 cprocgate() { sh tools/db/cproc/check.sh; }
 stress_btree() { "$NIM" c -r $FLAGS --outdir:build/db tools/db/stress_btree.nim; }
 crash_fuzz() { "$NIM" c $FLAGS --outdir:build/db tools/db/crash_fuzz.nim && ./build/db/crash_fuzz 50; }
+crash_fuzz_engine() { "$NIM" c $FLAGS --outdir:build/db tools/db/crash_fuzz_engine.nim && ./build/db/crash_fuzz_engine 60; }
 
 # ---- runner ----------------------------------------------------------------
 run() {
@@ -74,7 +75,7 @@ echo "0. toolchain"
 run versions sh tools/db/cproc/versions.sh
 
 echo "1. unit suites"
-for t in t_core t_security t_storage t_wal t_btree t_crash t_crypto t_corrupt; do
+for t in t_core t_security t_storage t_wal t_btree t_crash t_crypto t_corrupt t_disk; do
   run "$t" nimrun "$t"
 done
 
@@ -98,6 +99,7 @@ if [ $QUICK -eq 0 ]; then
   echo "7. stress and crash fuzzing"
   run stress_btree stress_btree
   run crash_fuzz crash_fuzz
+  run crash_fuzz_engine crash_fuzz_engine
 fi
 
 echo "----------------------------------------------------------------"

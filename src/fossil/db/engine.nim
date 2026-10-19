@@ -19,7 +19,7 @@ when not defined(foccilMinimalFloat):
   import std/math
 when not defined(foccilNoClock):
   import std/times   # only the host build needs a wall clock
-import ./errors, ./values, ./ast, ./schema, ./funcs, ./parser
+import ./errors, ./values, ./ast, ./schema, ./funcs, ./parser, ./rowstore, ./dbfile
 
 type
   DbOptions* = object
@@ -72,6 +72,8 @@ type
     totalChanges*: int64
     rand*: uint64
     stmtCache*: Table[string, Prepared]
+    file*: DbFile              ## nil for an in-memory database
+    loading*: bool             ## true while the schema is being rebuilt at open
 
   Prepared* = ref object
     sql*: string
@@ -92,8 +94,13 @@ const DefaultOptions* = DbOptions(
 # ===========================================================================
 
 proc cloneTableDef(t: TableDef): TableDef =
-  result = TableDef(name: t.name, pkCols: t.pkCols, rows: t.rows,
-                    order: t.order, nextRowid: t.nextRowid,
+  ## A transaction snapshot must be able to roll back, so it cannot share a
+  ## store it might later mutate: a disk-backed table gets a *memory* copy of
+  ## its current rows. That costs a full copy at BEGIN, which is the honest
+  ## price of the snapshot model and the reason a disk transaction with DDL
+  ## should be rare (it is: DDL is not the usual case).
+  result = TableDef(name: t.name, pkCols: t.pkCols, rs: cloneStore(t.rs),
+                    tid: t.tid, nextRowid: t.nextRowid,
                     tableChecks: t.tableChecks, strict: t.strict,
                     withoutRowid: t.withoutRowid, isView: t.isView,
                     viewSql: t.viewSql)
@@ -124,19 +131,16 @@ proc indexKeyFor(t: TableDef; ix: Index; row: Row): seq[Value] =
     result.add(if c < row.len: row[c] else: nullValue())
 
 proc storeRow(t: TableDef; rid: int64; row: Row) =
-  t.rows[rid] = row
-  t.order.add rid
+  t.rs.put(rid, row)
   for ix in t.indexes:
     ix.indexInsert(indexKeyFor(t, ix, row), rid)
 
 proc removeRow(t: TableDef; rid: int64) =
-  if t.rows.hasKey(rid):
-    let row = t.rows[rid]
+  if t.rs.contains(rid):
+    let (_, row) = t.rs.get(rid)
     for ix in t.indexes:
       ix.indexDelete(indexKeyFor(t, ix, row), rid)
-    t.rows.del rid
-    let p = t.order.find(rid)
-    if p >= 0: t.order.delete(p)
+    discard t.rs.del(rid)
 
 proc uniqueViolation(t: TableDef; ix: Index; key: seq[Value];
                      selfRid: int64): bool =
@@ -620,9 +624,10 @@ proc expandView(c: Ctx; name: string; sp: var SourcePlan): bool =
 
 proc sourceRows(c: Ctx; sp: var SourcePlan): seq[Row] =
   if sp.tbl != nil:
-    result = newSeqOfCap[Row](sp.tbl.rows.len)
-    for rid in sp.tbl.order:
-      if sp.tbl.rows.hasKey(rid): result.add sp.tbl.rows[rid]
+    result = newSeqOfCap[Row](sp.tbl.rs.len)
+    for rid in sp.tbl.rs.rowids():
+      let (found, row) = sp.tbl.rs.get(rid)
+      if found: result.add row
   elif sp.sub != nil:
     let rs = c.execSelect(sp.sub)
     result = rs.rows
@@ -723,7 +728,8 @@ proc buildFromRows(c: Ctx; st: SelectStmt; sources: var seq[SourcePlan]): seq[Ro
       var sorted = rids
       sorted.sort()
       for rid in sorted:
-        if first.tbl.rows.hasKey(rid): rows.add first.tbl.rows[rid]
+        let (found, row) = first.tbl.rs.get(rid)
+        if found: rows.add row
   if not usedIndex:
     rows = c.sourceRows(first)
   c.addSourceCols(first, 0)
@@ -1111,6 +1117,11 @@ proc createTable(c: Ctx; st: Stmt): ResultSet =
   for i, col in t.cols:
     if col.autoIncrement and not col.isPk:
       fail(syntax, "AUTOINCREMENT requires PRIMARY KEY")
+  if db.file != nil and not db.loading:
+    # The table id is allocated before registration, because `allocTid` reads
+    # the catalog and would otherwise see a table with no id yet.
+    t.tid = allocTid(db.file, db.cat)
+    t.rs = newDiskStore(db.file.tree, t.tid, @[])
   db.cat.registerTable(t)
   result.cols = @[]
   result.rows = @[]
@@ -1119,9 +1130,36 @@ proc dropTable(c: Ctx; st: Stmt): ResultSet =
   c.db.markDdl()
   if c.db.opts.readOnly: fail(readOnly, "database is read-only")
   if not c.db.opts.allowDdl: fail(auth, "DDL is disabled on this connection")
+  let victim = c.db.cat.findTable(st.table)
   if not c.db.cat.dropTable(st.table):
     if st.ifExists: return
     fail(notFound, "no such table: " & st.table)
+  if victim != nil and victim.rs != nil:
+    # The rows are removed by the commit that follows this statement; until then
+    # they are only hidden, which is what makes DROP TABLE transactional.
+    victim.rs.clear()
+
+proc rebuildIndexes*(db: Db; t: TableDef) =
+  ## Indexes live in memory; rows may not. When a table is re-bound to its
+  ## on-disk rows — at open, or after a rolled-back DDL replaced the catalog —
+  ## the entries have to be rebuilt from the rows. Skip this and every lookup
+  ## that picks an index answers "no rows" for a table that is full of them,
+  ## which reads exactly like data loss.
+  ##
+  ## Cost is O(rows · indexes · log rows), paid once per table per open. That is
+  ## the honest price of a lazy index; a persisted index format would remove it
+  ## and is listed as future work rather than pretended away here.
+  if t.rs == nil or t.indexes.len == 0: return
+  for ix in t.indexes: ix.entries.setLen(0)
+  let probe = newCtx(db, @[])
+  for rid in t.rs.rowids():
+    let (found, row) = t.rs.get(rid)
+    if not found: continue
+    for ix in t.indexes:
+      if ix.partial != nil:
+        probe.vals = row
+        if not probe.eval(ix.partial).whereTrue(): continue
+      ix.indexInsert(indexKeyFor(t, ix, row), rid)
 
 proc createIndex(c: Ctx; st: Stmt): ResultSet =
   let db = c.db
@@ -1145,8 +1183,8 @@ proc createIndex(c: Ctx; st: Stmt): ResultSet =
                  unique: st.isUnique, partial: st.where)
   # backfill
   let probe = newCtx(db, @[])
-  for rid in t.order:
-    let row = t.rows[rid]
+  for rid in t.rs.rowids():
+    let (_, row) = t.rs.get(rid)
     if st.where != nil:
       probe.vals = row
       if not probe.eval(st.where).whereTrue(): continue
@@ -1183,14 +1221,14 @@ proc alterTable(c: Ctx; st: Stmt): ResultSet =
       fail(unsupported, "cannot add a PRIMARY KEY column")
     let col = c.buildColumn(st.addCol)
     if col.notNull and not col.hasDefault:
-      if t.rows.len > 0:
+      if t.rs.len > 0:
         fail(constraint, "cannot add NOT NULL column without a default to a non-empty table")
     t.addColumn(col)
     let ci = t.cols.high
-    for rid in t.order:
-      var row = t.rows[rid]
+    for rid in t.rs.rowids():
+      var row = t.rs.get(rid).row
       row.add(if col.hasDefault: col.defaultVal else: nullValue())
-      t.rows[rid] = row
+      t.rs.put(rid, row)
     for ix in t.indexes:
       for i in 0 ..< ix.cols.len:
         if ix.cols[i] == ci: fail(unsupported, "column is used by an index")
@@ -1202,10 +1240,10 @@ proc alterTable(c: Ctx; st: Stmt): ResultSet =
         if cc == i: fail(constraint, "cannot drop indexed column: " & st.oldCol)
     t.cols.delete(i)
     t.buildColIdx()
-    for rid in t.order:
-      var row = t.rows[rid]
+    for rid in t.rs.rowids():
+      var row = t.rs.get(rid).row
       row.delete(i)
-      t.rows[rid] = row
+      t.rs.put(rid, row)
     var newPk: seq[int]
     for p in t.pkCols:
       if p < i: newPk.add p
@@ -1277,7 +1315,8 @@ proc insertRows(c0: Ctx; st: Stmt): ResultSet =
         if ix.unique:
           let key = indexKeyFor(t, ix, row)
           for rid in ix.indexScanEq(key):
-            let old = t.rows[rid]
+            let (foundOld, old) = t.rs.get(rid)
+            if not foundOld: continue
             c.recordUndo(ukDelete, t, rid, old)
             t.removeRow(rid)
             if c.db.changes >= 0: discard
@@ -1312,8 +1351,13 @@ proc updateRows(c0: Ctx; st: Stmt): ResultSet =
     setIdx.add i
   let scanCtx = c
   var returned: seq[Row] = @[]
-  for rid in t.order:
-    let old = t.rows[rid]
+  # Snapshot the scan: a write during the walk can restructure the tree, and a
+  # live iterator over pages that are being split is exactly how a storage
+  # engine crashes. UPDATE is not supposed to move rows (the rowid is stable),
+  # but "not supposed to" is not a guarantee worth betting a page on.
+  for rid in t.rs.rowids():
+    let (foundRow, old) = t.rs.get(rid)
+    if not foundRow: continue
     scanCtx.vals = old
     if st.where != nil and not scanCtx.eval(st.where).whereTrue(): continue
     var row = old
@@ -1324,7 +1368,7 @@ proc updateRows(c0: Ctx; st: Stmt): ResultSet =
     c.recordUndo(ukUpdate, t, rid, old)
     for ix in t.indexes:
       ix.indexDelete(indexKeyFor(t, ix, old), rid)
-    t.rows[rid] = row
+    t.rs.put(rid, row)
     for ix in t.indexes:
       ix.indexInsert(indexKeyFor(t, ix, row), rid)
     inc c.db.changes
@@ -1346,14 +1390,16 @@ proc deleteRows(c0: Ctx; st: Stmt): ResultSet =
   let c = scopedCtx(c0, t)
   let scanCtx = c
   var victims: seq[int64] = @[]
-  for rid in t.order:
-    let row = t.rows[rid]
+  for rid in t.rs.rowids():
+    let (foundV, row) = t.rs.get(rid)
+    if not foundV: continue
     scanCtx.vals = row
     if st.where != nil and not scanCtx.eval(st.where).whereTrue(): continue
     victims.add rid
   var returned: seq[Row] = @[]
   for rid in victims:
-    let old = t.rows[rid]
+    let (foundOld, old) = t.rs.get(rid)
+    if not foundOld: continue
     if st.returning.len > 0:
       var outRow: Row
       scanCtx.vals = old
@@ -1391,6 +1437,15 @@ proc rollbackTx*(db: Db) =
   if db.txDepth == 0:
     if db.txDdl and db.catSnapshot != nil:
       db.cat = cloneCatalog(db.catSnapshot)
+      if db.file != nil:
+        # The snapshot's tables are memory copies (they had to be, so they could
+        # be rolled back). Rebind them to their on-disk homes before anyone can
+        # commit through them — a table that silently stopped persisting after a
+        # rolled-back DDL would be the worst possible bug in this module.
+        for _, t in db.cat.tables:
+          if t.tid != 0:
+            t.rs = newDiskStore(db.file.tree, t.tid, rowKeys(db.file.tree, t.tid))
+            rebuildIndexes(db, t)
       db.undo = @[]
       db.catSnapshot = nil
       db.txDdl = false
@@ -1402,18 +1457,28 @@ proc rollbackTx*(db: Db) =
       of ukInsert: u.tbl.removeRow(u.rid)
       of ukDelete: u.tbl.storeRow(u.rid, u.row)
       of ukUpdate:
-        let cur = u.tbl.rows.getOrDefault(u.rid)
-        if cur.len > 0:
+        let (has, cur) = u.tbl.rs.get(u.rid)
+        if has:
           for ix in u.tbl.indexes: ix.indexDelete(indexKeyFor(u.tbl, ix, cur), u.rid)
-        u.tbl.rows[u.rid] = u.row
+        u.tbl.rs.put(u.rid, u.row)
         for ix in u.tbl.indexes: ix.indexInsert(indexKeyFor(u.tbl, ix, u.row), u.rid)
     db.undo = @[]
     db.catSnapshot = nil
+    if db.file != nil:
+      # Nothing was written to the tree, so rollback of the disk state is just
+      # dropping the overlay. That is the whole reason writes are staged.
+      for _, t in db.cat.tables:
+        if t.rs != nil: t.rs.discardStaged()
 
 proc commitTx*(db: Db) =
   if db.txDepth == 0: fail(misuse, "no transaction is active")
   dec db.txDepth
   if db.txDepth == 0:
+    if db.file != nil:
+      # Rows first, then the schema, then one WAL commit for all of it — see
+      # dbfile.commitFile. At this point the transaction is already correct in
+      # memory; this is the step that makes it survive a power cut.
+      db.file.commitFile(db.cat)
     db.undo = @[]
     db.catSnapshot = nil
     db.txDdl = false
@@ -1427,7 +1492,14 @@ proc savepoint(db: Db; name: string) =
 # ===========================================================================
 
 proc pragmaArgText(c: Ctx; st: Stmt): string =
-  if st.pragmaValue == nil: "" else: c.eval(st.pragmaValue).toText
+  ## A bare word in a PRAGMA argument is a *name*, not a column reference:
+  ## `PRAGMA table_info(s)` means the same as `PRAGMA table_info('s')` in
+  ## SQLite. Evaluating it as an expression instead would fail with
+  ## "no such column: s" on the one spelling everybody actually types.
+  if st.pragmaValue == nil: return ""
+  if st.pragmaValue.kind == exCol and st.pragmaValue.tbl.len == 0:
+    return st.pragmaValue.name
+  c.eval(st.pragmaValue).toText
 
 proc execPragma(c: Ctx; st: Stmt): ResultSet =
   let db = c.db
@@ -1526,7 +1598,7 @@ proc explain(c: Ctx; st: Stmt): ResultSet =
             lines.add "SEARCH " & t.name & " USING INDEX " & ixName &
                       " (" & ixCol & "=?)"
           else:
-            lines.add "SCAN " & t.name & " (~" & $t.rows.len & " rows)"
+            lines.add "SCAN " & t.name & " (~" & $t.rs.len & " rows)"
         else: lines.add "SCAN " & s.fromFirst.name
         for j in s.joins:
           lines.add "JOIN " & j.table.name & " (nested loop)"
@@ -1550,15 +1622,7 @@ proc explain(c: Ctx; st: Stmt): ResultSet =
 # Dispatch
 # ===========================================================================
 
-proc execPrepared*(db: Db; p: Prepared; params: seq[Value]): ResultSet =
-  let c = newCtx(db, params)
-  db.changes = 0
-  db.rand = db.rand xor (uint64(db.totalChanges) + 0x9E3779B97F4A7C15'u64)
-  if params.len > p.nParams:
-    fail(badParam, "too many parameters: got " & $params.len &
-         ", statement uses " & $p.nParams)
-  let st = p.stmt
-  inc p.execCount
+proc runStmt(db: Db; c: Ctx; st: Stmt): ResultSet =
   case st.kind
   of stSelect: return c.execSelect(st.select)
   of stInsert: return c.insertRows(st)
@@ -1600,6 +1664,36 @@ proc execPrepared*(db: Db; p: Prepared; params: seq[Value]): ResultSet =
   of stPragma: return c.execPragma(st)
   of stExplain: return c.explain(st)
   of stAnalyze, stVacuum: discard
+
+func mutates(st: Stmt): bool =
+  ## Statements that can change durable state. Everything else may run without
+  ## opening a transaction — a read must not pay for a WAL commit.
+  st.kind in {stInsert, stUpdate, stDelete, stCreateTable, stDropTable,
+              stCreateIndex, stDropIndex, stAlterTable, stCreateView, stDropView}
+
+proc execPrepared*(db: Db; p: Prepared; params: seq[Value]): ResultSet =
+  let c = newCtx(db, params)
+  db.changes = 0
+  db.rand = db.rand xor (uint64(db.totalChanges) + 0x9E3779B97F4A7C15'u64)
+  if params.len > p.nParams:
+    fail(badParam, "too many parameters: got " & $params.len &
+         ", statement uses " & $p.nParams)
+  let st = p.stmt
+  inc p.execCount
+
+  # Implicit transaction, on a file-backed database only. Without it a bare
+  # INSERT outside BEGIN would live in memory and vanish on close — the single
+  # most likely way for a storage engine to lose data while looking healthy.
+  # In-memory databases keep the old behaviour exactly, because there is nothing
+  # to make durable and a transaction per statement would only cost time.
+  let implicit = db.txDepth == 0 and db.file != nil and mutates(st)
+  if implicit: db.beginTx()
+  try:
+    result = runStmt(db, c, st)
+    if implicit: db.commitTx()
+  except CatchableError:
+    if implicit and db.txDepth > 0: db.rollbackTx()
+    raise
 
 proc prepare*(db: Db; sql: string): Prepared =
   ## Parse + cache. The cache key is the SQL text itself; statements are

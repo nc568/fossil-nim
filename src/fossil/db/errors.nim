@@ -53,12 +53,39 @@ proc dbErr*(code: DbCode; msg: string; context = ""): ref DbError =
 template fail*(code: DbCode; msg: string) =
   raise dbErr(code, msg)
 
+proc interp*(fmt: string; args: openArray[string]): string =
+  ## `$1` .. `$9` substitution — the whole format language, on purpose.
+  ##
+  ## Why not `strutils.`%``: its generated C contains a GNU case range
+  ## (`case 49 ... 57:`), and cproc rejects that, so one `failf` call anywhere
+  ## in the reachable graph broke the whole QBE gate. Fifteen lines here remove
+  ## a build-target dependency from a module that every single error path uses.
+  ##
+  ## `$$` is a literal dollar. A placeholder with no argument, or `$0`, is
+  ## copied through unchanged: an error message that fails to format must still
+  ## be an error message, never a crash inside the error path.
+  result = newStringOfCap(fmt.len + 16)
+  var i = 0
+  while i < fmt.len:
+    let ch = fmt[i]
+    if ch == '$' and i + 1 < fmt.len:
+      let n = fmt[i + 1]
+      if n == '$':
+        result.add '$'
+        inc i, 2
+        continue
+      if n in {'1' .. '9'}:
+        let idx = ord(n) - ord('1')
+        if idx < args.len: result.add args[idx]
+        inc i, 2
+        continue
+    result.add ch
+    inc i
+
 proc failf*(code: DbCode; fmt: string; args: varargs[string, `$`]) =
   ## Formatted failure. `$` is applied to every argument by the compiler, so
   ## `failf(corrupt, "bad page $1", pid)` works for any type and for 0..n args.
-  ## It is a proc, not a template, precisely because a template used to resolve
-  ## `%` at the call site and broke for everything except a single argument.
-  raise dbErr(code, fmt % @args)
+  raise dbErr(code, interp(fmt, args))
 
 proc codeName*(c: DbCode): string =
   ## Stable textual code, safe for logs and wire protocols.
