@@ -1,7 +1,7 @@
 # Push state
 
 Repository: `nc568/fossil-nim`
-Branch under development: **`feat/foccil-db-v0.1`** — currently **`12f7c08`**
+Branch under development: **`feat/foccil-db-v0.1`** — currently **`8bc38a1`**
 `main` stays at `dd7630e` and is not merged until the implementation is complete.
 
 PR / diff for review:
@@ -18,10 +18,11 @@ PR / diff for review:
 | `0ecca54` | B+tree — page format, overflow values, structural verification, docs RU/EN |
 | `fa7d987` | differential stress harness for 1e6 keys |
 | `12f7c08` | write-through store + 1000-iteration crash fuzzer |
+| `8bc38a1` | crypto core — ChaCha20 + HMAC-SHA256, RFC vectors, encrypt-then-MAC |
 
 ## Gate
 
-**26 core + 20 security + 17 storage + 18 WAL + 24 btree + 3 crash**, 0 failures.
+**26 core + 20 security + 17 storage + 18 WAL + 24 btree + 3 crash + 23 crypto**, 0 failures.
 Crash fuzz: 1000 iterations, 1000 torn crashes, 0 failures.
 Backend parity digest unchanged: `0376a7c4c0dfd8cf602e8fcff9dddb40`.
 
@@ -40,7 +41,7 @@ The throughput is the next task (K9L-67): `readPage` copies 4 KiB per level and
 
 ```sh
 export PATH=$HOME/.cache/tc/nim-2.2.12/bin:$PATH
-for t in t_core t_security t_storage t_wal t_btree t_crash; do
+for t in t_core t_security t_storage t_wal t_btree t_crash t_crypto; do
   nim c -r --skipParentCfg:on --mm:arc --hints:off --warnings:off \
       --path:src --outdir:build/db tests/db/$t.nim
 done
@@ -61,3 +62,10 @@ Both were invisible to review and obvious to a test that reads its own writes.
   one-shot `x-access-token` URL that is never written to disk.
 - The token has contents rights only — `POST /pulls` returns 403, hence the
   compare link above instead of a pull request.
+
+## Workspace budget
+
+The session hit the 128 MB / 10 000-file limit on toolchain docs and rebuild
+output, not on source. `tools/db/clean.sh` trims both and prints the current
+footprint; run it after a long session. Push first — everything that matters is
+on the branch, so the local tree is disposable.
