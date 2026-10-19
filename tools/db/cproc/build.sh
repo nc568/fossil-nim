@@ -33,6 +33,12 @@ if [ ! -f "$TC/musl/lib/libc.a" ]; then
   make -j"$(nproc)" && make install
   cd ..
 fi
+# stamp what was actually built, so versions.sh can compare facts rather than
+# guess from directory names
+printf '%s\n' "1.3" > "$TC/qbe-1.3/.foccil-version" 2>/dev/null || true
+git -C "$TC/cproc-src" rev-parse HEAD > "$TC/cproc/.foccil-commit" 2>/dev/null || true
+printf '%s\n' "1.2.5" > "$TC/musl/.foccil-version" 2>/dev/null || true
+
 # refuse a QBE that cannot parse cproc's output
 printf 'export function w $f() {\n@start\n\t%%r =w loadw extern $probe\n\tret %%r\n}\n' > /tmp/qbe_probe.ssa
 if ! "$TC/qbe-1.3/qbe" -o /dev/null /tmp/qbe_probe.ssa 2>/dev/null; then

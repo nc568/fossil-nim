@@ -21,6 +21,7 @@ WebAssembly. Not a port of SQLite — a rewrite with the legacy cut out.
 | [Encryption](../en/encryption.md) | XChaCha20 + HMAC-SHA256, random nonces, what is not wired yet |
 | [Audit lessons](../en/audit-lessons.md) | the seven bug shapes from the fossil-nim audit, mapped to the engine |
 | [Status sheet](../en/status.md) | one row per stage: what is real, what is only self-tested, cproc state |
+| [Page integrity](../en/page-integrity.md) | the plain-file checksum: layout, CRC parameters, mismatch behaviour, measured cost |
 | [Differential tests](../en/difftest.md) | the same SQL through this engine and real SQLite; what differs and why |
 
 ## Quick facts

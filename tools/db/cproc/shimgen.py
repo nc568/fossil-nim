@@ -32,7 +32,10 @@ still produces what we expect.
 import argparse
 import pathlib
 import re
+import subprocess
 import sys
+
+HERE = pathlib.Path(__file__).resolve().parent
 
 PARSEUTILS_RANGE = re.compile(r"of '(.)'\.\.'(.)':")
 HASHES_EMIT = "elif defined(gcc) or defined(llvm_gcc) or defined(clang):"
@@ -55,6 +58,35 @@ double pow(double, double);
 double fmod(double, double);
 #endif
 """
+
+
+def pinned(key: str) -> str:
+    """Read a pin from versions.env (the gate's single source of truth)."""
+    env = HERE / "versions.env"
+    for line in env.read_text().splitlines():
+        line = line.strip()
+        if line.startswith(key + "="):
+            return line.split("=", 1)[1].strip()
+    sys.exit(f"shimgen: {key} missing from {env}")
+
+
+def check_nim_version() -> None:
+    """The shim rewrites stdlib files by shape, so it is only valid for the Nim
+    it was written against. A silent mismatch would mean silently not patching
+    (the regex finds nothing), and then the gate fails with a confusing error
+    three steps later — so fail here, with the reason."""
+    exe = subprocess.run(["sh", "-c", "command -v nim"], capture_output=True, text=True).stdout.strip()
+    if not exe:
+        sys.exit("shimgen: nim not on PATH")
+    out = subprocess.run([exe, "--version"], capture_output=True, text=True).stdout
+    m = re.search(r"Version ([0-9.]+)", out)
+    actual = m.group(1) if m else "unknown"
+    expect = pinned("NIM_VERSION")
+    if actual != expect:
+        sys.exit(f"shimgen: Nim {actual} is installed, but the gate pins {expect} "
+                 f"(tools/db/cproc/versions.env). The stdlib shim is derived by "
+                 f"shape and is only validated against the pinned version — run "
+                 f"tools/db/bootstrap.sh, or update the pin deliberately.")
 
 
 def nim_lib() -> pathlib.Path:
@@ -91,12 +123,16 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("outdir", type=pathlib.Path)
     ap.add_argument("--lib", type=pathlib.Path, default=None)
+    ap.add_argument("--skip-version-check", action="store_true",
+                    help="for developing the shim itself; never in the gate")
     ap.add_argument("--check", action="store_true",
                     help="only verify that the derivation still applies")
     ap.add_argument("--install", action="store_true",
                     help="patch the installed stdlib in place (needed: stdlib "
                          "modules imported as `std/x` bypass patchFile)")
     args = ap.parse_args()
+    if not args.skip_version_check:
+        check_nim_version()
     lib = args.lib or nim_lib()
 
     # Always derive from the pristine copy: after `--install` the stdlib file

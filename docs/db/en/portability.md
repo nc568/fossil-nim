@@ -160,3 +160,78 @@ is the only part attributable to the shim, and it is a `.rodata` → `.data` mov
 **Bottom line:** "must compile with cproc/QBE" is now a measurement with a working binary
 at the end of it, and the three things that used to block it are documented, shimmed
 outside the engine, and self-checking.
+
+### 4.6 K9L-36, checked on clean C without Nim: real limitation, no report
+
+The claim was "any `#include <math.h>` breaks cproc". Reproduced with no Nim
+anywhere in sight, but the first explanation was wrong: it is not `math.h` and
+not the `long double` *type*.
+
+```c
+/* ok */    long double g;                              /* parses, compiles     */
+/* ok */    long double sqrtl(long double);              /* prototype, fine      */
+/* ok */    static long double f(long double x);         /* declaration, fine    */
+/* FAILS */ static inline long double f(long double x) { return x; }
+            int g(void) { return 0; }
+```
+
+```
+$ cproc -std=c11 -c -o min.o min.c
+cproc-qbe: long double is not yet supported
+```
+
+So the trigger is a **definition** of a `static inline` function whose
+parameters or bodies touch `long double` — even when it is never called. And
+musl's `math.h` contains exactly that shape, six times, via `__ISREL_DEF`:
+
+```c
+static inline int __islessl(long double __x, long double __y) { ... }
+```
+
+Two facts follow, and they are different from the report we almost filed:
+
+* It **is** a real cproc limitation, not our build. GCC compiles the same file;
+  cproc rejects it; nothing here is Nim-specific.
+* It is **already documented upstream**: cproc's README lists `long double`
+  under what it does not implement (its issue #3, "requires qbe support"). A
+  new bug report would be closed as a duplicate of a known limitation.
+
+What is *not* documented, and what is worth one upstream sentence, is the
+consequence: because unused `static inline` definitions are still code-generated,
+a standard header that merely *declares* `long double` helpers poisons the whole
+translation unit. Either skipping codegen for unused static inline bodies, or
+printing `file:line` in that diagnostic, would turn a confusing failure into an
+honest one. Our side is already handled: the gate compiles against a minimal
+`math.h` shim with the double subset, so `fabs` works and anything new fails
+loudly.
+
+**Verdict:** confirmed on clean C, so the "was it our build?" doubt is closed —
+but it is a known limitation, so there is no report to send, and this is
+recorded here rather than filed.
+
+### 4.7 The toolchain is pinned, and the standard library is patched
+
+`tools/db/cproc/versions.env` is the single source of truth, and
+`versions.sh` compares the installed toolchain against it:
+
+```
+$ sh tools/db/cproc/versions.sh
+nim=2.2.12 qbe=1.3 cproc=d1c53dd musl=1.2.5
+```
+
+A mismatch is a hard failure, not a warning — that is what would have caught
+K9L-35 on day one. `build.sh` stamps what it actually built (`qbe/.foccil-version`,
+`cproc/.foccil-commit`, `musl/.foccil-version`), because QBE and cproc print no
+version, and `shimgen.py` refuses to run when the installed Nim is not the pinned
+one: the shim rewrites stdlib files *by shape*, so a silent version skew would
+mean silently patching nothing.
+
+**Read this before running the gate on a fresh machine:** the cproc build
+requires a **patched Nim standard library**, and `check.sh` applies the patch
+itself (idempotent, derived from `*.foccil-orig` backups). Two files change —
+`pure/hashes.nim` takes its portable 128-bit fallback instead of the
+`__uint128_t` emit, and `pure/parseutils.nim` gets its GNU case ranges expanded
+— plus a NIM_CONST postlude in the generated `nimbase.h`. The engine source is
+untouched. If you find unexplained stdlib changes on the machine, that is this,
+and `*.foccil-orig` are the originals; the patch is not needed for the native,
+JS or wasm builds, which use gcc/clang.

@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const wasmPath = process.argv[2] || path.join(__dirname, '../../build/db/wasm/foccil.wasm');
+const wasmPath = process.argv[2] || path.join(__dirname, '../../../build/db/wasm/foccil.wasm');
 const mod = new WebAssembly.Module(fs.readFileSync(wasmPath));
 // Import stubs: the module does no I/O, but wasi-libc's startup references a
 // handful of symbols, so we satisfy them with no-ops instead of pulling in the

@@ -38,6 +38,9 @@ QBE=${QBE:-$TC/qbe-1.3}
 [ -d "$QBE" ] || { echo "missing qbe (expected $QBE); run tools/db/cproc/build.sh"; exit 2; }
 
 rm -rf "$OUT/nc" "$OUT/probe"; mkdir -p "$OUT/probe"
+# 0) is this the toolchain the gate was calibrated on?
+sh "$HERE/versions.sh"
+
 # 1) stdlib shims, derived from the Nim that will do the codegen, and applied
 #    to the installed toolchain (see the header comment for why)
 python3 "$HERE/shimgen.py" "$HERE/shim" --install

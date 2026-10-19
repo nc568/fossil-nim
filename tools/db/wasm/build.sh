@@ -7,9 +7,15 @@
 set -e
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
 OUT=${OUT:-$ROOT/build/db/wasm}
-NIM=${NIM:-nim}
-ZIGCC=${ZIGCC:-zigcc}
-ZIGLD=${ZIGLD:-zigld}
+TC=${TC:-$HOME/.cache/tc}
+NIM=${NIM:-$TC/nim-2.2.12/bin/nim}
+PATH="$TC/nim-2.2.12/bin:$PATH"; export PATH
+# Default to the wrappers bootstrap.sh installs, so this works without PATH
+# surgery (the previous version silently depended on the caller's PATH, and the
+# stage failed with "zigcc: not found" the moment it ran from tools/db/test.sh).
+ZIGCC=${ZIGCC:-$TC/zigcc}
+ZIGLD=${ZIGLD:-$TC/zigld}
+[ -x "$ZIGCC" ] || { echo "missing $ZIGCC; run tools/db/bootstrap.sh"; exit 2; }
 NIMLIB=${NIMLIB:-$("$NIM" dump --dump.format:json 2>/dev/null | sed -n 's/.*"libpath":[[:space:]]*"\([^"]*\)".*/\1/p')}
 [ -z "$NIMLIB" ] && NIMLIB=$(dirname "$(command -v "$NIM")")/../lib
 

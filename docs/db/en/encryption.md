@@ -120,6 +120,9 @@ predictable nonce is worse than a failed write.
 | randomness | 24 bytes per sealed page from `std/sysrand` |
 | new wasm constants | 0 |
 
+> The byte-exact decision record for the plain-mode checksum now lives in
+> [`page-integrity.md`](page-integrity.md). The summary below stays for context.
+
 ## Page integrity without a key
 
 Encryption must not be the only thing that detects bit rot. A database that is
