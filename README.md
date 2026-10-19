@@ -104,18 +104,18 @@ Drivers populate these relay objects at init time. Application code calls conven
 
 ## Drivers
 
-| Driver | Platform | Dependencies |
+| Driver | Platform | System API / External Dependencies |
 |--------|----------|-------------|
-| `html_driver` | Web Browser (Pure DOM, Server or Standalone JS) | None (Pure Nim `--mm:arc`, HTML5/CSS3/JS DOM, **no `<canvas>`, no WASM**) |
-| `canvas_driver` | Web Browser (Canvas 2D) | None (Pure Nim `--mm:arc`, HTML5 `<canvas>` 2D, **no WASM**) |
-| `winapi_driver` | Windows | None (GDI) |
-| `cocoa_driver` | macOS | None (AppKit) |
-| `x11_driver` | Linux/BSD | libX11, libXft |
-| `gtk4_driver` | Linux/BSD | GTK4, Cairo, Pango |
-| `sdl3_driver` | Cross-platform | SDL3, SDL3_ttf |
-| `sdl2_driver` | Cross-platform | SDL2, SDL2_ttf |
-| `figdraw_windy_driver` | Cross-platform | FigDraw, Windy |
-| `figdraw_siwin_driver` | Cross-platform | FigDraw, siwin |
+| `html_driver` (`-d:html`) | Web Browser (Pure DOM, Server or Standalone JS) | Pure HTML5/CSS3/JS DOM (`--mm:arc`, **no `<canvas>`, no WASM**, zero external deps) |
+| `canvas_driver` (`-d:canvas`) | Web Browser (Canvas 2D) | HTML5 `<canvas>` 2D (`--mm:arc`, **no WASM**, zero external deps) |
+| `winapi_driver` (default on Windows) | Windows | Native Win32 API / GDI (built into Windows, no external dependencies needed) |
+| `cocoa_driver` (default on macOS) | macOS | Native Cocoa / AppKit (built into macOS, no external dependencies needed) |
+| `x11_driver` (default on Linux/BSD) | Linux/BSD | libX11, libXft |
+| `gtk4_driver` (`-d:gtk4`) | Linux/BSD | GTK4, Cairo, Pango |
+| `sdl3_driver` (`-d:sdl3`) | Cross-platform | SDL3, SDL3_ttf |
+| `sdl2_driver` (`-d:sdl2`) | Cross-platform | SDL2, SDL2_ttf |
+| `figdraw_windy_driver` (`-d:figDrawWindy`) | Cross-platform | FigDraw, Windy |
+| `figdraw_siwin_driver` (`-d:figDrawSiwin`) | Cross-platform | FigDraw, siwin |
 
 See:
 - [Web Backends Architecture & Guide](doc/web_backends.md)
