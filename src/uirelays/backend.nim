@@ -13,6 +13,53 @@
 ##   -d:sdl2    Force SDL2 backend
 ##   -d:gtk4    Force GTK4 backend
 
+import std/macros
+
+when defined(js):
+  proc uirRequestAnimationFrame*(cb: proc(t: float)) {.importjs: "window.__uirScheduleFrame(#)".}
+  proc uirGetRunId*(): int {.importjs: "(window.__uirRunId || 0)".}
+
+macro uirApp*(p: untyped): untyped =
+  ## Transforms a UIRelays `while running:` main loop into a non-blocking
+  ## `requestAnimationFrame` callback when compiled with `nim js` (`--mm:arc`),
+  ## while preserving the native loop unchanged when compiled with `nim c`.
+  if not defined(js):
+    return p
+  expectKind(p, {nnkProcDef, nnkFuncDef})
+  result = copyNimTree(p)
+  let body = result.body
+  var whileIdx = -1
+  for i in 0 ..< body.len:
+    if body[i].kind == nnkWhileStmt:
+      whileIdx = i
+      break
+  if whileIdx < 0:
+    return result
+  let whileNode = body[whileIdx]
+  let cond = whileNode[0]
+  let loopBody = whileNode[1]
+  var afterStmts = newStmtList()
+  for i in (whileIdx + 1) ..< body.len:
+    afterStmts.add(body[i])
+  while body.len > whileIdx:
+    body.del(whileIdx)
+  let stepIdent = genSym(nskProc, "uirStepFrame")
+  let tIdent = genSym(nskParam, "t")
+  let runIdIdent = genSym(nskLet, "uirRunId")
+  let stepProc = quote do:
+    let `runIdIdent` = uirGetRunId()
+    proc `stepIdent`(`tIdent`: float) =
+      if uirGetRunId() != `runIdIdent`:
+        return
+      if `cond`:
+        `loopBody`
+      if `cond` and uirGetRunId() == `runIdIdent`:
+        uirRequestAnimationFrame(`stepIdent`)
+      else:
+        `afterStmts`
+    `stepIdent`(0.0)
+  body.add(stepProc)
+
 when (defined(features.uirelays.html) or defined(uirelaysHtml) or defined(html)) and
     (defined(features.uirelays.canvas) or defined(uirelaysCanvas) or defined(canvas)):
   {.error: "html and canvas backends are mutually exclusive".}

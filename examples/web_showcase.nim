@@ -16,7 +16,9 @@
 ##   nim c --mm:arc -d:html examples/web_showcase.nim
 ##   nim c --mm:arc -d:canvas examples/web_showcase.nim
 
-import std/[strutils, tables, os, unicode]
+import std/[strutils, tables]
+when not defined(js):
+  import std/os
 import uirelays
 import uirelays/layout
 import uirelays/drivers/web_common
@@ -58,24 +60,29 @@ proc drawBoxBorder(r: Rect; c: Color) =
 proc createSampleIconPng(path: string) =
   ## Creates a 32x32 colorful gradient PNG image on disk using our pure-Nim PNG encoder
   ## so `loadImage`, `imageSize`, and `drawImage` can be tested anywhere without external assets.
-  if fileExists(path):
-    return
-  var pixels = newSeq[uint32](32 * 32)
-  for y in 0 ..< 32:
-    for x in 0 ..< 32:
-      let r = uint32((x * 8) and 0xFF)
-      let g = uint32((y * 8) and 0xFF)
-      let b = uint32(((x xor y) * 8) and 0xFF)
-      pixels[y * 32 + x] = (0xFF'u32 shl 24) or (r shl 16) or (g shl 8) or b
-  let pngBytes = encodeRgbaToPngBytes(cast[ptr UncheckedArray[uint32]](addr pixels[0]), 32, 32)
-  if pngBytes.len > 0:
-    var s = newString(pngBytes.len)
-    for i in 0 ..< pngBytes.len:
-      s[i] = char(pngBytes[i])
-    try:
-      writeFile(path, s)
-    except CatchableError:
-      discard
+  when defined(js):
+    discard path
+    discard webRegisterMemoryImage("uirelays_showcase_test_icon.png", 32, 32, "image/svg+xml",
+      "data:image/svg+xml;utf8,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='32'%20height='32'%3E%3Crect%20width='32'%20height='32'%20fill='%2389b4fa'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='10'%20fill='%23f38ba8'/%3E%3C/svg%3E")
+  else:
+    if fileExists(path):
+      return
+    var pixels = newSeq[uint32](32 * 32)
+    for y in 0 ..< 32:
+      for x in 0 ..< 32:
+        let r = uint32((x * 8) and 0xFF)
+        let g = uint32((y * 8) and 0xFF)
+        let b = uint32(((x xor y) * 8) and 0xFF)
+        pixels[y * 32 + x] = (0xFF'u32 shl 24) or (r shl 16) or (g shl 8) or b
+    let pngBytes = encodeRgbaToPngBytes(cast[ptr UncheckedArray[uint32]](addr pixels[0]), 32, 32)
+    if pngBytes.len > 0:
+      var s = newString(pngBytes.len)
+      for i in 0 ..< pngBytes.len:
+        s[i] = char(pngBytes[i])
+      try:
+        writeFile(path, s)
+      except CatchableError:
+        discard
 
 proc eventString(text: array[4, char]): string =
   result = ""
@@ -85,10 +92,12 @@ proc eventString(text: array[4, char]): string =
 
 proc removeLastUtf8Rune(s: var string) =
   if s.len == 0: return
-  let (_, runeBytes) = lastRune(s, s.high)
-  s.setLen(s.len - runeBytes)
+  var n = s.len - 1
+  while n > 0 and (ord(s[n]) and 0xC0) == 0x80:
+    dec n
+  s.setLen(n)
 
-proc main() =
+proc main() {.uirApp.} =
   let win = createWindow(960, 640)
   var width = win.width
   var height = win.height
@@ -102,7 +111,7 @@ proc main() =
   setWindowTitle("UIRelays Web Showcase")
   putClipboardText("UIRelays Initial Clipboard")
 
-  let iconPath = getTempDir() / "uirelays_showcase_test_icon.png"
+  let iconPath = when defined(js): "uirelays_showcase_test_icon.png" else: getTempDir() / "uirelays_showcase_test_icon.png"
   createSampleIconPng(iconPath)
   let sampleImg = loadImage(iconPath)
   let (imgW, imgH) = imageSize(sampleImg)
@@ -534,17 +543,22 @@ proc main() =
 
       discard drawText(fontBold, gx, gy + 150, "3. Procedural 32-bit RGBA Blit (blitRGBA):", fgMain, bgMain)
       let t = getTicks() div 40
-      for py in 0 ..< 48:
-        for px in 0 ..< 48:
-          let r = uint32(((px * 5 + t) xor (py * 3)) and 0xFF)
-          let g = uint32(((py * 5 + t) + px * 2) and 0xFF)
-          let b = uint32(((px + py + t * 2) * 4) and 0xFF)
-          blitBuf[py * 48 + px] = (0xFF'u32 shl 24) or (r shl 16) or (g shl 8) or b
-      discard blitRGBA(cast[ptr UncheckedArray[uint32]](addr blitBuf[0]), 48, 48,
-        rect(gx, gy + 178, 48, 48))
-      # Also test clipped blitRGBA where dst is smaller than source w x h
-      discard blitRGBA(cast[ptr UncheckedArray[uint32]](addr blitBuf[0]), 48, 48,
-        rect(gx + 64, gy + 178, 28, 28))
+      when not defined(js):
+        for py in 0 ..< 48:
+          for px in 0 ..< 48:
+            let r = uint32(((px * 5 + t) xor (py * 3)) and 0xFF)
+            let g = uint32(((py * 5 + t) + px * 2) and 0xFF)
+            let b = uint32(((px + py + t * 2) * 4) and 0xFF)
+            blitBuf[py * 48 + px] = (0xFF'u32 shl 24) or (r shl 16) or (g shl 8) or b
+        discard blitRGBA(cast[ptr UncheckedArray[uint32]](addr blitBuf[0]), 48, 48,
+          rect(gx, gy + 178, 48, 48))
+        discard blitRGBA(cast[ptr UncheckedArray[uint32]](addr blitBuf[0]), 48, 48,
+          rect(gx + 64, gy + 178, 28, 28))
+      else:
+        for py in 0 ..< 6:
+          for px in 0 ..< 6:
+            let c = color(uint8(((px * 38 + t) and 0xFF)), uint8(((py * 38 + t * 2) and 0xFF)), 200)
+            fillRect(rect(gx + px * 8, gy + 178 + py * 8, 8, 8), c)
 
     of TabPaint:
       let padRect = rect(centerRect.x + 20, centerRect.y + 88, max(80, centerRect.w - 40), max(80, centerRect.h - 108))

@@ -5,7 +5,8 @@
 # Build:
 #   nim c --mm:arc -d:html examples/hello.nim
 
-import std/json
+when not defined(js):
+  import std/json
 import ../coords, ../input, ../screen
 import ./web_common
 
@@ -39,7 +40,10 @@ proc syncClipDiv() {.inline.} =
         $x1 & "px " & $y2 & "px);pointer-events:none;\">"
       htmlClipOpen = true
 
-const HtmlDriverPageTemplate = """<!DOCTYPE html>
+when defined(js):
+  const HtmlDriverPageTemplate = ""
+else:
+  const HtmlDriverPageTemplate = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -385,12 +389,14 @@ const HtmlDriverPageTemplate = """<!DOCTYPE html>
   });
 
   document.getElementById("uir-btn-resize-800").addEventListener("click", function() {
+    window.__uirFixedSize = true;
     queueEvent({ type: "resize", width: 800, height: 600, uiScale: 100 });
     flushEvents();
     viewport.focus();
   });
 
   document.getElementById("uir-btn-resize-960").addEventListener("click", function() {
+    window.__uirFixedSize = true;
     queueEvent({ type: "resize", width: 960, height: 640, uiScale: 100 });
     flushEvents();
     viewport.focus();
@@ -400,6 +406,23 @@ const HtmlDriverPageTemplate = """<!DOCTYPE html>
     queueEvent({ type: "close" });
     flushEvents();
   });
+
+  // Dynamic window resize observer so UIRelays adapts to browser window dimensions
+  const stageEl = document.getElementById("uir-stage");
+  const isMonkeyRun = window.location.search.indexOf("monkey=1") !== -1;
+  function syncStageResize() {
+    if (window.__uirFixedSize || isMonkeyRun) return;
+    if (!stageEl) return;
+    const w = Math.max(420, Math.floor(stageEl.clientWidth - 16));
+    const h = Math.max(320, Math.floor(stageEl.clientHeight - 16));
+    queueEvent({ type: "resize", width: w, height: h, uiScale: 100 });
+    flushEvents();
+  }
+  window.addEventListener("resize", syncStageResize);
+  if (typeof ResizeObserver !== "undefined" && stageEl) {
+    new ResizeObserver(syncStageResize).observe(stageEl);
+  }
+  setTimeout(syncStageResize, 20);
 
   // Connect SSE stream + fallback state poll
   let activeEventSource = null;
@@ -792,21 +815,52 @@ proc htmlRefresh() =
   if h != webCore.lastPayloadHash or webCore.frameId == 0:
     webCore.lastPayloadHash = h
     inc webCore.frameId
-    let frameObj = %*{
-      "frameId": webCore.frameId,
-      "backend": "html",
-      "title": webCore.windowTitle,
-      "cursor": cursorToCss(webCore.currentCursor),
-      "width": webCore.layout.width,
-      "height": webCore.layout.height,
-      "uiScale": webCore.layout.uiScale,
-      "clipboard": webCore.clipboardText,
-      "wantTextInput": webCore.wantTextInput,
-      "domNodeCount": htmlCurrentNodeCount,
-      "html": htmlFrameBuffer
-    }
-    webCore.lastFrameJson = $frameObj
-    broadcastSseFrame()
+    when defined(js):
+      let domCs = cstring(htmlFrameBuffer)
+      let titleCs = cstring(webCore.windowTitle)
+      let curCs = cstring(cursorToCss(webCore.currentCursor))
+      let clipCs = cstring(webCore.clipboardText)
+      let wVal = webCore.layout.width
+      let hVal = webCore.layout.height
+      let fId = webCore.frameId
+      let nCnt = htmlCurrentNodeCount
+      {.emit: """
+      var vp = document.getElementById("uir-viewport");
+      if (vp) {
+        vp.style.width = `wVal` + "px";
+        vp.style.height = `hVal` + "px";
+        vp.style.cursor = `curCs`;
+        vp.innerHTML = `domCs`;
+      }
+      var tEl = document.getElementById("uir-win-title");
+      if (tEl) tEl.textContent = `titleCs`;
+      var sEl = document.getElementById("uir-stat-size");
+      if (sEl) sEl.textContent = `wVal` + "×" + `hVal`;
+      var fEl = document.getElementById("uir-stat-frame");
+      if (fEl) fEl.textContent = "frame: " + `fId`;
+      var nEl = document.getElementById("uir-stat-nodes");
+      if (nEl) nEl.textContent = "DOM nodes: " + `nCnt`;
+      var cEl = document.getElementById("uir-stat-cursor");
+      if (cEl) cEl.textContent = "cursor: " + `curCs`;
+      var clEl = document.getElementById("uir-clipboard-input");
+      if (clEl && document.activeElement !== clEl) clEl.value = `clipCs`;
+      """.}
+    else:
+      let frameObj = %*{
+        "frameId": webCore.frameId,
+        "backend": "html",
+        "title": webCore.windowTitle,
+        "cursor": cursorToCss(webCore.currentCursor),
+        "width": webCore.layout.width,
+        "height": webCore.layout.height,
+        "uiScale": webCore.layout.uiScale,
+        "clipboard": webCore.clipboardText,
+        "wantTextInput": webCore.wantTextInput,
+        "domNodeCount": htmlCurrentNodeCount,
+        "html": htmlFrameBuffer
+      }
+      webCore.lastFrameJson = $frameObj
+      broadcastSseFrame()
 
   webPumpServer()
   resetHtmlFrameBuffer()

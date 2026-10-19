@@ -26,6 +26,8 @@ exec "nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/inputtest.nim"
 # Pure HTML/CSS/JS DOM backend and HTML5 Canvas 2D backend unit & HTTP tests:
 exec "nim c --mm:arc -d:html --outdir:/tmp/uirelays_bins -r tests/web_html_test.nim"
 exec "nim c --mm:arc -d:canvas --outdir:/tmp/uirelays_bins -r tests/web_canvas_test.nim"
+# Standalone offline HTML interactive & dynamic resize monkey test across all 9 apps:
+exec "nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/standalone_html_monkey_test.nim"
 
 # Everything else is a window, and a window is what the examples are: each
 # backend gets to compile all of them.

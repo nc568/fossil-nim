@@ -8,6 +8,6 @@
 ## and call ``initBackend()`` yourself.
 
 import uirelays / [coords, screen, input, backend]
-export coords, screen, input
+export coords, screen, input, backend
 
 initBackend()

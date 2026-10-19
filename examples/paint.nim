@@ -1,8 +1,10 @@
-## paint.nim -- Simple drawing app using uirelays.
-## Click and drag to paint. Right-click to clear. Scroll to change brush size.
+## paint.nim -- Interactive drawing app using uirelays.
+## Click and drag to paint. Click color swatches or top buttons (Brush -, Brush +, Clear).
+## Right-click also clears. Scroll to change brush size. Adapts to window resize.
 ##
 ## Compile:
-##   nim c examples/paint.nim
+##   nim c --mm:arc -d:html examples/paint.nim
+##   nim c --mm:arc -d:canvas examples/paint.nim
 
 import uirelays/[coords, screen, input, backend]
 
@@ -13,7 +15,14 @@ type
     x, y, size: int
     col: Color
 
-proc main =
+proc drawBorder(r: Rect; c: Color) =
+  if r.w <= 0 or r.h <= 0: return
+  drawLine(r.x, r.y, r.x + r.w - 1, r.y, c)
+  drawLine(r.x, r.y, r.x, r.y + r.h - 1, c)
+  drawLine(r.x + r.w - 1, r.y, r.x + r.w - 1, r.y + r.h - 1, c)
+  drawLine(r.x, r.y + r.h - 1, r.x + r.w - 1, r.y + r.h - 1, c)
+
+proc main() {.uirApp.} =
   initBackend()
 
   let layout = createWindow(800, 600)
@@ -21,11 +30,8 @@ proc main =
   var height = layout.height
   setWindowTitle("Paint - uirelays example")
 
-  var strokes = default(seq[Stroke])
-  var brushSize = 4
-  var brushColor = color(137, 180, 250)
-  var painting = false
-  var running = true
+  var fm: FontMetrics
+  let font = openFont("", 13, fm, {FontStyle.bold})
 
   let palette = [
     color(137, 180, 250),  # blue
@@ -36,40 +42,70 @@ proc main =
     color(205, 214, 244),  # white
   ]
 
+  var strokes = default(seq[Stroke])
+  var brushSize = 6
+  var brushColor = palette[0]
+  var painting = false
+  var running = true
+
+  # Seed an initial colorful geometric wave so the canvas looks lively immediately
+  for cIdx in 0 .. 3:
+    let col = palette[cIdx]
+    let yBase = 150 + cIdx * 70
+    for step in 0 .. 18:
+      let px = 110 + step * 28
+      let py = yBase + (if step mod 2 == 0: -14 else: 14)
+      strokes.add Stroke(x: px, y: py, size: 8, col: col)
+
   while running:
+    let btnMinus = rect(210, 8, 78, 24)
+    let btnPlus  = rect(296, 8, 78, 24)
+    let btnClear = rect(382, 8, 78, 24)
+
     var e = Event()
     while pollEvent(e):
       case e.kind
       of QuitEvent, WindowCloseEvent:
         running = false
       of WindowResizeEvent, WindowMetricsEvent:
-        width = e.x; height = e.y
+        width = max(360, e.x)
+        height = max(280, e.y)
       of KeyDownEvent:
         if e.key == KeyEsc: running = false
-        # Number keys 1-6 pick palette color
         if e.key >= Key1 and e.key <= Key6:
           brushColor = palette[e.key.ord - Key1.ord]
+        elif e.key == KeyC:
+          strokes.setLen(0)
       of MouseDownEvent:
         if e.button == LeftButton:
-          # Check if click is on a palette swatch
-          var pickedPalette = false
+          var handledUi = false
           for i, c in palette:
             let sx = 10 + i * 30
-            if rect(sx, 8, 22, 22).contains(point(e.x, e.y)):
+            if rect(sx, 8, 24, 24).contains(point(e.x, e.y)):
               brushColor = c
-              pickedPalette = true
+              handledUi = true
               break
-          if not pickedPalette:
+          if not handledUi:
+            if btnMinus.contains(point(e.x, e.y)):
+              brushSize = clamp(brushSize - 2, 2, 40)
+              handledUi = true
+            elif btnPlus.contains(point(e.x, e.y)):
+              brushSize = clamp(brushSize + 2, 2, 40)
+              handledUi = true
+            elif btnClear.contains(point(e.x, e.y)):
+              strokes.setLen(0)
+              handledUi = true
+          if not handledUi and e.y > 40:
             painting = true
             if strokes.len < MaxStrokes:
               strokes.add Stroke(x: e.x, y: e.y, size: brushSize, col: brushColor)
         elif e.button == RightButton:
-          strokes.setLen(0)  # clear canvas
+          strokes.setLen(0)
       of MouseUpEvent:
         if e.button == LeftButton:
           painting = false
       of MouseMoveEvent:
-        if painting and strokes.len < MaxStrokes:
+        if painting and e.y > 40 and strokes.len < MaxStrokes:
           strokes.add Stroke(x: e.x, y: e.y, size: brushSize, col: brushColor)
       of MouseWheelEvent:
         brushSize = clamp(brushSize + e.y, 1, 40)
@@ -77,26 +113,49 @@ proc main =
 
     # --- draw ---
     let bg = color(30, 30, 46)
+    let barBg = color(24, 24, 37)
+    let btnBg = color(49, 50, 68)
+    let fg = color(205, 214, 244)
     fillRect(rect(0, 0, width, height), bg)
 
     # draw all strokes
     for s in strokes:
       fillRect(rect(s.x - s.size, s.y - s.size, s.size * 2, s.size * 2), s.col)
 
-    # HUD: palette at top
-    let fg = color(205, 214, 244)
+    # Top toolbar
+    fillRect(rect(0, 0, width, 40), barBg)
+    drawLine(0, 39, width, 39, color(69, 71, 90))
+
     for i, c in palette:
       let x = 10 + i * 30
-      fillRect(rect(x, 8, 22, 22), c)
+      fillRect(rect(x, 8, 24, 24), c)
       if c == brushColor:
-        drawLine(x, 32, x + 22, 32, fg)
+        drawLine(x, 34, x + 24, 34, fg)
 
-    # brush size indicator
-    fillRect(rect(width - 50, 8, 22, 22), brushColor)
+    fillRect(btnMinus, btnBg)
+    drawBorder(btnMinus, color(88, 91, 112))
+    discard drawText(font, btnMinus.x + 8, btnMinus.y + 5, "Brush -", fg, btnBg)
+
+    fillRect(btnPlus, btnBg)
+    drawBorder(btnPlus, color(88, 91, 112))
+    discard drawText(font, btnPlus.x + 8, btnPlus.y + 5, "Brush +", fg, btnBg)
+
+    fillRect(btnClear, color(140, 60, 75))
+    drawBorder(btnClear, color(88, 91, 112))
+    discard drawText(font, btnClear.x + 14, btnClear.y + 5, "Clear", fg, color(140, 60, 75))
+
+    discard drawText(font, 474, 13, "Size: " & $brushSize & "px · Drag to paint (" & $width & "×" & $height & ")", fg, barBg)
+
+    # brush size preview in top-right
+    let previewX = width - 24
+    let previewY = 20
+    let previewR = min(brushSize, 14)
+    fillRect(rect(previewX - previewR, previewY - previewR, previewR * 2, previewR * 2), brushColor)
 
     refresh()
     sleep(16)
 
+  closeFont(font)
   shutdown()
 
 main()

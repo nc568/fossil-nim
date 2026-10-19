@@ -1,20 +1,21 @@
-## layout_demo.nim -- Demonstrates the layout manager.
-## Parses a NIF layout into named screen regions, draws them,
-## highlights the region under the mouse, and resizes dynamically.
+## layout_demo.nim -- Interactive demonstration of uirelays/layout.
+## Parses a NIF layout into named screen regions, lets you drag splitters
+## to resize panels, click toolbar buttons to split/remove cells dynamically,
+## and reflows automatically when the window resizes.
 ##
 ## Compile:
-##   nim c examples/layout_demo.nim
+##   nim c --mm:arc -d:html examples/layout_demo.nim
+##   nim c --mm:arc -d:canvas examples/layout_demo.nim
 
 import uirelays
 import uirelays/layout
 import std/tables
 
-const LayoutSpec = """
+const DefaultLayoutSpec = """
 (layout
-  (toolbar (px 30))
+  (toolbar (px 40))
   (cols
-    (sidebar (px 200))
-    (divider (px 4))
+    (sidebar (px 220))
     (editor))
   (status (lines 1)))
 """
@@ -22,51 +23,147 @@ const LayoutSpec = """
 const
   bg       = color(30, 30, 46)
   panelBg  = color(49, 50, 68)
-  hoverBg  = color(69, 71, 90)
-  divColor = color(88, 91, 112)
+  hoverBg  = color(62, 64, 86)
+  btnBg    = color(69, 71, 90)
+  btnHover = color(88, 91, 112)
+  divColor = color(108, 112, 134)
   fg       = color(205, 214, 244)
+  subtleFg = color(166, 173, 200)
   accent   = color(137, 180, 250)
+  green    = color(166, 227, 161)
 
-proc main =
+type
+  ToolBtn = object
+    id: string
+    label: string
+    r: Rect
+
+proc drawBorder(r: Rect; c: Color) =
+  if r.w <= 0 or r.h <= 0: return
+  drawLine(r.x, r.y, r.x + r.w - 1, r.y, c)
+  drawLine(r.x, r.y, r.x, r.y + r.h - 1, c)
+  drawLine(r.x + r.w - 1, r.y, r.x + r.w - 1, r.y + r.h - 1, c)
+  drawLine(r.x, r.y + r.h - 1, r.x + r.w - 1, r.y + r.h - 1, c)
+
+proc main() {.uirApp.} =
   let win = createWindow(900, 600)
   var width = win.width
   var height = win.height
 
-  var fm: FontMetrics
-  let font = openFont("", win.scaled(16), fm)
+  var fm, fmSmall: FontMetrics
+  let font = openFont("", win.scaled(15), fm, {FontStyle.bold})
+  let fontSmall = openFont("", win.scaled(13), fmSmall, {})
   setWindowTitle("Layout Demo")
 
-  let parsed = parseLayout(LayoutSpec)
+  var parsed = parseLayout(DefaultLayoutSpec)
   doAssert parsed.error.len == 0, parsed.error
 
   var running = true
   var mouseX, mouseY = 0
   var hovered = ""
+  var selectedCell = "editor"
+  var splitCounter = 1
+  var statusNote = "Drag any border to resize panes, or click toolbar buttons to split/remove cells"
+  var activeSplitter = Splitter()
+  var isDragging = false
 
   while running:
+    let metrics = LayoutMetrics(
+      screenW: width,
+      screenH: height,
+      lineHeight: fm.lineHeight,
+      padding: 4,
+      gap: 4,
+      uiScale: win.uiScale
+    )
+    var cells = parsed.resolve(metrics)
+    let tbRect = cells.getOrDefault("toolbar", rect(0, 0, width, 40))
+
+    let btns = [
+      ToolBtn(id: "split_v", label: "[+ Split Right]", r: rect(tbRect.x + 190, tbRect.y + 6, 134, 28)),
+      ToolBtn(id: "split_h", label: "[+ Split Down]",  r: rect(tbRect.x + 332, tbRect.y + 6, 130, 28)),
+      ToolBtn(id: "remove",  label: "[- Remove Pane]", r: rect(tbRect.x + 470, tbRect.y + 6, 136, 28)),
+      ToolBtn(id: "reset",   label: "[Reset Layout]",  r: rect(tbRect.x + 614, tbRect.y + 6, 126, 28))
+    ]
+
     var e = default Event
     while pollEvent(e):
       case e.kind
       of QuitEvent, WindowCloseEvent:
         running = false
       of WindowResizeEvent, WindowMetricsEvent:
-        width = e.x
-        height = e.y
+        width = max(420, e.x)
+        height = max(300, e.y)
+        statusNote = "Window resized to " & $width & "×" & $height
       of MouseMoveEvent:
         mouseX = e.x
         mouseY = e.y
+        if isDragging and activeSplitter.found:
+          if parsed.dragTo(metrics, activeSplitter, e.x, e.y):
+            cells = parsed.resolve(metrics)
+            statusNote = "Dragging splitter to (" & $e.x & ", " & $e.y & ")"
+        else:
+          let sp = parsed.splitterAt(metrics, e.x, e.y, slack = 4)
+          if sp.found:
+            setCursor(if sp.vertical: curSizeNS else: curSizeWE)
+          else:
+            setCursor(curDefault)
+      of MouseDownEvent:
+        mouseX = e.x
+        mouseY = e.y
+        if e.button == LeftButton:
+          var clickedBtn = ""
+          for b in btns:
+            if b.r.contains(point(e.x, e.y)):
+              clickedBtn = b.id
+              break
+          if clickedBtn.len > 0:
+            case clickedBtn
+            of "split_v":
+              let newName = "pane_" & $splitCounter
+              if parsed.splitCell(selectedCell, newName, asColumn = true):
+                inc splitCounter
+                selectedCell = newName
+                statusNote = "Split right -> created '" & newName & "'"
+            of "split_h":
+              let newName = "pane_" & $splitCounter
+              if parsed.splitCell(selectedCell, newName, asColumn = false):
+                inc splitCounter
+                selectedCell = newName
+                statusNote = "Split down -> created '" & newName & "'"
+            of "remove":
+              if selectedCell notin ["toolbar", "status", "sidebar"]:
+                let old = selectedCell
+                if parsed.removeCell(old):
+                  let remaining = parsed.cellNames()
+                  selectedCell = if "editor" in remaining: "editor" elif remaining.len > 0: remaining[^1] else: "sidebar"
+                  statusNote = "Removed pane '" & old & "'"
+              else:
+                statusNote = "Select an editor/split pane to remove"
+            of "reset":
+              parsed = parseLayout(DefaultLayoutSpec)
+              selectedCell = "editor"
+              splitCounter = 1
+              statusNote = "Reset layout to default"
+            cells = parsed.resolve(metrics)
+          else:
+            let sp = parsed.splitterAt(metrics, e.x, e.y, slack = 4)
+            if sp.found:
+              activeSplitter = sp
+              isDragging = true
+            else:
+              let hCell = cells.hitTest(e.x, e.y)
+              if hCell.name.len > 0 and hCell.name notin ["toolbar", "status"]:
+                selectedCell = hCell.name
+                statusNote = "Selected cell '" & selectedCell & "' (" & $cells[selectedCell].w & "×" & $cells[selectedCell].h & ")"
+      of MouseUpEvent:
+        isDragging = false
+        activeSplitter = Splitter()
       of KeyDownEvent:
         if e.key == KeyEsc or (e.key == KeyQ and CtrlPressed in e.mods):
           running = false
       else: discard
 
-    # `uiScale` is what makes the `(px 30)` and `(px 200)` above hold as many
-    # pixels as they are worth on this display, exactly as `scaled` did for
-    # the font size.
-    let cells = parsed.resolve(width, height, fm.lineHeight,
-                               uiScale = win.uiScale)
-
-    # hit test
     let hit = cells.hitTest(mouseX, mouseY)
     hovered = hit.name
 
@@ -76,26 +173,38 @@ proc main =
     # draw each cell
     for name, r in cells:
       let isHover = name == hovered
-      let cellBg = if name == "divider": divColor
-                   elif isHover: hoverBg
-                   else: panelBg
+      let isSel = name == selectedCell
+      let cellBg = if isHover and name notin ["toolbar", "status"]: hoverBg else: panelBg
       fillRect(r, cellBg)
+      if isSel and name notin ["toolbar", "status"]:
+        drawBorder(r, accent)
+      else:
+        drawBorder(r, divColor)
 
-      # label
-      let label = if isHover:
-                    name & " (" & $r.w & "x" & $r.h & ")"
-                  else:
-                    name
-      let labelFg = if isHover: accent else: fg
-      discard drawText(font, r.x + 8, r.y + 6, label, labelFg, cellBg)
-
-    # outline separators between cells
-    for name, r in cells:
-      drawLine(r.x, r.y, r.x + r.w, r.y, divColor)
+      if name == "toolbar":
+        discard drawText(font, r.x + 10, r.y + 10, "toolbar (" & $r.w & "x" & $r.h & ")", accent, cellBg)
+        for b in btns:
+          let bHov = b.r.contains(point(mouseX, mouseY))
+          let bCol = if bHov: btnHover else: btnBg
+          fillRect(b.r, bCol)
+          drawBorder(b.r, divColor)
+          discard drawText(fontSmall, b.r.x + 8, b.r.y + 6, b.label, fg, bCol)
+      elif name == "status":
+        discard drawText(fontSmall, r.x + 10, r.y + 3,
+          "status (" & $r.w & "x" & $r.h & ") · " & statusNote, subtleFg, cellBg)
+      else:
+        let label = name & " (" & $r.w & "x" & $r.h & ")"
+        let labelFg = if isSel: green elif isHover: accent else: fg
+        discard drawText(font, r.x + 12, r.y + 12, label, labelFg, cellBg)
+        if r.h > 60 and r.w > 140:
+          discard drawText(fontSmall, r.x + 12, r.y + 38,
+            if isSel: "[Active pane — click Split/Remove or drag border]" else: "Click to select pane",
+            subtleFg, cellBg)
 
     refresh()
     sleep(16)
 
+  closeFont(fontSmall)
   closeFont(font)
   shutdown()
 

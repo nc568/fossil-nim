@@ -76,7 +76,7 @@ proc isOpposite(a, b: Direction): bool =
   (a == dirUp and b == dirDown) or
   (a == dirDown and b == dirUp)
 
-proc main() =
+proc main() {.uirApp.} =
   let win = createWindow(780, 520)
   var width = win.width
   var height = win.height

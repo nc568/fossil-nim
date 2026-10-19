@@ -108,7 +108,7 @@ proc slideLine(line: array[4, int]): tuple[res: array[4, int]; gained: int; move
       break
   (merged, gained, changed)
 
-proc main() =
+proc main() {.uirApp.} =
   let win = createWindow(720, 520)
   var width = win.width
   var height = win.height

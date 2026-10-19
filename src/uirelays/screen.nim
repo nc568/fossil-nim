@@ -196,8 +196,11 @@ proc createWindow*(requestedW, requestedH: int; fullScreen = false;
   result = ScreenLayout(width: requestedW, height: requestedH,
                         scaleX: 1, scaleY: 1, uiScale: 100,
                         fullScreen: fullScreen)
-  windowRelays.createWindow(result,
-    if icon.len > 0: cast[pointer](unsafeAddr icon[0]) else: nil, icon.len)
+  when defined(js):
+    windowRelays.createWindow(result, nil, icon.len)
+  else:
+    windowRelays.createWindow(result,
+      if icon.len > 0: cast[pointer](unsafeAddr icon[0]) else: nil, icon.len)
 
 proc getWindowLayout*(): ScreenLayout =
   ## The current size and scale. Worth re-reading after the window moved to

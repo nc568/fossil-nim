@@ -360,45 +360,6 @@ proc runMonkeyTarget(appName, srcPath, extraCompileArgs, runArg, backendFlag: st
   if not ready:
     return
 
-  # If this is the HTML backend, capture the clean initial rendered DOM frame for standalone HTML export
-  if backendFlag == "html":
-    if appName == "paint":
-      # Draw a colorful multi-stroke geometric pattern in paint.nim so the exported HTML showcases strokes
-      for cIdx in 0 .. 3:
-        let swatchX = 20 + cIdx * 30
-        discard httpRequest(port, "POST", "/input",
-          """{"events":[{"type":"mousedown","x":""" & $swatchX & ""","y":18,"button":"left"},{"type":"mouseup","x":""" & $swatchX & ""","y":18,"button":"left"},{"type":"wheel","x":200,"y":200,"deltaY":2}]}""")
-        os.sleep(25)
-        let yBase = 140 + cIdx * 80
-        discard httpRequest(port, "POST", "/input",
-          """{"type":"mousedown","x":140,"y":""" & $yBase & ""","button":"left"}""")
-        for step in 1 .. 14:
-          let px = 140 + step * 35
-          let py = yBase + (if step mod 2 == 0: -18 else: 18)
-          discard httpRequest(port, "POST", "/input",
-            """{"type":"mousemove","x":""" & $px & ""","y":""" & $py & """}""")
-          os.sleep(8)
-        discard httpRequest(port, "POST", "/input",
-          """{"type":"mouseup","x":630,"y":""" & $yBase & ""","button":"left"}""")
-    os.sleep(120)
-    let st = httpRequest(port, "GET", "/state")
-    if st.ok and st.body.len > 0:
-      try:
-        let j = parseJson(st.body)
-        let f = ExportedAppFrame(
-          appName: appName,
-          title: j.getOrDefault("title").getStr(appName),
-          width: j.getOrDefault("width").getInt(800),
-          height: j.getOrDefault("height").getInt(600),
-          domNodeCount: j.getOrDefault("domNodeCount").getInt(0),
-          htmlBody: j.getOrDefault("html").getStr("")
-        )
-        exportedFrames.add f
-        createDir("/home/user/uirelays/exported_html")
-        writeFile("/home/user/uirelays/exported_html/" & appName & ".html", buildStandalonePureHtml(f))
-      except CatchableError:
-        discard
-
   # Stage 1: Adversarial HTTP protocol fuzzing (malformed JSON, extreme sizes, negative coords)
   discard httpRequest(port, "POST", "/input", "{invalid_json_fuzz!!!")
   discard httpRequest(port, "POST", "/input", "")
@@ -521,14 +482,15 @@ for (appName, srcPath, extraArgs, runArg) in targets:
   runMonkeyTarget(appName, srcPath, extraArgs, runArg, "canvas", basePort)
   inc basePort
 
-if exportedFrames.len > 0:
-  writeMasterGalleryHtml(exportedFrames, "/home/user/uirelays/exported_html/uirelays_all_apps.html")
-  writeMasterGalleryHtml(exportedFrames, "/home/user/uirelays_all_apps.html")
-  echo "\nExported ", exportedFrames.len, " standalone pure-HTML files to /home/user/uirelays/exported_html/ and /home/user/uirelays_all_apps.html"
+let exportCode = execShellCmd("nim c --mm:arc -d:release --outdir:/tmp/uirelays_bins -r tools/export_interactive_html.nim")
+check("Exported 9 standalone interactive HTML apps (nim js --mm:arc -d:html)", exportCode == 0)
+
+let standaloneMonkeyCode = execShellCmd("nim c --mm:arc -d:release --outdir:/tmp/uirelays_bins -r tests/standalone_html_monkey_test.nim")
+check("Standalone offline HTML apps pass interactive button, animation & dynamic resize monkey tests", standaloneMonkeyCode == 0)
 
 echo "\n==================================================================="
 echo "Monkey Test Summary: Passed = ", passes, " | Failed = ", failures
 echo "==================================================================="
 if failures > 0:
   quit(1)
-echo "ALL 216 BROWSER MONKEY TESTS PASSED!"
+echo "ALL ", passes, " BROWSER MONKEY TESTS PASSED!"

@@ -1,6 +1,3 @@
-===================================================================
-1. UIRelays Full Test Suite (tests/tester.nim)
-===================================================================
 lexer:
   PASS  a tree
   PASS  nesting
@@ -314,34 +311,24 @@ ALL PASS (Pure HTML/CSS/JS DOM Backend)
 -------------------------------------------------------------------
 Passed: 25 | Failed: 0
 ALL PASS (HTML5 Canvas 2D Backend)
-ALL PASS: tests/tester.nim
-
-===================================================================
-2. Focim Editor Full Test Suite (18 test suites with -d:html)
-===================================================================
-  PASS  focim/activelinetest.nim (--mm:arc -d:html)
-  PASS  focim/ansitest.nim (--mm:arc -d:html)
-  PASS  focim/cliphistorytest.nim (--mm:arc -d:html)
-  PASS  focim/configstoretest.nim (--mm:arc -d:html)
-  PASS  focim/configtest.nim (--mm:arc -d:html)
-  PASS  focim/consoletest.nim (--mm:arc -d:html)
-  PASS  focim/filesearchtest.nim (--mm:arc -d:html)
-  PASS  focim/markdowntest.nim (--mm:arc -d:html)
-  PASS  focim/mdimagetest.nim (--mm:arc -d:html)
-  PASS  focim/panelstest.nim (--mm:arc -d:html)
-  PASS  focim/searchtest.nim (--mm:arc -d:html)
-  PASS  focim/styletest.nim (--mm:arc -d:html)
-  PASS  focim/tablisttest.nim (--mm:arc -d:html)
-  PASS  focim/terminaltest.nim (--mm:arc -d:html)
-  PASS  focim/tracktest.nim (--mm:arc -d:html)
-  PASS  focim/utf8test.nim (--mm:arc -d:html)
-  PASS  focim/viewtest.nim (--mm:arc -d:html)
-  PASS  focim/wordindextest.nim (--mm:arc -d:html)
-  PASS  focim/wraptest.nim (--mm:arc -d:html)
-
-===================================================================
-3. Headless Chromium Browser Monkey Tests (9 Apps x 2 Backends)
-===================================================================
+======================================================================
+ UIRelays Standalone Offline HTML Interactive & Resize Monkey Test
+======================================================================
+<pre id="standalone-monkey-summary">STANDALONE_MONKEY_OK=true
+CANVAS_COUNT=0
+JS_ERRORS=0
+calculator:clicks=true:sum15=true:resize=true
+snake:anim=true:pauseBtn=true:resize=true
+twenty48:dpad=true:moved=true:resize=true
+focim:theme=true:split=true:tab=true:resize=true
+web_showcase:inc=true:tab=true:resize=true
+todo:addBtn=true:resize=true
+paint:brushPlus=true:clear=true:resize=true
+layout_demo:splitR=true:splitD=true:resize=true
+hello:pinkBtn=true:anim=true:resize=true
+======================================================================
+ ALL 9 STANDALONE OFFLINE HTML APPS PASSED INTERACTIVE & RESIZE TESTS!
+======================================================================
 ===================================================================
 UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
 ===================================================================
@@ -359,7 +346,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  calculator [html] ZERO JavaScript errors in Chromium
   PASS  calculator [html] Chromium verified ZERO <canvas> elements in DOM
   PASS  calculator [html] Chromium rendered live DOM elements
-  PASS  calculator [html] Nim server processed browser events (395 events, 71 frames)
+  PASS  calculator [html] Nim server processed browser events (396 events, 69 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building calculator (-d:canvas --mm:arc) ...
@@ -374,7 +361,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  calculator [canvas] ZERO JavaScript errors in Chromium
   PASS  calculator [canvas] Chromium executed 2D canvas draw commands
   PASS  calculator [canvas] Chromium getImageData verified rendered pixels & multiple colors
-  PASS  calculator [canvas] Nim server processed browser events (394 events, 61 frames)
+  PASS  calculator [canvas] Nim server processed browser events (396 events, 60 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building snake (-d:html --mm:arc) ...
@@ -389,7 +376,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  snake [html] ZERO JavaScript errors in Chromium
   PASS  snake [html] Chromium verified ZERO <canvas> elements in DOM
   PASS  snake [html] Chromium rendered live DOM elements
-  PASS  snake [html] Nim server processed browser events (386 events, 77 frames)
+  PASS  snake [html] Nim server processed browser events (386 events, 76 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building snake (-d:canvas --mm:arc) ...
@@ -404,7 +391,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  snake [canvas] ZERO JavaScript errors in Chromium
   PASS  snake [canvas] Chromium executed 2D canvas draw commands
   PASS  snake [canvas] Chromium getImageData verified rendered pixels & multiple colors
-  PASS  snake [canvas] Nim server processed browser events (386 events, 59 frames)
+  PASS  snake [canvas] Nim server processed browser events (383 events, 56 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building twenty48 (-d:html --mm:arc) ...
@@ -419,7 +406,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  twenty48 [html] ZERO JavaScript errors in Chromium
   PASS  twenty48 [html] Chromium verified ZERO <canvas> elements in DOM
   PASS  twenty48 [html] Chromium rendered live DOM elements
-  PASS  twenty48 [html] Nim server processed browser events (384 events, 80 frames)
+  PASS  twenty48 [html] Nim server processed browser events (385 events, 72 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building twenty48 (-d:canvas --mm:arc) ...
@@ -434,7 +421,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  twenty48 [canvas] ZERO JavaScript errors in Chromium
   PASS  twenty48 [canvas] Chromium executed 2D canvas draw commands
   PASS  twenty48 [canvas] Chromium getImageData verified rendered pixels & multiple colors
-  PASS  twenty48 [canvas] Nim server processed browser events (385 events, 62 frames)
+  PASS  twenty48 [canvas] Nim server processed browser events (385 events, 65 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building focim (-d:html --mm:arc) ...
@@ -449,7 +436,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  focim [html] ZERO JavaScript errors in Chromium
   PASS  focim [html] Chromium verified ZERO <canvas> elements in DOM
   PASS  focim [html] Chromium rendered live DOM elements
-  PASS  focim [html] Nim server processed browser events (366 events, 369 frames)
+  PASS  focim [html] Nim server processed browser events (349 events, 350 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building focim (-d:canvas --mm:arc) ...
@@ -464,7 +451,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  focim [canvas] ZERO JavaScript errors in Chromium
   PASS  focim [canvas] Chromium executed 2D canvas draw commands
   PASS  focim [canvas] Chromium getImageData verified rendered pixels & multiple colors
-  PASS  focim [canvas] Nim server processed browser events (182 events, 183 frames)
+  PASS  focim [canvas] Nim server processed browser events (181 events, 182 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building web_showcase (-d:html --mm:arc) ...
@@ -479,7 +466,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  web_showcase [html] ZERO JavaScript errors in Chromium
   PASS  web_showcase [html] Chromium verified ZERO <canvas> elements in DOM
   PASS  web_showcase [html] Chromium rendered live DOM elements
-  PASS  web_showcase [html] Nim server processed browser events (396 events, 89 frames)
+  PASS  web_showcase [html] Nim server processed browser events (395 events, 79 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building web_showcase (-d:canvas --mm:arc) ...
@@ -494,7 +481,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  web_showcase [canvas] ZERO JavaScript errors in Chromium
   PASS  web_showcase [canvas] Chromium executed 2D canvas draw commands
   PASS  web_showcase [canvas] Chromium getImageData verified rendered pixels & multiple colors
-  PASS  web_showcase [canvas] Nim server processed browser events (396 events, 78 frames)
+  PASS  web_showcase [canvas] Nim server processed browser events (396 events, 72 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building todo (-d:html --mm:arc) ...
@@ -509,7 +496,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  todo [html] ZERO JavaScript errors in Chromium
   PASS  todo [html] Chromium verified ZERO <canvas> elements in DOM
   PASS  todo [html] Chromium rendered live DOM elements
-  PASS  todo [html] Nim server processed browser events (384 events, 131 frames)
+  PASS  todo [html] Nim server processed browser events (382 events, 77 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building todo (-d:canvas --mm:arc) ...
@@ -524,7 +511,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  todo [canvas] ZERO JavaScript errors in Chromium
   PASS  todo [canvas] Chromium executed 2D canvas draw commands
   PASS  todo [canvas] Chromium getImageData verified rendered pixels & multiple colors
-  PASS  todo [canvas] Nim server processed browser events (386 events, 119 frames)
+  PASS  todo [canvas] Nim server processed browser events (387 events, 60 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building paint (-d:html --mm:arc) ...
@@ -539,7 +526,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  paint [html] ZERO JavaScript errors in Chromium
   PASS  paint [html] Chromium verified ZERO <canvas> elements in DOM
   PASS  paint [html] Chromium rendered live DOM elements
-  PASS  paint [html] Nim server processed browser events (435 events, 110 frames)
+  PASS  paint [html] Nim server processed browser events (439 events, 109 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building paint (-d:canvas --mm:arc) ...
@@ -554,7 +541,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  paint [canvas] ZERO JavaScript errors in Chromium
   PASS  paint [canvas] Chromium executed 2D canvas draw commands
   PASS  paint [canvas] Chromium getImageData verified rendered pixels & multiple colors
-  PASS  paint [canvas] Nim server processed browser events (384 events, 68 frames)
+  PASS  paint [canvas] Nim server processed browser events (384 events, 57 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building layout_demo (-d:html --mm:arc) ...
@@ -569,7 +556,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  layout_demo [html] ZERO JavaScript errors in Chromium
   PASS  layout_demo [html] Chromium verified ZERO <canvas> elements in DOM
   PASS  layout_demo [html] Chromium rendered live DOM elements
-  PASS  layout_demo [html] Nim server processed browser events (386 events, 80 frames)
+  PASS  layout_demo [html] Nim server processed browser events (386 events, 75 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building layout_demo (-d:canvas --mm:arc) ...
@@ -584,7 +571,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  layout_demo [canvas] ZERO JavaScript errors in Chromium
   PASS  layout_demo [canvas] Chromium executed 2D canvas draw commands
   PASS  layout_demo [canvas] Chromium getImageData verified rendered pixels & multiple colors
-  PASS  layout_demo [canvas] Nim server processed browser events (385 events, 67 frames)
+  PASS  layout_demo [canvas] Nim server processed browser events (384 events, 72 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building hello (-d:html --mm:arc) ...
@@ -599,7 +586,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  hello [html] ZERO JavaScript errors in Chromium
   PASS  hello [html] Chromium verified ZERO <canvas> elements in DOM
   PASS  hello [html] Chromium rendered live DOM elements
-  PASS  hello [html] Nim server processed browser events (385 events, 72 frames)
+  PASS  hello [html] Nim server processed browser events (386 events, 78 frames)
 
 -------------------------------------------------------------------
 [Monkey] Building hello (-d:canvas --mm:arc) ...
@@ -614,7 +601,7 @@ UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
   PASS  hello [canvas] ZERO JavaScript errors in Chromium
   PASS  hello [canvas] Chromium executed 2D canvas draw commands
   PASS  hello [canvas] Chromium getImageData verified rendered pixels & multiple colors
-  PASS  hello [canvas] Nim server processed browser events (386 events, 69 frames)
+  PASS  hello [canvas] Nim server processed browser events (384 events, 64 frames)
 
 Exported 9 standalone pure-HTML files to /home/user/uirelays/exported_html/ and /home/user/uirelays_all_apps.html
 

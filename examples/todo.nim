@@ -6,7 +6,7 @@
 
 import uirelays
 import uirelays/layout
-import std/[strutils, tables, unicode]
+import std/[strutils, tables]
 
 const
   BaseFontSize = 15
@@ -81,11 +81,22 @@ proc eventText(text: array[4, char]): string =
       break
     result.add ch
 
+proc utf8StepAt(s: string; i: int): int {.inline.} =
+  if i < 0 or i >= s.len: return 1
+  let b = ord(s[i])
+  if b < 0x80: 1
+  elif (b and 0xE0) == 0xC0: 2
+  elif (b and 0xF0) == 0xE0: 3
+  elif (b and 0xF8) == 0xF0: 4
+  else: 1
+
 proc removeLastRune(s: var string) =
   if s.len == 0:
     return
-  let (_, runeBytes) = lastRune(s, s.high)
-  s.setLen(s.len - runeBytes)
+  var n = s.len - 1
+  while n > 0 and (ord(s[n]) and 0xC0) == 0x80:
+    dec n
+  s.setLen(n)
 
 proc truncateText(font: Font; text: string; maxWidth: int): string =
   if maxWidth <= 0:
@@ -101,7 +112,7 @@ proc truncateText(font: Font; text: string; maxWidth: int): string =
   var runeEnds: seq[int] = @[]
   var i = 0
   while i < text.len:
-    i += runeLenAt(text, i)
+    i += utf8StepAt(text, i)
     runeEnds.add i
 
   var low = 0
@@ -196,7 +207,7 @@ proc drawDeleteButton(r: Rect; hovered: bool) =
   drawLine(r.x + pad, r.y + pad, r.x + r.w - pad - 1, r.y + r.h - pad - 1, fg)
   drawLine(r.x + r.w - pad - 1, r.y + pad, r.x + pad, r.y + r.h - pad - 1, fg)
 
-proc main =
+proc main() {.uirApp.} =
   let win = createWindow(760, 560)
   var width = win.width
   var height = win.height
@@ -223,7 +234,9 @@ proc main =
 
   while running:
     var cells = parsedLayout.resolve(width, height, fm.lineHeight)
-    let composerRect = composerInnerRect(cells["composer"])
+    let rawComp = composerInnerRect(cells["composer"])
+    let addBtnRect = rect(rawComp.x + rawComp.w - 78, rawComp.y, 78, rawComp.h)
+    let composerRect = rect(rawComp.x, rawComp.y, max(120, rawComp.w - 86), rawComp.h)
     let listInner = listInnerRect(cells["list"])
     let rowHeight = rowHeightFor(fm)
     let visibleRows = visibleRowsFor(listInner, rowHeight)
@@ -236,8 +249,8 @@ proc main =
       of QuitEvent, WindowCloseEvent:
         running = false
       of WindowResizeEvent, WindowMetricsEvent:
-        width = e.x
-        height = e.y
+        width = max(360, e.x)
+        height = max(280, e.y)
       of MouseMoveEvent:
         mouseX = e.x
         mouseY = e.y
@@ -249,7 +262,14 @@ proc main =
         mouseX = e.x
         mouseY = e.y
         let p = point(e.x, e.y)
-        if composerRect.contains(p):
+        if addBtnRect.contains(p):
+          let trimmed = strutils.strip(inputText)
+          let taskTitle = if trimmed.len > 0: trimmed else: "Follow up task #" & $(items.len + 1)
+          items.add TodoItem(text: taskTitle, done: false)
+          inputText.setLen(0)
+          selectedIndex = items.high
+          clampSelection(items, selectedIndex, scrollIndex, visibleRows)
+        elif composerRect.contains(p):
           focus = ComposerFocus
         else:
           let hover = hitList(listInner, rowHeight, scrollIndex, items, e.x, e.y)
@@ -333,7 +353,9 @@ proc main =
     let composerCell = cells["composer"]
     let listRect = cells["list"]
     let statusRect = cells["status"]
-    let composerBox = composerInnerRect(composerCell)
+    let rawCompBox = composerInnerRect(composerCell)
+    let addBtnBox = rect(rawCompBox.x + rawCompBox.w - 78, rawCompBox.y, 78, rawCompBox.h)
+    let composerBox = rect(rawCompBox.x, rawCompBox.y, max(120, rawCompBox.w - 86), rawCompBox.h)
     let listClip = listInnerRect(listRect)
     let listVisibleRows = visibleRowsFor(listClip, rowHeight)
     clampSelection(items, selectedIndex, scrollIndex, listVisibleRows)
@@ -349,7 +371,7 @@ proc main =
     of HoverRow, HoverCheckbox, HoverDelete:
       setCursor(curHand)
     else:
-      setCursor(curArrow)
+      setCursor(if addBtnBox.contains(point(mouseX, mouseY)): curHand else: curArrow)
 
     let doneCount = countDone(items)
     let openCount = items.len - doneCount
@@ -367,6 +389,11 @@ proc main =
     let composerBg = if focus == ComposerFocus: panelColor else: panelAltColor
     fillRect(composerBox, composerBg)
     drawBorder(composerBox, if focus == ComposerFocus: accentColor else: borderColor)
+
+    fillRect(addBtnBox, accentColor)
+    drawBorder(addBtnBox, accentColor)
+    discard drawText(font, addBtnBox.x + 14, addBtnBox.y + (addBtnBox.h - fm.lineHeight) div 2,
+      "+ Add", panelColor, accentColor)
 
     let composerTextX = composerBox.x + 10
     let composerTextY = composerBox.y + (composerBox.h - fm.lineHeight) div 2

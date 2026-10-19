@@ -19,8 +19,8 @@ const CalcLayoutSpec = """
 (layout
   (header (px 40))
   (cols
-    (pad (px 380))
-    (tape))
+    (pad (stretch 3))
+    (tape (stretch 2)))
   (status (lines 1)))
 """
 
@@ -80,7 +80,7 @@ proc brighten(c: Color; delta: int): Color =
     c.a
   )
 
-proc main() =
+proc main() {.uirApp.} =
   let win = createWindow(680, 520)
   var width = win.width
   var height = win.height

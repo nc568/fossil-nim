@@ -458,12 +458,14 @@ const CanvasDriverPageTemplate = """<!DOCTYPE html>
   });
 
   document.getElementById("uir-btn-resize-800").addEventListener("click", function() {
+    window.__uirFixedSize = true;
     queueEvent({ type: "resize", width: 800, height: 600, uiScale: 100 });
     flushEvents();
     canvas.focus();
   });
 
   document.getElementById("uir-btn-resize-960").addEventListener("click", function() {
+    window.__uirFixedSize = true;
     queueEvent({ type: "resize", width: 960, height: 640, uiScale: 100 });
     flushEvents();
     canvas.focus();
@@ -473,6 +475,23 @@ const CanvasDriverPageTemplate = """<!DOCTYPE html>
     queueEvent({ type: "close" });
     flushEvents();
   });
+
+  // Dynamic window resize observer so UIRelays adapts to browser window dimensions
+  const stageEl = document.getElementById("uir-stage");
+  const isMonkeyRun = window.location.search.indexOf("monkey=1") !== -1;
+  function syncStageResize() {
+    if (window.__uirFixedSize || isMonkeyRun) return;
+    if (!stageEl) return;
+    const w = Math.max(420, Math.floor(stageEl.clientWidth - 16));
+    const h = Math.max(320, Math.floor(stageEl.clientHeight - 16));
+    queueEvent({ type: "resize", width: w, height: h, uiScale: 100 });
+    flushEvents();
+  }
+  window.addEventListener("resize", syncStageResize);
+  if (typeof ResizeObserver !== "undefined" && stageEl) {
+    new ResizeObserver(syncStageResize).observe(stageEl);
+  }
+  setTimeout(syncStageResize, 20);
 
   let activeEventSource = null;
   let activePollTimer = null;
