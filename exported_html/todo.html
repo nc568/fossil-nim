@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tasks — UIRelays Pure HTML5 + CSS3 (No JS · No Canvas · No WASM)</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #11111b;
+    color: #cdd6f4;
+    font-family: ui-monospace, "JetBrains Mono", "Fira Code", "Cascadia Mono", monospace;
+  }
+  .hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px;
+    background: #181825;
+    border-bottom: 1px solid #313244;
+    font-size: 12px;
+  }
+  .badge {
+    background: #a6e3a1;
+    color: #11111b;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+  }
+  .meta { color: #a6adc8; }
+  .stage-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    overflow: auto;
+  }
+  .uir-viewport {
+    position: relative;
+    overflow: hidden;
+    background: #1e1e2e;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    box-shadow: 0 14px 36px rgba(0,0,0,0.55);
+    width: 760px;
+    height: 560px;
+    flex-shrink: 0;
+  }
+  .uir-rect, .uir-point, .uir-line-h, .uir-line-v, .uir-svg-line, .uir-text, .uir-img-crop, .uir-blit {
+    position: absolute;
+    pointer-events: none;
+  }
+  .uir-text {
+    white-space: pre;
+    line-height: 1;
+    font-family: ui-monospace, "JetBrains Mono", "Fira Code", "Cascadia Mono", monospace;
+  }
+  .uir-clip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <div>
+      <span class="badge">PURE HTML5 + CSS3 · ZERO JS · ZERO CANVAS · ZERO WASM</span>
+      <strong style="margin-left:10px;">Tasks</strong>
+      <span class="meta" style="margin-left:8px;">(todo.nim)</span>
+    </div>
+    <div class="meta">Size: 760×560 · DOM nodes: 66</div>
+  </div>
+  <div class="stage-wrap">
+    <div class="uir-viewport">
+<div class="uir-rect" style="left:0px;top:0px;width:760px;height:560px;background:rgb(244,243,241);"></div><div class="uir-rect" style="left:0px;top:0px;width:760px;height:48px;background:rgb(255,255,255);"></div><span class="uir-text" style="left:14px;top:10px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:15px;line-height:18px;height:18px;color:rgb(29,31,34);background-color:rgb(255,255,255);">Tasks</span><span class="uir-text" style="left:14px;top:28px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:15px;line-height:18px;height:18px;color:rgb(103,107,112);background-color:rgb(255,255,255);">2 remaining, 1 completed</span><div class="uir-line-h" style="left:14px;top:47px;width:733px;height:1px;background:rgb(229,232,235);"></div><div class="uir-rect" style="left:0px;top:48px;width:760px;height:48px;background:rgb(255,255,255);"></div><div class="uir-rect" style="left:8px;top:56px;width:744px;height:32px;background:rgb(255,255,255);"></div><div class="uir-line-h" style="left:8px;top:56px;width:744px;height:1px;background:rgb(44,120,220);"></div><div class="uir-line-v" style="left:8px;top:56px;width:1px;height:32px;background:rgb(44,120,220);"></div><div class="uir-line-v" style="left:751px;top:56px;width:1px;height:32px;background:rgb(44,120,220);"></div><div class="uir-line-h" style="left:8px;top:87px;width:744px;height:1px;background:rgb(44,120,220);"></div><span class="uir-text" style="left:18px;top:63px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:15px;line-height:18px;height:18px;color:rgb(126,130,135);background-color:rgb(255,255,255);">Add a task</span><div class="uir-line-v" style="left:19px;top:63px;width:1px;height:18px;background:rgb(44,120,220);"></div><div class="uir-rect" style="left:0px;top:96px;width:760px;height:434px;background:rgb(255,255,255);"></div><div class="uir-line-h" style="left:14px;top:96px;width:733px;height:1px;background:rgb(229,232,235);"></div><div class="uir-clip" data-clip="6,102,748,422" style="position:absolute;left:0;top:0;width:100%;height:100%;clip-path:polygon(6px 102px,754px 102px,754px 524px,6px 524px);pointer-events:none;"><div class="uir-rect" style="left:6px;top:102px;width:748px;height:26px;background:rgb(233,240,250);"></div><div class="uir-rect" style="left:6px;top:102px;width:3px;height:26px;background:rgb(44,120,220);"></div><div class="uir-line-h" style="left:6px;top:127px;width:749px;height:1px;background:rgb(229,232,235);"></div><div class="uir-rect" style="left:14px;top:107px;width:16px;height:16px;background:rgb(46,160,67);"></div><div class="uir-line-h" style="left:14px;top:107px;width:16px;height:1px;background:rgb(46,160,67);"></div><div class="uir-line-v" style="left:14px;top:107px;width:1px;height:16px;background:rgb(46,160,67);"></div><div class="uir-line-v" style="left:29px;top:107px;width:1px;height:16px;background:rgb(46,160,67);"></div><div class="uir-line-h" style="left:14px;top:122px;width:16px;height:1px;background:rgb(46,160,67);"></div><svg class="uir-svg-line" style="left:18px;top:115px;width:5px;height:5px;overflow:visible;" viewBox="0 0 5 5"><line x1="0" y1="0" x2="3" y2="3" stroke="rgb(255,255,255)" stroke-width="1.25" stroke-linecap="round"/></svg><svg class="uir-svg-line" style="left:21px;top:111px;width:7px;height:9px;overflow:visible;" viewBox="0 0 7 9"><line x1="0" y1="7" x2="5" y2="0" stroke="rgb(255,255,255)" stroke-width="1.25" stroke-linecap="round"/></svg><div class="uir-rect" style="left:728px;top:106px;width:18px;height:18px;background:rgb(255,255,255);"></div><div class="uir-line-h" style="left:728px;top:106px;width:18px;height:1px;background:rgb(208,56,76);"></div><div class="uir-line-v" style="left:728px;top:106px;width:1px;height:18px;background:rgb(208,56,76);"></div><div class="uir-line-v" style="left:745px;top:106px;width:1px;height:18px;background:rgb(208,56,76);"></div><div class="uir-line-h" style="left:728px;top:123px;width:18px;height:1px;background:rgb(208,56,76);"></div><svg class="uir-svg-line" style="left:732px;top:110px;width:11px;height:11px;overflow:visible;" viewBox="0 0 11 11"><line x1="0" y1="0" x2="9" y2="9" stroke="rgb(208,56,76)" stroke-width="1.25" stroke-linecap="round"/></svg><svg class="uir-svg-line" style="left:732px;top:110px;width:11px;height:11px;overflow:visible;" viewBox="0 0 11 11"><line x1="9" y1="0" x2="0" y2="9" stroke="rgb(208,56,76)" stroke-width="1.25" stroke-linecap="round"/></svg><span class="uir-text" style="left:40px;top:106px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:15px;line-height:18px;height:18px;color:rgb(103,107,112);background-color:rgb(233,240,250);">Review this week&#39;s priorities</span><div class="uir-line-h" style="left:40px;top:115px;width:262px;height:1px;background:rgb(103,107,112);"></div><div class="uir-rect" style="left:6px;top:128px;width:748px;height:26px;background:rgb(255,255,255);"></div><div class="uir-line-h" style="left:6px;top:153px;width:749px;height:1px;background:rgb(229,232,235);"></div><div class="uir-rect" style="left:14px;top:133px;width:16px;height:16px;background:rgb(255,255,255);"></div><div class="uir-line-h" style="left:14px;top:133px;width:16px;height:1px;background:rgb(216,219,223);"></div><div class="uir-line-v" style="left:14px;top:133px;width:1px;height:16px;background:rgb(216,219,223);"></div><div class="uir-line-v" style="left:29px;top:133px;width:1px;height:16px;background:rgb(216,219,223);"></div><div class="uir-line-h" style="left:14px;top:148px;width:16px;height:1px;background:rgb(216,219,223);"></div><div class="uir-rect" style="left:728px;top:132px;width:18px;height:18px;background:rgb(255,255,255);"></div><div class="uir-line-h" style="left:728px;top:132px;width:18px;height:1px;background:rgb(208,56,76);"></div><div class="uir-line-v" style="left:728px;top:132px;width:1px;height:18px;background:rgb(208,56,76);"></div><div class="uir-line-v" style="left:745px;top:132px;width:1px;height:18px;background:rgb(208,56,76);"></div><div class="uir-line-h" style="left:728px;top:149px;width:18px;height:1px;background:rgb(208,56,76);"></div><svg class="uir-svg-line" style="left:732px;top:136px;width:11px;height:11px;overflow:visible;" viewBox="0 0 11 11"><line x1="0" y1="0" x2="9" y2="9" stroke="rgb(208,56,76)" stroke-width="1.25" stroke-linecap="round"/></svg><svg class="uir-svg-line" style="left:732px;top:136px;width:11px;height:11px;overflow:visible;" viewBox="0 0 11 11"><line x1="9" y1="0" x2="0" y2="9" stroke="rgb(208,56,76)" stroke-width="1.25" stroke-linecap="round"/></svg><span class="uir-text" style="left:40px;top:132px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:15px;line-height:18px;height:18px;color:rgb(29,31,34);background-color:rgb(255,255,255);">Reply to client email</span><div class="uir-rect" style="left:6px;top:154px;width:748px;height:26px;background:rgb(255,255,255);"></div><div class="uir-line-h" style="left:6px;top:179px;width:749px;height:1px;background:rgb(229,232,235);"></div><div class="uir-rect" style="left:14px;top:159px;width:16px;height:16px;background:rgb(255,255,255);"></div><div class="uir-line-h" style="left:14px;top:159px;width:16px;height:1px;background:rgb(216,219,223);"></div><div class="uir-line-v" style="left:14px;top:159px;width:1px;height:16px;background:rgb(216,219,223);"></div><div class="uir-line-v" style="left:29px;top:159px;width:1px;height:16px;background:rgb(216,219,223);"></div><div class="uir-line-h" style="left:14px;top:174px;width:16px;height:1px;background:rgb(216,219,223);"></div><div class="uir-rect" style="left:728px;top:158px;width:18px;height:18px;background:rgb(255,255,255);"></div><div class="uir-line-h" style="left:728px;top:158px;width:18px;height:1px;background:rgb(208,56,76);"></div><div class="uir-line-v" style="left:728px;top:158px;width:1px;height:18px;background:rgb(208,56,76);"></div><div class="uir-line-v" style="left:745px;top:158px;width:1px;height:18px;background:rgb(208,56,76);"></div><div class="uir-line-h" style="left:728px;top:175px;width:18px;height:1px;background:rgb(208,56,76);"></div><svg class="uir-svg-line" style="left:732px;top:162px;width:11px;height:11px;overflow:visible;" viewBox="0 0 11 11"><line x1="0" y1="0" x2="9" y2="9" stroke="rgb(208,56,76)" stroke-width="1.25" stroke-linecap="round"/></svg><svg class="uir-svg-line" style="left:732px;top:162px;width:11px;height:11px;overflow:visible;" viewBox="0 0 11 11"><line x1="9" y1="0" x2="0" y2="9" stroke="rgb(208,56,76)" stroke-width="1.25" stroke-linecap="round"/></svg><span class="uir-text" style="left:40px;top:158px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:15px;line-height:18px;height:18px;color:rgb(29,31,34);background-color:rgb(255,255,255);">Prepare tomorrow&#39;s notes</span></div><div class="uir-rect" style="left:0px;top:530px;width:760px;height:30px;background:rgb(255,255,255);"></div><span class="uir-text" style="left:14px;top:536px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:15px;line-height:18px;height:18px;color:rgb(103,107,112);background-color:rgb(255,255,255);">2 remaining</span>    </div>
+  </div>
+</body>
+</html>

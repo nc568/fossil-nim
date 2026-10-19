@@ -1,0 +1,624 @@
+===================================================================
+1. UIRelays Full Test Suite (tests/tester.nim)
+===================================================================
+lexer:
+  PASS  a tree
+  PASS  nesting
+  PASS  the tag is the ParLe's text
+  PASS  an ident
+  PASS  an ident is an ident
+  PASS  a dotted name is a symbol
+  PASS  the symbol keeps its dots
+  PASS  a ':' marks a definition
+  PASS  the ':' is not part of the name
+  PASS  a lone dot is the empty node
+  PASS  everything else is an ident
+  PASS  zero
+  PASS  decimal
+  PASS  negative
+  PASS  explicit plus
+  PASS  hexadecimal
+  PASS  a 'u' suffix is tolerated
+  PASS  a float
+  PASS  a negative float
+  PASS  an exponent without a point
+  PASS  a negative exponent
+  PASS  'e' is a hex digit, not an exponent, after 0x
+  PASS  a lone '-' is a name
+  PASS  so is '-x'
+  PASS  a string literal
+  PASS  a hex escape
+  PASS  the empty string
+  PASS  backslash and quote as escapes
+  PASS  a character literal
+  PASS  an escaped character
+  PASS  a comment runs to the end of the line
+  PASS  a comment may be the whole input
+  PASS  whitespace only
+  PASS  Eof repeats
+  PASS  line and column of a nested tag
+lexer errors:
+  PASS  an unterminated string
+  PASS  a newline inside a string
+  PASS  a half-written escape
+  PASS  an exponent without digits
+  PASS  junk stuck to a float
+  PASS  no tag behind '('
+  PASS  '()' has no tag
+  PASS  junk stuck to a number
+  PASS  an integer too large for int64
+  PASS  an unclosed character literal
+  PASS  the error carries its position
+layout:
+  PASS  parses: (layout
+  PASS  a fixed pixel height
+  PASS  the stretch gets what is left
+  PASS  lines times lineHeight
+  PASS  parses: (layout (a (lines 1)) (b))
+  PASS  padding surrounds a lines cell
+  PASS  and comes off the stretch
+  PASS  parses: (layout (cols (a (stretch 1)) (b (stretch 3))))
+  PASS  weighted share
+  PASS  the larger weight
+  PASS  parses: (layout (cols (a) (b) (c)))
+  PASS  thirds, first
+  PASS  thirds, second
+  PASS  thirds, third fills the rest
+  PASS  parses: (layout (a (px 10)) (b))
+  PASS  a gap sits between the boxes
+  PASS  and comes off the stretch too
+  PASS  parses: (layout
+  PASS  title
+  PASS  status
+  PASS  a column keeps its pixel width
+  PASS  below it, the rest of the column
+  PASS  the middle column by weight
+  PASS  the right column, top
+  PASS  the right column, bottom
+  PASS  cell() finds a leaf
+  PASS  cell() does not invent one
+  PASS  hitTest names the cell
+  PASS  hitTest is relative to it
+  PASS  parses: # The layout of a window, commented.
+  PASS  comments do not disturb the layout
+  PASS  nor the box behind them
+  PASS  parses: (layout (side-bar) (main.view))
+  PASS  a dash in a name
+  PASS  a dot in a name
+  PASS  parses: (layout (rows) (real))
+  PASS  'rows' is not a widget name
+  PASS  but its sibling is
+layout errors:
+  PASS  a misspelled container
+  PASS  a nameless box
+  PASS  a missing ')'
+  PASS  a stray ')'
+  PASS  something behind the layout
+  PASS  a size behind the children
+  PASS  two sizes
+  PASS  a negative size
+  PASS  a size without a number
+  PASS  a nested layout
+  PASS  another tag at the top
+  PASS  an empty input
+  PASS  comments only
+  PASS  a lexer error is passed along
+  PASS  a float where a size wants pixels
+  PASS  a broken layout resolves to nothing
+  PASS  and claims no cells
+  PASS  so does a layout nobody parsed into
+ALL PASS
+resolving:
+  PASS  parses: (layout
+  PASS  a lines box is its lines and its padding
+  PASS  and the box above it takes the rest
+  PASS  a px box is its pixels
+  PASS  the stretching one takes what the gaps leave
+  PASS  and the last one starts behind it
+  PASS  parses: (layout (cols (sidebar (px 30)) (editor)))
+  PASS  a px size is logical
+  PASS  and the stretching neighbour gives way
+  PASS  the dense sidebar still starts at the left edge
+finding a border:
+  PASS  parses: (layout
+  PASS  the border between the first two columns
+  PASS  the one behind the stretching box
+  PASS  and the one across the window
+  PASS  the middle of a box is not a border
+  PASS  nor is the edge of the window
+  PASS  a pointer just short of a border still catches it
+  PASS  and one just past it
+  PASS  three pixels off it is a miss
+  PASS  the border is the gap itself
+  PASS  parses: (layout
+  PASS  a nested border names the box it divides
+  PASS  and the outer one is still the outer one
+moving one:
+  PASS  parses: (layout
+  PASS  the drag took
+  PASS  the box before it moved by what the pointer moved
+  PASS  its neighbour gave up exactly that much
+  PASS  and the box past that one did not move
+  PASS  the size is written in the unit it was written in
+  PASS  parses: (layout
+  PASS  a row border moves in y
+  PASS  a lines box snaps to whole lines
+  PASS  and says so as lines
+  PASS  parses: (layout (cols (a) (b) (c)))
+  PASS  two stretching boxes can be dragged apart
+  PASS  the one before the border takes what was asked
+  PASS  the one behind it takes the rest of the pair
+  PASS  and the third is left exactly where it was
+  PASS  the weights say the window they are in
+  PASS  parses: (layout
+  PASS  a border cannot be dragged past the window
+  PASS  the box keeps a few pixels to be caught by
+  PASS  and its neighbour has the rest
+  PASS  parses: (layout
+  PASS  dragging nothing changes nothing
+  PASS  and neither does a drag that lands where it started
+growing and shrinking:
+  PASS  parses: (layout
+  PASS  the cells come out in the order they are written
+  PASS  parses: (layout
+  PASS  a cell splits to the right
+  PASS  beside the one it came out of, in the same container
+  PASS  parses: (layout
+  PASS  parses: (layout
+  PASS  the room comes out of that box alone
+  PASS  and the two halves fill it
+  PASS  the second one behind the first
+  PASS  which is the room the one box had
+  PASS  parses: (layout
+  PASS  a cell splits downwards
+  PASS  into a rows of its own, holding the size it had
+  PASS  parses: (layout
+  PASS  a px box is halved in pixels, the odd one to the newcomer
+  PASS  parses: (layout (a (lines 5)) (b))
+  PASS  and a lines box in whole lines
+  PASS  parses: (layout (cols (a) (b (stretch 3))))
+  PASS  a stretching box is halved by doubling the others
+  PASS  parses: (layout (cols (a (stretch 2)) (b (stretch 2))))
+  PASS  and the weights are reduced by what they have in common
+  PASS  parses: (layout
+  PASS  a cell that is not there does not split
+  PASS  nor does one split into a name already taken
+  PASS  and the layout is left alone
+  PASS  parses: (layout
+  PASS  a cell can be taken away
+  PASS  leaving the others where they were
+  PASS  parses: (layout
+  PASS  and taking one away again
+  PASS  collapses the container it leaves behind
+  PASS  parses: (layout (rows (px 40) (a) (b)))
+  PASS  the survivor takes the size the container had
+  PASS  parses: (layout (only))
+  PASS  the last box stays
+  PASS  as does one that was never there
+  PASS  and the layout is left alone
+  PASS  parses: (layout
+  PASS  parses: (layout
+  PASS  what a split writes reads back as itself
+  PASS  two cells of one name is an error
+  PASS  said where the second one is
+writing one back:
+  PASS  parses: (layout
+  PASS  what comes out is what went in
+  PASS  parses: (layout
+  PASS  and it reads back as the same window
+  PASS  with everything in the same place
+  PASS  parses: (layout (rows (a (stretch 3)) (cols (b) (c (px 10)))))
+  PASS  a nested layout keeps its shape
+  PASS  a layout that did not parse is not written
+  PASS  and resolves to nothing
+ALL PASS
+command chords:
+  PASS  plain typing is text
+  PASS  shifted typing is text
+  PASS  Ctrl+'+' is a command
+  PASS  Ctrl+Shift+'+' too
+  PASS  Cmd+'+' as well
+  PASS  and Cmd+Shift
+  PASS  AltGr stays text
+  PASS  AltGr with shift as well
+  PASS  Alt alone stays text
+  PASS  but Cmd wins over AltGr
+ALL PASS
+=== UIRelays Pure HTML/CSS/JS DOM Backend Tests (--mm:arc) ===
+  PASS  backend is wbkHtml
+  PASS  window width initialized
+  PASS  window height initialized
+  PASS  uiScale initialized to 100
+  PASS  getWindowLayout matches
+  PASS  HTML page has #uir-viewport
+  PASS  HTML page has ZERO <canvas> elements
+  PASS  HTML page has ZERO WebAssembly
+  PASS  window title stored
+  PASS  cursor CSS mapping for curDefault
+  PASS  cursor CSS mapping for curArrow
+  PASS  cursor CSS mapping for curIbeam
+  PASS  cursor CSS mapping for curWait
+  PASS  cursor CSS mapping for curCrosshair
+  PASS  cursor CSS mapping for curHand
+  PASS  cursor CSS mapping for curSizeNS
+  PASS  cursor CSS mapping for curSizeWE
+  PASS  openFont returns non-zero handle
+  PASS  font metrics populated
+  PASS  getFontMetrics matches
+  PASS  measureText empty is 0x0
+  PASS  measureText ASCII width > 0
+  PASS  measureText UTF-8 Cyrillic counts 6 runes, not 12 bytes
+  PASS  pure-Nim PNG encoder produces valid PNG header
+  PASS  loadImage succeeds on PNG
+  PASS  imageSize parses PNG IHDR 16x12
+  PASS  blitRGBA succeeds and returns true
+  PASS  blitRGBA rejects nil pixels
+  PASS  lastPublishedHtml is non-empty
+  PASS  DOM contains uir-rect
+  PASS  DOM contains uir-point
+  PASS  DOM contains uir-line-h
+  PASS  DOM contains uir-line-v
+  PASS  DOM contains uir-svg-line for diagonal
+  PASS  DOM escapes HTML entities in drawText
+  PASS  DOM contains bold & italic styles
+  PASS  DOM contains uir-clip polygon
+  PASS  DOM contains uir-img-crop
+  PASS  DOM contains uir-blit with PNG data URI
+  PASS  DOM frame has ZERO <canvas>
+  PASS  clipboard roundtrip
+  PASS  poll MouseDownEvent
+  PASS  poll KeyDownEvent KeyA
+  PASS  poll TextInputEvent 'A'
+  PASS  poll KeyUpEvent KeyA
+  PASS  poll KeyDownEvent Ctrl+C
+  PASS  Ctrl+C did NOT emit TextInputEvent, next is KeyUpEvent
+  PASS  poll WindowResizeEvent
+  PASS  without WantTextInput, TextInputEvent is skipped and KeyEnter arrives
+  PASS  embedded HTTP server listening on port > 0
+  PASS  HTTP GET /health returns 200 OK and backend html
+  PASS  HTTP GET /state returns frame HTML
+  PASS  HTTP POST /input queues events
+  PASS  HTTP-posted mousedown received by pollEvent
+  PASS  HTTP-posted keydown received by pollEvent
+  PASS  HTTP-posted textinput received by pollEvent
+  PASS  freeImage resets imageSize to 0x0
+-------------------------------------------------------------------
+Passed: 57 | Failed: 0
+ALL PASS (Pure HTML/CSS/JS DOM Backend)
+=== UIRelays HTML5 Canvas 2D Backend Tests (--mm:arc) ===
+  PASS  backend is wbkCanvas
+  PASS  window dimensions 900x640
+  PASS  Canvas page has <canvas id="uir-canvas"
+  PASS  Canvas page uses getContext("2d")
+  PASS  Canvas page has ZERO WebAssembly
+  PASS  openFont returns valid handle
+  PASS  loadImage 20x16 on Canvas backend
+  PASS  blitRGBA succeeds on Canvas backend
+  PASS  Canvas command array is non-empty JArray
+  PASS  2D command stream contains rect
+  PASS  2D command stream contains point
+  PASS  2D command stream contains line
+  PASS  2D command stream contains text
+  PASS  2D command stream contains save/clip/restore
+  PASS  2D command stream contains img
+  PASS  2D command stream contains blit
+  PASS  Changed frame increments frameId
+  PASS  Identical frame is deduplicated (frameId unchanged)
+  PASS  Canvas HTTP server listening on port > 0
+  PASS  HTTP GET /health returns backend canvas
+  PASS  HTTP GET /state returns commands array
+  PASS  HTTP POST /input succeeds
+  PASS  poll MouseWheelEvent dy=3
+  PASS  clipboard updated via /input
+  PASS  poll WindowCloseEvent
+-------------------------------------------------------------------
+Passed: 25 | Failed: 0
+ALL PASS (HTML5 Canvas 2D Backend)
+ALL PASS: tests/tester.nim
+
+===================================================================
+2. Focim Editor Full Test Suite (18 test suites with -d:html)
+===================================================================
+  PASS  focim/activelinetest.nim (--mm:arc -d:html)
+  PASS  focim/ansitest.nim (--mm:arc -d:html)
+  PASS  focim/cliphistorytest.nim (--mm:arc -d:html)
+  PASS  focim/configstoretest.nim (--mm:arc -d:html)
+  PASS  focim/configtest.nim (--mm:arc -d:html)
+  PASS  focim/consoletest.nim (--mm:arc -d:html)
+  PASS  focim/filesearchtest.nim (--mm:arc -d:html)
+  PASS  focim/markdowntest.nim (--mm:arc -d:html)
+  PASS  focim/mdimagetest.nim (--mm:arc -d:html)
+  PASS  focim/panelstest.nim (--mm:arc -d:html)
+  PASS  focim/searchtest.nim (--mm:arc -d:html)
+  PASS  focim/styletest.nim (--mm:arc -d:html)
+  PASS  focim/tablisttest.nim (--mm:arc -d:html)
+  PASS  focim/terminaltest.nim (--mm:arc -d:html)
+  PASS  focim/tracktest.nim (--mm:arc -d:html)
+  PASS  focim/utf8test.nim (--mm:arc -d:html)
+  PASS  focim/viewtest.nim (--mm:arc -d:html)
+  PASS  focim/wordindextest.nim (--mm:arc -d:html)
+  PASS  focim/wraptest.nim (--mm:arc -d:html)
+
+===================================================================
+3. Headless Chromium Browser Monkey Tests (9 Apps x 2 Backends)
+===================================================================
+===================================================================
+UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)
+===================================================================
+
+-------------------------------------------------------------------
+[Monkey] Building calculator (-d:html --mm:arc) ...
+  PASS  calculator [html] compiles with --mm:arc
+  PASS  calculator [html] server ready on port 18310
+  PASS  calculator [html] survives adversarial HTTP fuzzing
+  PASS  calculator [html] Chromium browser monkey report received
+  PASS  calculator [html] Chromium dispatched >= 100 button & monkey clicks
+  PASS  calculator [html] Chromium dispatched >= 15 keyboard events
+  PASS  calculator [html] Chromium dispatched >= 8 wheel scroll events
+  PASS  calculator [html] Chromium clicked HUD control buttons
+  PASS  calculator [html] ZERO JavaScript errors in Chromium
+  PASS  calculator [html] Chromium verified ZERO <canvas> elements in DOM
+  PASS  calculator [html] Chromium rendered live DOM elements
+  PASS  calculator [html] Nim server processed browser events (395 events, 71 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building calculator (-d:canvas --mm:arc) ...
+  PASS  calculator [canvas] compiles with --mm:arc
+  PASS  calculator [canvas] server ready on port 18311
+  PASS  calculator [canvas] survives adversarial HTTP fuzzing
+  PASS  calculator [canvas] Chromium browser monkey report received
+  PASS  calculator [canvas] Chromium dispatched >= 100 button & monkey clicks
+  PASS  calculator [canvas] Chromium dispatched >= 15 keyboard events
+  PASS  calculator [canvas] Chromium dispatched >= 8 wheel scroll events
+  PASS  calculator [canvas] Chromium clicked HUD control buttons
+  PASS  calculator [canvas] ZERO JavaScript errors in Chromium
+  PASS  calculator [canvas] Chromium executed 2D canvas draw commands
+  PASS  calculator [canvas] Chromium getImageData verified rendered pixels & multiple colors
+  PASS  calculator [canvas] Nim server processed browser events (394 events, 61 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building snake (-d:html --mm:arc) ...
+  PASS  snake [html] compiles with --mm:arc
+  PASS  snake [html] server ready on port 18312
+  PASS  snake [html] survives adversarial HTTP fuzzing
+  PASS  snake [html] Chromium browser monkey report received
+  PASS  snake [html] Chromium dispatched >= 100 button & monkey clicks
+  PASS  snake [html] Chromium dispatched >= 15 keyboard events
+  PASS  snake [html] Chromium dispatched >= 8 wheel scroll events
+  PASS  snake [html] Chromium clicked HUD control buttons
+  PASS  snake [html] ZERO JavaScript errors in Chromium
+  PASS  snake [html] Chromium verified ZERO <canvas> elements in DOM
+  PASS  snake [html] Chromium rendered live DOM elements
+  PASS  snake [html] Nim server processed browser events (386 events, 77 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building snake (-d:canvas --mm:arc) ...
+  PASS  snake [canvas] compiles with --mm:arc
+  PASS  snake [canvas] server ready on port 18313
+  PASS  snake [canvas] survives adversarial HTTP fuzzing
+  PASS  snake [canvas] Chromium browser monkey report received
+  PASS  snake [canvas] Chromium dispatched >= 100 button & monkey clicks
+  PASS  snake [canvas] Chromium dispatched >= 15 keyboard events
+  PASS  snake [canvas] Chromium dispatched >= 8 wheel scroll events
+  PASS  snake [canvas] Chromium clicked HUD control buttons
+  PASS  snake [canvas] ZERO JavaScript errors in Chromium
+  PASS  snake [canvas] Chromium executed 2D canvas draw commands
+  PASS  snake [canvas] Chromium getImageData verified rendered pixels & multiple colors
+  PASS  snake [canvas] Nim server processed browser events (386 events, 59 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building twenty48 (-d:html --mm:arc) ...
+  PASS  twenty48 [html] compiles with --mm:arc
+  PASS  twenty48 [html] server ready on port 18314
+  PASS  twenty48 [html] survives adversarial HTTP fuzzing
+  PASS  twenty48 [html] Chromium browser monkey report received
+  PASS  twenty48 [html] Chromium dispatched >= 100 button & monkey clicks
+  PASS  twenty48 [html] Chromium dispatched >= 15 keyboard events
+  PASS  twenty48 [html] Chromium dispatched >= 8 wheel scroll events
+  PASS  twenty48 [html] Chromium clicked HUD control buttons
+  PASS  twenty48 [html] ZERO JavaScript errors in Chromium
+  PASS  twenty48 [html] Chromium verified ZERO <canvas> elements in DOM
+  PASS  twenty48 [html] Chromium rendered live DOM elements
+  PASS  twenty48 [html] Nim server processed browser events (384 events, 80 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building twenty48 (-d:canvas --mm:arc) ...
+  PASS  twenty48 [canvas] compiles with --mm:arc
+  PASS  twenty48 [canvas] server ready on port 18315
+  PASS  twenty48 [canvas] survives adversarial HTTP fuzzing
+  PASS  twenty48 [canvas] Chromium browser monkey report received
+  PASS  twenty48 [canvas] Chromium dispatched >= 100 button & monkey clicks
+  PASS  twenty48 [canvas] Chromium dispatched >= 15 keyboard events
+  PASS  twenty48 [canvas] Chromium dispatched >= 8 wheel scroll events
+  PASS  twenty48 [canvas] Chromium clicked HUD control buttons
+  PASS  twenty48 [canvas] ZERO JavaScript errors in Chromium
+  PASS  twenty48 [canvas] Chromium executed 2D canvas draw commands
+  PASS  twenty48 [canvas] Chromium getImageData verified rendered pixels & multiple colors
+  PASS  twenty48 [canvas] Nim server processed browser events (385 events, 62 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building focim (-d:html --mm:arc) ...
+  PASS  focim [html] compiles with --mm:arc
+  PASS  focim [html] server ready on port 18316
+  PASS  focim [html] survives adversarial HTTP fuzzing
+  PASS  focim [html] Chromium browser monkey report received
+  PASS  focim [html] Chromium dispatched >= 100 button & monkey clicks
+  PASS  focim [html] Chromium dispatched >= 15 keyboard events
+  PASS  focim [html] Chromium dispatched >= 8 wheel scroll events
+  PASS  focim [html] Chromium clicked HUD control buttons
+  PASS  focim [html] ZERO JavaScript errors in Chromium
+  PASS  focim [html] Chromium verified ZERO <canvas> elements in DOM
+  PASS  focim [html] Chromium rendered live DOM elements
+  PASS  focim [html] Nim server processed browser events (366 events, 369 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building focim (-d:canvas --mm:arc) ...
+  PASS  focim [canvas] compiles with --mm:arc
+  PASS  focim [canvas] server ready on port 18317
+  PASS  focim [canvas] survives adversarial HTTP fuzzing
+  PASS  focim [canvas] Chromium browser monkey report received
+  PASS  focim [canvas] Chromium dispatched >= 100 button & monkey clicks
+  PASS  focim [canvas] Chromium dispatched >= 15 keyboard events
+  PASS  focim [canvas] Chromium dispatched >= 8 wheel scroll events
+  PASS  focim [canvas] Chromium clicked HUD control buttons
+  PASS  focim [canvas] ZERO JavaScript errors in Chromium
+  PASS  focim [canvas] Chromium executed 2D canvas draw commands
+  PASS  focim [canvas] Chromium getImageData verified rendered pixels & multiple colors
+  PASS  focim [canvas] Nim server processed browser events (182 events, 183 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building web_showcase (-d:html --mm:arc) ...
+  PASS  web_showcase [html] compiles with --mm:arc
+  PASS  web_showcase [html] server ready on port 18318
+  PASS  web_showcase [html] survives adversarial HTTP fuzzing
+  PASS  web_showcase [html] Chromium browser monkey report received
+  PASS  web_showcase [html] Chromium dispatched >= 100 button & monkey clicks
+  PASS  web_showcase [html] Chromium dispatched >= 15 keyboard events
+  PASS  web_showcase [html] Chromium dispatched >= 8 wheel scroll events
+  PASS  web_showcase [html] Chromium clicked HUD control buttons
+  PASS  web_showcase [html] ZERO JavaScript errors in Chromium
+  PASS  web_showcase [html] Chromium verified ZERO <canvas> elements in DOM
+  PASS  web_showcase [html] Chromium rendered live DOM elements
+  PASS  web_showcase [html] Nim server processed browser events (396 events, 89 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building web_showcase (-d:canvas --mm:arc) ...
+  PASS  web_showcase [canvas] compiles with --mm:arc
+  PASS  web_showcase [canvas] server ready on port 18319
+  PASS  web_showcase [canvas] survives adversarial HTTP fuzzing
+  PASS  web_showcase [canvas] Chromium browser monkey report received
+  PASS  web_showcase [canvas] Chromium dispatched >= 100 button & monkey clicks
+  PASS  web_showcase [canvas] Chromium dispatched >= 15 keyboard events
+  PASS  web_showcase [canvas] Chromium dispatched >= 8 wheel scroll events
+  PASS  web_showcase [canvas] Chromium clicked HUD control buttons
+  PASS  web_showcase [canvas] ZERO JavaScript errors in Chromium
+  PASS  web_showcase [canvas] Chromium executed 2D canvas draw commands
+  PASS  web_showcase [canvas] Chromium getImageData verified rendered pixels & multiple colors
+  PASS  web_showcase [canvas] Nim server processed browser events (396 events, 78 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building todo (-d:html --mm:arc) ...
+  PASS  todo [html] compiles with --mm:arc
+  PASS  todo [html] server ready on port 18320
+  PASS  todo [html] survives adversarial HTTP fuzzing
+  PASS  todo [html] Chromium browser monkey report received
+  PASS  todo [html] Chromium dispatched >= 100 button & monkey clicks
+  PASS  todo [html] Chromium dispatched >= 15 keyboard events
+  PASS  todo [html] Chromium dispatched >= 8 wheel scroll events
+  PASS  todo [html] Chromium clicked HUD control buttons
+  PASS  todo [html] ZERO JavaScript errors in Chromium
+  PASS  todo [html] Chromium verified ZERO <canvas> elements in DOM
+  PASS  todo [html] Chromium rendered live DOM elements
+  PASS  todo [html] Nim server processed browser events (384 events, 131 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building todo (-d:canvas --mm:arc) ...
+  PASS  todo [canvas] compiles with --mm:arc
+  PASS  todo [canvas] server ready on port 18321
+  PASS  todo [canvas] survives adversarial HTTP fuzzing
+  PASS  todo [canvas] Chromium browser monkey report received
+  PASS  todo [canvas] Chromium dispatched >= 100 button & monkey clicks
+  PASS  todo [canvas] Chromium dispatched >= 15 keyboard events
+  PASS  todo [canvas] Chromium dispatched >= 8 wheel scroll events
+  PASS  todo [canvas] Chromium clicked HUD control buttons
+  PASS  todo [canvas] ZERO JavaScript errors in Chromium
+  PASS  todo [canvas] Chromium executed 2D canvas draw commands
+  PASS  todo [canvas] Chromium getImageData verified rendered pixels & multiple colors
+  PASS  todo [canvas] Nim server processed browser events (386 events, 119 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building paint (-d:html --mm:arc) ...
+  PASS  paint [html] compiles with --mm:arc
+  PASS  paint [html] server ready on port 18322
+  PASS  paint [html] survives adversarial HTTP fuzzing
+  PASS  paint [html] Chromium browser monkey report received
+  PASS  paint [html] Chromium dispatched >= 100 button & monkey clicks
+  PASS  paint [html] Chromium dispatched >= 15 keyboard events
+  PASS  paint [html] Chromium dispatched >= 8 wheel scroll events
+  PASS  paint [html] Chromium clicked HUD control buttons
+  PASS  paint [html] ZERO JavaScript errors in Chromium
+  PASS  paint [html] Chromium verified ZERO <canvas> elements in DOM
+  PASS  paint [html] Chromium rendered live DOM elements
+  PASS  paint [html] Nim server processed browser events (435 events, 110 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building paint (-d:canvas --mm:arc) ...
+  PASS  paint [canvas] compiles with --mm:arc
+  PASS  paint [canvas] server ready on port 18323
+  PASS  paint [canvas] survives adversarial HTTP fuzzing
+  PASS  paint [canvas] Chromium browser monkey report received
+  PASS  paint [canvas] Chromium dispatched >= 100 button & monkey clicks
+  PASS  paint [canvas] Chromium dispatched >= 15 keyboard events
+  PASS  paint [canvas] Chromium dispatched >= 8 wheel scroll events
+  PASS  paint [canvas] Chromium clicked HUD control buttons
+  PASS  paint [canvas] ZERO JavaScript errors in Chromium
+  PASS  paint [canvas] Chromium executed 2D canvas draw commands
+  PASS  paint [canvas] Chromium getImageData verified rendered pixels & multiple colors
+  PASS  paint [canvas] Nim server processed browser events (384 events, 68 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building layout_demo (-d:html --mm:arc) ...
+  PASS  layout_demo [html] compiles with --mm:arc
+  PASS  layout_demo [html] server ready on port 18324
+  PASS  layout_demo [html] survives adversarial HTTP fuzzing
+  PASS  layout_demo [html] Chromium browser monkey report received
+  PASS  layout_demo [html] Chromium dispatched >= 100 button & monkey clicks
+  PASS  layout_demo [html] Chromium dispatched >= 15 keyboard events
+  PASS  layout_demo [html] Chromium dispatched >= 8 wheel scroll events
+  PASS  layout_demo [html] Chromium clicked HUD control buttons
+  PASS  layout_demo [html] ZERO JavaScript errors in Chromium
+  PASS  layout_demo [html] Chromium verified ZERO <canvas> elements in DOM
+  PASS  layout_demo [html] Chromium rendered live DOM elements
+  PASS  layout_demo [html] Nim server processed browser events (386 events, 80 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building layout_demo (-d:canvas --mm:arc) ...
+  PASS  layout_demo [canvas] compiles with --mm:arc
+  PASS  layout_demo [canvas] server ready on port 18325
+  PASS  layout_demo [canvas] survives adversarial HTTP fuzzing
+  PASS  layout_demo [canvas] Chromium browser monkey report received
+  PASS  layout_demo [canvas] Chromium dispatched >= 100 button & monkey clicks
+  PASS  layout_demo [canvas] Chromium dispatched >= 15 keyboard events
+  PASS  layout_demo [canvas] Chromium dispatched >= 8 wheel scroll events
+  PASS  layout_demo [canvas] Chromium clicked HUD control buttons
+  PASS  layout_demo [canvas] ZERO JavaScript errors in Chromium
+  PASS  layout_demo [canvas] Chromium executed 2D canvas draw commands
+  PASS  layout_demo [canvas] Chromium getImageData verified rendered pixels & multiple colors
+  PASS  layout_demo [canvas] Nim server processed browser events (385 events, 67 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building hello (-d:html --mm:arc) ...
+  PASS  hello [html] compiles with --mm:arc
+  PASS  hello [html] server ready on port 18326
+  PASS  hello [html] survives adversarial HTTP fuzzing
+  PASS  hello [html] Chromium browser monkey report received
+  PASS  hello [html] Chromium dispatched >= 100 button & monkey clicks
+  PASS  hello [html] Chromium dispatched >= 15 keyboard events
+  PASS  hello [html] Chromium dispatched >= 8 wheel scroll events
+  PASS  hello [html] Chromium clicked HUD control buttons
+  PASS  hello [html] ZERO JavaScript errors in Chromium
+  PASS  hello [html] Chromium verified ZERO <canvas> elements in DOM
+  PASS  hello [html] Chromium rendered live DOM elements
+  PASS  hello [html] Nim server processed browser events (385 events, 72 frames)
+
+-------------------------------------------------------------------
+[Monkey] Building hello (-d:canvas --mm:arc) ...
+  PASS  hello [canvas] compiles with --mm:arc
+  PASS  hello [canvas] server ready on port 18327
+  PASS  hello [canvas] survives adversarial HTTP fuzzing
+  PASS  hello [canvas] Chromium browser monkey report received
+  PASS  hello [canvas] Chromium dispatched >= 100 button & monkey clicks
+  PASS  hello [canvas] Chromium dispatched >= 15 keyboard events
+  PASS  hello [canvas] Chromium dispatched >= 8 wheel scroll events
+  PASS  hello [canvas] Chromium clicked HUD control buttons
+  PASS  hello [canvas] ZERO JavaScript errors in Chromium
+  PASS  hello [canvas] Chromium executed 2D canvas draw commands
+  PASS  hello [canvas] Chromium getImageData verified rendered pixels & multiple colors
+  PASS  hello [canvas] Nim server processed browser events (386 events, 69 frames)
+
+Exported 9 standalone pure-HTML files to /home/user/uirelays/exported_html/ and /home/user/uirelays_all_apps.html
+
+===================================================================
+Monkey Test Summary: Passed = 216 | Failed = 0
+===================================================================
+ALL 216 BROWSER MONKEY TESTS PASSED!

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hello uirelays — UIRelays Pure HTML5 + CSS3 (No JS · No Canvas · No WASM)</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #11111b;
+    color: #cdd6f4;
+    font-family: ui-monospace, "JetBrains Mono", "Fira Code", "Cascadia Mono", monospace;
+  }
+  .hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px;
+    background: #181825;
+    border-bottom: 1px solid #313244;
+    font-size: 12px;
+  }
+  .badge {
+    background: #a6e3a1;
+    color: #11111b;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+  }
+  .meta { color: #a6adc8; }
+  .stage-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    overflow: auto;
+  }
+  .uir-viewport {
+    position: relative;
+    overflow: hidden;
+    background: #1e1e2e;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    box-shadow: 0 14px 36px rgba(0,0,0,0.55);
+    width: 640px;
+    height: 480px;
+    flex-shrink: 0;
+  }
+  .uir-rect, .uir-point, .uir-line-h, .uir-line-v, .uir-svg-line, .uir-text, .uir-img-crop, .uir-blit {
+    position: absolute;
+    pointer-events: none;
+  }
+  .uir-text {
+    white-space: pre;
+    line-height: 1;
+    font-family: ui-monospace, "JetBrains Mono", "Fira Code", "Cascadia Mono", monospace;
+  }
+  .uir-clip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <div>
+      <span class="badge">PURE HTML5 + CSS3 · ZERO JS · ZERO CANVAS · ZERO WASM</span>
+      <strong style="margin-left:10px;">Hello uirelays</strong>
+      <span class="meta" style="margin-left:8px;">(hello.nim)</span>
+    </div>
+    <div class="meta">Size: 640×480 · DOM nodes: 19</div>
+  </div>
+  <div class="stage-wrap">
+    <div class="uir-viewport">
+<div class="uir-rect" style="left:0px;top:0px;width:640px;height:480px;background:rgb(30,30,46);"></div><div class="uir-rect" style="left:0px;top:0px;width:640px;height:40px;background:rgb(49,50,68);"></div><span class="uir-text" style="left:12px;top:10px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:18px;line-height:21px;height:21px;color:rgb(205,214,244);background-color:rgb(49,50,68);">Hello, uirelays!</span><div class="uir-rect" style="left:40px;top:60px;width:120px;height:80px;background:rgb(137,180,250);"></div><div class="uir-rect" style="left:180px;top:60px;width:120px;height:80px;background:rgb(245,194,231);"></div><div class="uir-rect" style="left:320px;top:60px;width:120px;height:80px;background:rgb(166,227,161);"></div><span class="uir-text" style="left:60px;top:90px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:18px;line-height:21px;height:21px;color:rgb(30,30,46);background-color:rgb(137,180,250);">Accent</span><span class="uir-text" style="left:205px;top:90px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:18px;line-height:21px;height:21px;color:rgb(30,30,46);background-color:rgb(245,194,231);">Pink</span><span class="uir-text" style="left:345px;top:90px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:18px;line-height:21px;height:21px;color:rgb(30,30,46);background-color:rgb(166,227,161);">Green</span><svg class="uir-svg-line" style="left:40px;top:170px;width:102px;height:102px;overflow:visible;" viewBox="0 0 102 102"><line x1="0" y1="0" x2="100" y2="100" stroke="rgb(137,180,250)" stroke-width="1.25" stroke-linecap="round"/></svg><svg class="uir-svg-line" style="left:60px;top:170px;width:102px;height:102px;overflow:visible;" viewBox="0 0 102 102"><line x1="0" y1="0" x2="100" y2="100" stroke="rgb(137,180,250)" stroke-width="1.25" stroke-linecap="round"/></svg><svg class="uir-svg-line" style="left:80px;top:170px;width:102px;height:102px;overflow:visible;" viewBox="0 0 102 102"><line x1="0" y1="0" x2="100" y2="100" stroke="rgb(137,180,250)" stroke-width="1.25" stroke-linecap="round"/></svg><svg class="uir-svg-line" style="left:100px;top:170px;width:102px;height:102px;overflow:visible;" viewBox="0 0 102 102"><line x1="0" y1="0" x2="100" y2="100" stroke="rgb(137,180,250)" stroke-width="1.25" stroke-linecap="round"/></svg><svg class="uir-svg-line" style="left:120px;top:170px;width:102px;height:102px;overflow:visible;" viewBox="0 0 102 102"><line x1="0" y1="0" x2="100" y2="100" stroke="rgb(137,180,250)" stroke-width="1.25" stroke-linecap="round"/></svg><svg class="uir-svg-line" style="left:140px;top:170px;width:102px;height:102px;overflow:visible;" viewBox="0 0 102 102"><line x1="0" y1="0" x2="100" y2="100" stroke="rgb(137,180,250)" stroke-width="1.25" stroke-linecap="round"/></svg><svg class="uir-svg-line" style="left:160px;top:170px;width:102px;height:102px;overflow:visible;" viewBox="0 0 102 102"><line x1="0" y1="0" x2="100" y2="100" stroke="rgb(137,180,250)" stroke-width="1.25" stroke-linecap="round"/></svg><svg class="uir-svg-line" style="left:180px;top:170px;width:102px;height:102px;overflow:visible;" viewBox="0 0 102 102"><line x1="0" y1="0" x2="100" y2="100" stroke="rgb(137,180,250)" stroke-width="1.25" stroke-linecap="round"/></svg><span class="uir-text" style="left:40px;top:300px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:18px;line-height:21px;height:21px;color:rgb(205,214,244);background-color:rgb(30,30,46);">Click anywhere</span><span class="uir-text" style="left:40px;top:440px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:18px;line-height:21px;height:21px;color:rgb(128,128,148);background-color:rgb(30,30,46);">Press ESC or Ctrl+Q to quit</span>    </div>
+  </div>
+</body>
+</html>

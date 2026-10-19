@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Layout Demo — UIRelays Pure HTML5 + CSS3 (No JS · No Canvas · No WASM)</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #11111b;
+    color: #cdd6f4;
+    font-family: ui-monospace, "JetBrains Mono", "Fira Code", "Cascadia Mono", monospace;
+  }
+  .hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px;
+    background: #181825;
+    border-bottom: 1px solid #313244;
+    font-size: 12px;
+  }
+  .badge {
+    background: #a6e3a1;
+    color: #11111b;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+  }
+  .meta { color: #a6adc8; }
+  .stage-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    overflow: auto;
+  }
+  .uir-viewport {
+    position: relative;
+    overflow: hidden;
+    background: #1e1e2e;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    box-shadow: 0 14px 36px rgba(0,0,0,0.55);
+    width: 900px;
+    height: 600px;
+    flex-shrink: 0;
+  }
+  .uir-rect, .uir-point, .uir-line-h, .uir-line-v, .uir-svg-line, .uir-text, .uir-img-crop, .uir-blit {
+    position: absolute;
+    pointer-events: none;
+  }
+  .uir-text {
+    white-space: pre;
+    line-height: 1;
+    font-family: ui-monospace, "JetBrains Mono", "Fira Code", "Cascadia Mono", monospace;
+  }
+  .uir-clip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <div>
+      <span class="badge">PURE HTML5 + CSS3 · ZERO JS · ZERO CANVAS · ZERO WASM</span>
+      <strong style="margin-left:10px;">Layout Demo</strong>
+      <span class="meta" style="margin-left:8px;">(layout_demo.nim)</span>
+    </div>
+    <div class="meta">Size: 900×600 · DOM nodes: 16</div>
+  </div>
+  <div class="stage-wrap">
+    <div class="uir-viewport">
+<div class="uir-rect" style="left:0px;top:0px;width:900px;height:600px;background:rgb(30,30,46);"></div><div class="uir-rect" style="left:200px;top:30px;width:4px;height:539px;background:rgb(88,91,112);"></div><span class="uir-text" style="left:208px;top:36px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:16px;line-height:19px;height:19px;color:rgb(205,214,244);background-color:rgb(88,91,112);">divider</span><div class="uir-rect" style="left:204px;top:30px;width:696px;height:539px;background:rgb(49,50,68);"></div><span class="uir-text" style="left:212px;top:36px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:16px;line-height:19px;height:19px;color:rgb(205,214,244);background-color:rgb(49,50,68);">editor</span><div class="uir-rect" style="left:0px;top:30px;width:200px;height:539px;background:rgb(49,50,68);"></div><span class="uir-text" style="left:8px;top:36px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:16px;line-height:19px;height:19px;color:rgb(205,214,244);background-color:rgb(49,50,68);">sidebar</span><div class="uir-rect" style="left:0px;top:569px;width:900px;height:31px;background:rgb(49,50,68);"></div><span class="uir-text" style="left:8px;top:575px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:16px;line-height:19px;height:19px;color:rgb(205,214,244);background-color:rgb(49,50,68);">status</span><div class="uir-rect" style="left:0px;top:0px;width:900px;height:30px;background:rgb(69,71,90);"></div><span class="uir-text" style="left:8px;top:6px;font-family:'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace;font-size:16px;line-height:19px;height:19px;color:rgb(137,180,250);background-color:rgb(69,71,90);">toolbar (900x30)</span><div class="uir-line-h" style="left:200px;top:30px;width:5px;height:1px;background:rgb(88,91,112);"></div><div class="uir-line-h" style="left:204px;top:30px;width:697px;height:1px;background:rgb(88,91,112);"></div><div class="uir-line-h" style="left:0px;top:30px;width:201px;height:1px;background:rgb(88,91,112);"></div><div class="uir-line-h" style="left:0px;top:569px;width:901px;height:1px;background:rgb(88,91,112);"></div><div class="uir-line-h" style="left:0px;top:0px;width:901px;height:1px;background:rgb(88,91,112);"></div>    </div>
+  </div>
+</body>
+</html>

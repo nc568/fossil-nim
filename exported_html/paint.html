@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paint - uirelays example — UIRelays Pure HTML5 + CSS3 (No JS · No Canvas · No WASM)</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #11111b;
+    color: #cdd6f4;
+    font-family: ui-monospace, "JetBrains Mono", "Fira Code", "Cascadia Mono", monospace;
+  }
+  .hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 18px;
+    background: #181825;
+    border-bottom: 1px solid #313244;
+    font-size: 12px;
+  }
+  .badge {
+    background: #a6e3a1;
+    color: #11111b;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+  }
+  .meta { color: #a6adc8; }
+  .stage-wrap {
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    overflow: auto;
+  }
+  .uir-viewport {
+    position: relative;
+    overflow: hidden;
+    background: #1e1e2e;
+    border: 1px solid #45475a;
+    border-radius: 6px;
+    box-shadow: 0 14px 36px rgba(0,0,0,0.55);
+    width: 800px;
+    height: 600px;
+    flex-shrink: 0;
+  }
+  .uir-rect, .uir-point, .uir-line-h, .uir-line-v, .uir-svg-line, .uir-text, .uir-img-crop, .uir-blit {
+    position: absolute;
+    pointer-events: none;
+  }
+  .uir-text {
+    white-space: pre;
+    line-height: 1;
+    font-family: ui-monospace, "JetBrains Mono", "Fira Code", "Cascadia Mono", monospace;
+  }
+  .uir-clip {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div class="hdr">
+    <div>
+      <span class="badge">PURE HTML5 + CSS3 · ZERO JS · ZERO CANVAS · ZERO WASM</span>
+      <strong style="margin-left:10px;">Paint - uirelays example</strong>
+      <span class="meta" style="margin-left:8px;">(paint.nim)</span>
+    </div>
+    <div class="meta">Size: 800×600 · DOM nodes: 45</div>
+  </div>
+  <div class="stage-wrap">
+    <div class="uir-viewport">
+<div class="uir-rect" style="left:0px;top:0px;width:800px;height:600px;background:rgb(30,30,46);"></div><div class="uir-rect" style="left:100px;top:100px;width:80px;height:80px;background:rgb(137,180,250);"></div><div class="uir-rect" style="left:170px;top:82px;width:80px;height:80px;background:rgb(137,180,250);"></div><div class="uir-rect" style="left:205px;top:118px;width:80px;height:80px;background:rgb(137,180,250);"></div><div class="uir-rect" style="left:275px;top:118px;width:80px;height:80px;background:rgb(137,180,250);"></div><div class="uir-rect" style="left:345px;top:118px;width:80px;height:80px;background:rgb(137,180,250);"></div><div class="uir-rect" style="left:415px;top:118px;width:80px;height:80px;background:rgb(137,180,250);"></div><div class="uir-rect" style="left:450px;top:82px;width:80px;height:80px;background:rgb(137,180,250);"></div><div class="uir-rect" style="left:520px;top:82px;width:80px;height:80px;background:rgb(137,180,250);"></div><div class="uir-rect" style="left:590px;top:82px;width:80px;height:80px;background:rgb(137,180,250);"></div><div class="uir-rect" style="left:100px;top:180px;width:80px;height:80px;background:rgb(245,194,231);"></div><div class="uir-rect" style="left:170px;top:162px;width:80px;height:80px;background:rgb(245,194,231);"></div><div class="uir-rect" style="left:240px;top:162px;width:80px;height:80px;background:rgb(245,194,231);"></div><div class="uir-rect" style="left:275px;top:198px;width:80px;height:80px;background:rgb(245,194,231);"></div><div class="uir-rect" style="left:345px;top:198px;width:80px;height:80px;background:rgb(245,194,231);"></div><div class="uir-rect" style="left:415px;top:198px;width:80px;height:80px;background:rgb(245,194,231);"></div><div class="uir-rect" style="left:485px;top:198px;width:80px;height:80px;background:rgb(245,194,231);"></div><div class="uir-rect" style="left:520px;top:162px;width:80px;height:80px;background:rgb(245,194,231);"></div><div class="uir-rect" style="left:590px;top:162px;width:80px;height:80px;background:rgb(245,194,231);"></div><div class="uir-rect" style="left:100px;top:260px;width:80px;height:80px;background:rgb(166,227,161);"></div><div class="uir-rect" style="left:170px;top:242px;width:80px;height:80px;background:rgb(166,227,161);"></div><div class="uir-rect" style="left:240px;top:242px;width:80px;height:80px;background:rgb(166,227,161);"></div><div class="uir-rect" style="left:310px;top:242px;width:80px;height:80px;background:rgb(166,227,161);"></div><div class="uir-rect" style="left:345px;top:278px;width:80px;height:80px;background:rgb(166,227,161);"></div><div class="uir-rect" style="left:415px;top:278px;width:80px;height:80px;background:rgb(166,227,161);"></div><div class="uir-rect" style="left:485px;top:278px;width:80px;height:80px;background:rgb(166,227,161);"></div><div class="uir-rect" style="left:555px;top:278px;width:80px;height:80px;background:rgb(166,227,161);"></div><div class="uir-rect" style="left:590px;top:242px;width:80px;height:80px;background:rgb(166,227,161);"></div><div class="uir-rect" style="left:100px;top:340px;width:80px;height:80px;background:rgb(249,226,175);"></div><div class="uir-rect" style="left:170px;top:322px;width:80px;height:80px;background:rgb(249,226,175);"></div><div class="uir-rect" style="left:240px;top:322px;width:80px;height:80px;background:rgb(249,226,175);"></div><div class="uir-rect" style="left:310px;top:322px;width:80px;height:80px;background:rgb(249,226,175);"></div><div class="uir-rect" style="left:380px;top:322px;width:80px;height:80px;background:rgb(249,226,175);"></div><div class="uir-rect" style="left:415px;top:358px;width:80px;height:80px;background:rgb(249,226,175);"></div><div class="uir-rect" style="left:485px;top:358px;width:80px;height:80px;background:rgb(249,226,175);"></div><div class="uir-rect" style="left:555px;top:358px;width:80px;height:80px;background:rgb(249,226,175);"></div><div class="uir-rect" style="left:590px;top:322px;width:80px;height:80px;background:rgb(249,226,175);"></div><div class="uir-rect" style="left:10px;top:8px;width:22px;height:22px;background:rgb(137,180,250);"></div><div class="uir-rect" style="left:40px;top:8px;width:22px;height:22px;background:rgb(245,194,231);"></div><div class="uir-rect" style="left:70px;top:8px;width:22px;height:22px;background:rgb(166,227,161);"></div><div class="uir-rect" style="left:100px;top:8px;width:22px;height:22px;background:rgb(249,226,175);"></div><div class="uir-line-h" style="left:100px;top:32px;width:23px;height:1px;background:rgb(205,214,244);"></div><div class="uir-rect" style="left:130px;top:8px;width:22px;height:22px;background:rgb(243,139,168);"></div><div class="uir-rect" style="left:160px;top:8px;width:22px;height:22px;background:rgb(205,214,244);"></div><div class="uir-rect" style="left:750px;top:8px;width:22px;height:22px;background:rgb(249,226,175);"></div>    </div>
+  </div>
+</body>
+</html>
