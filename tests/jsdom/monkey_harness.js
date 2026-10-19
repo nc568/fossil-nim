@@ -329,6 +329,156 @@ function checkViewport(window, report) {
 }
 
 // ---------------------------------------------------------------------------
+// D7 / D8 / D9 -- the browser must not dictate the layout.
+//
+// The relays own their viewport: minViewport is a floor, the inset is zero
+// unless the embedder says otherwise, the device pixel ratio is honoured for
+// the backing store but never for the logical size, and every element the
+// backend asks the shell to create must actually exist.
+// ---------------------------------------------------------------------------
+
+function checkBridge(window, errs, label) {
+  const tag = "[" + label + "] ";
+  const w = window;
+
+  // D7: the embedder may publish a minimum viewport; the backend must honour
+  // it. It need not publish one -- the backend then uses its own floor.
+  const mv = w.__uirMinViewport;
+  if (mv !== undefined && mv !== null &&
+      (typeof mv.w !== "number" || typeof mv.h !== "number" ||
+       !(mv.w > 0) || !(mv.h > 0))) {
+    errs.push(tag + "D7 __uirMinViewport is malformed: " + JSON.stringify(mv));
+  }
+  // D8: an inset is opt-in. A hard-coded one is the bug this guards against.
+  const inset = w.__uirViewportInset;
+  if (inset !== undefined && inset !== null &&
+      (typeof inset.x !== "number" || typeof inset.y !== "number" ||
+       inset.x < 0 || inset.y < 0)) {
+    errs.push(tag + "D8 __uirViewportInset is malformed: " + JSON.stringify(inset));
+  }
+  // D9: the device pixel ratio drives the backing store only. The HTML
+  // backend never publishes one (it has no backing store); the canvas
+  // backend must, and its canvas must be sized in device pixels.
+  const dpr = w.__uirDpr;
+  const canvas = w.document.getElementById("uir-canvas");
+  if (dpr !== undefined || canvas !== null) {
+    if (typeof dpr !== "number" || !(dpr > 0) || !(dpr < 16)) {
+      errs.push(tag + "D9 __uirDpr is missing or absurd: " + dpr);
+    }
+  }
+  if (canvas !== null && typeof dpr === "number" && dpr > 0) {
+    const r = canvas.getBoundingClientRect();
+    const wantW = Math.max(1, Math.round(r.width * dpr));
+    const wantH = Math.max(1, Math.round(r.height * dpr));
+    if (canvas.width !== wantW || canvas.height !== wantH) {
+      errs.push(tag + "D9 backing store is " + canvas.width + "x" + canvas.height +
+                ", expected " + wantW + "x" + wantH + " at dpr " + dpr);
+    }
+  }
+  const missing = w.__uirMissingElements;
+  if (Array.isArray(missing) && missing.length > 0) {
+    errs.push(tag + "shell is missing elements: " + missing.join(","));
+  }
+  for (const fn of ["__uirRequestStep", "__uirSetTitle", "__uirCopyToSystem",
+                    "__uirTriggerResizeObservers", "__uirSyncViewportSize"]) {
+    if (typeof w[fn] !== "function") errs.push(tag + "bridge is missing " + fn);
+  }
+  // A measured string must never come back as zero or as a non-finite number,
+  // and the cache must not grow without bound.
+  const cache = w.__uirMeasureCache;
+  if (cache && typeof cache.forEach === "function") {
+    let bad = 0, n = 0;
+    cache.forEach((v) => {
+      n += 1;
+      if (typeof v !== "number" || !isFinite(v) || v <= 0 || v > 1e6) bad += 1;
+    });
+    if (bad > 0) errs.push(tag + "D2 " + bad + " bad entries in the text measure cache");
+    if (n > 20000) errs.push(tag + "D2 the text measure cache grows without bound: " + n);
+  }
+  return errs.length;
+}
+
+// Ask for a floor that is bigger than the natural one, then squeeze the stage.
+// Whatever the shell does, the app must never be told about a viewport
+// smaller than the floor it was given.
+async function floorStorm(window, errs, label, floorW, floorH) {
+  const w = window;
+  const prevMin = w.__uirMinViewport;
+  const prevInset = w.__uirViewportInset;
+  w.__uirMinViewport = { w: floorW, h: floorH };
+  w.__uirViewportInset = { x: 0, y: 0 };
+  const stage = w.__uirStage;
+  if (!stage) { w.__uirMinViewport = prevMin; w.__uirViewportInset = prevInset; return; }
+  const orig = { w: stage.w, h: stage.h };
+  for (const [sw, sh] of [[30, 20], [1, 1], [0, 0], [100, 100]]) {
+    stage.w = sw;
+    stage.h = sh;
+    if (typeof w.__uirTriggerResizeObservers === "function") w.__uirTriggerResizeObservers();
+    w.dispatchEvent(new w.Event("resize"));
+    await sleep(10);
+    if (typeof w.__uirSyncViewportSize === "function") w.__uirSyncViewportSize();
+    await sleep(10);
+    if (typeof w.__uirRequestStep === "function") {
+      try { w.__uirRequestStep(); } catch (e) { /* the loop may be done */ }
+    }
+    await sleep(10);
+    const vp = w.document.getElementById("uir-viewport");
+    if (!vp) { errs.push("[" + label + "] the viewport vanished during a resize storm"); break; }
+    const r = vp.getBoundingClientRect();
+    if (r.width < floorW || r.height < floorH) {
+      errs.push("[" + label + "] viewport fell below the requested floor " +
+                floorW + "x" + floorH + " at stage " + sw + "x" + sh +
+                ": " + r.width + "x" + r.height);
+    }
+  }
+  stage.w = orig.w;
+  stage.h = orig.h;
+  w.__uirMinViewport = prevMin;
+  w.__uirViewportInset = prevInset;
+  if (typeof w.__uirTriggerResizeObservers === "function") w.__uirTriggerResizeObservers();
+  if (typeof w.__uirSyncViewportSize === "function") w.__uirSyncViewportSize();
+  await sleep(30);
+}
+
+// Squeeze the stage down to nothing and back. An app that survives this is an
+// app that does not care what the window manager says.
+async function resizeStorm(window, errs, label) {
+  const stage = window.__uirStage;
+  if (!stage) return;
+  const sizes = [[320, 240], [120, 90], [40, 30], [1, 1], [stage.w, stage.h],
+                 [stage.w + 400, stage.h + 200], [200, 800]];
+  for (const [w, h] of sizes) {
+    stage.w = w;
+    stage.h = h;
+    if (typeof window.__uirTriggerResizeObservers === "function") {
+      window.__uirTriggerResizeObservers();
+    }
+    window.dispatchEvent(new window.Event("resize"));
+    await sleep(10);
+    if (typeof window.__uirRequestStep === "function") {
+      try { window.__uirRequestStep(); } catch (e) { /* the loop may be done */ }
+    }
+    await sleep(10);
+    const vp = window.document.getElementById("uir-viewport");
+    if (!vp) {
+      errs.push("[" + label + "] the viewport vanished during a resize storm");
+      return;
+    }
+    const r = vp.getBoundingClientRect();
+    if (!(r.width > 0) || !(r.height > 0)) {
+      errs.push("[" + label + "] viewport collapsed to " + r.width + "x" +
+                r.height + " after resizing to " + w + "x" + h);
+    }
+  }
+  stage.w = sizes[sizes.length - 3][0];
+  stage.h = sizes[sizes.length - 3][1];
+  if (typeof window.__uirTriggerResizeObservers === "function") {
+    window.__uirTriggerResizeObservers();
+  }
+  await sleep(30);
+}
+
+// ---------------------------------------------------------------------------
 // Monkey
 // ---------------------------------------------------------------------------
 
@@ -529,6 +679,10 @@ async function main() {
 
   await sleep(60);
   report.missingShellElements = window.__uirMissingElements || [];
+  const startupBridge = [];
+  checkBridge(window, startupBridge, "startup");
+  report.bridgeViolations = startupBridge.slice();
+  for (const e of startupBridge) errors.push(e);
 
   let appIds = opts.apps;
   if (!appIds || appIds.length === 0) {
@@ -552,10 +706,19 @@ async function main() {
       maxTextOverflowPx: 0, textClicks: 0
     };
     const rendered = await monkeyOneApp(window, appId, opts, sub);
+    checkBridge(window, sub.errors, appId || "standalone");
+    await resizeStorm(window, sub.errors, appId || "standalone");
+    await floorStorm(window, sub.errors, appId || "standalone", 500, 400);
+    checkBridge(window, sub.errors, appId || "standalone");
     perApp.rendered = rendered;
     perApp.errors = sub.errors.length;
     perApp.domNodes = sub.maxNodes;
     perApp.maxTextOverflowPx = sub.maxTextOverflowPx;
+    const postNodes = window.document.getElementById("uir-viewport")
+      ? window.document.getElementById("uir-viewport")
+          .querySelectorAll("*").length + 1
+      : 0;
+    if (postNodes > perApp.domNodes) perApp.domNodes = postNodes;
     if (sub.maxTextOverflowPx > report.maxTextOverflowPx) report.worstOverflow = sub.worstOverflow;
     for (const e of sub.errors) errors.push("[" + (appId || "standalone") + "] " + e);
     report.maxTextOverflowPx = Math.max(report.maxTextOverflowPx, sub.maxTextOverflowPx);

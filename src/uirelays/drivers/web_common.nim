@@ -1134,6 +1134,12 @@ when defined(js):
     webCore.clipboardText = $txt
 
   proc bindJsBrowserListeners() =
+    # Each backend owns a different viewport id, and an HTML page must never
+    # be asked to provide a `<canvas>` it is not allowed to draw into.
+    when defined(canvas):
+      {.emit: """var __uirShellViewportId = "uir-canvas";""".}
+    else:
+      {.emit: """var __uirShellViewportId = "uir-viewport";""".}
     # The canvas build has to size a backing store; the HTML build is not
     # allowed to touch a canvas at all, so the two get different helpers.
     when defined(canvas):
@@ -1259,25 +1265,32 @@ when defined(js):
       // matching feature silently does nothing, which costs an evening to
       // find; say so once, on the console, at startup.
       (function reportShellContract() {
-        var ids = ["uir-viewport", "uir-canvas", "uir-stage", "uir-clipboard-input",
-                   "uir-win-title", "uir-btn-clip-sync", "uir-btn-resize-960",
-                   "uir-btn-resize-800", "uir-btn-resize-auto", "uir-btn-close"];
-        var missing = [];
-        for (var i = 0; i < ids.length; i++) {
-          if (!document.getElementById(ids[i])) missing.push("#" + ids[i]);
-        }
+        // The two backends need different ids. Asking an HTML page for
+        // `#uir-canvas` only ever produced a warning that made no sense --
+        // and nudged embedders into shipping a canvas element the backend is
+        // forbidden to use.
+        // Required: without these a feature is dead, not merely inconvenient.
+        var required = [__uirShellViewportId, "uir-stage", "uir-clipboard-input"];
+        // Optional: a minimal embedder, or the exported app gallery, ships no
+        // toolbar at all and that is perfectly fine.
+        var optional = ["uir-win-title", "uir-btn-clip-sync", "uir-btn-resize-960",
+                        "uir-btn-resize-800", "uir-btn-resize-auto", "uir-btn-close"];
+        var collect = function(ids) {
+          var out = [];
+          for (var i = 0; i < ids.length; i++) {
+            if (!document.getElementById(ids[i])) out.push("#" + ids[i]);
+          }
+          return out;
+        };
+        var missing = collect(required);
         window.__uirMissingElements = missing;
+        window.__uirMissingOptional = collect(optional);
         var hasViewport = document.getElementById("uir-viewport") || document.getElementById("uir-canvas");
         if (typeof console !== "undefined" && console.warn) {
           if (!hasViewport) {
-            console.warn("[uirelays] no #uir-viewport (or #uir-canvas) in the page: nothing will be drawn.");
-          } else {
-            var core = [];
-            if (!document.getElementById("uir-stage")) core.push("#uir-stage (viewport falls back to window size)");
-            if (!document.getElementById("uir-clipboard-input")) core.push("#uir-clipboard-input (paste and clipboard sync stay inert)");
-            if (core.length > 0) {
-              console.warn("[uirelays] shell contract incomplete: " + core.join(", ") + ".");
-            }
+            console.warn("[uirelays] no #" + __uirShellViewportId + " in the page: nothing will be drawn.");
+          } else if (missing.length > 0) {
+            console.warn("[uirelays] shell contract incomplete: " + missing.join(", ") + ".");
           }
         }
       })();
