@@ -89,6 +89,12 @@ ancestor of `feat/foccil-db-v0.1`; the two histories are siblings. Nothing has
 been merged either way — that is a decision for the repo owner, and the branch
 stays as instructed until the implementation is complete.
 
+## Pushed (verified)
+
+`0c6db5c` was pushed and confirmed with `git ls-remote` after the fact. The
+pending-push note below is history, kept because the lesson ("check the remote,
+do not assume") is the one that mattered.
+
 ## Pending: the crypto-v2 commit is local only
 
 `eed5283` (XChaCha20, random nonces, MAC over pageId ‖ generation ‖ nonce ‖ ct)
@@ -101,3 +107,9 @@ git push "https://x-access-token:<PAT>@github.com/nc568/fossil-nim.git" feat/foc
 
 Do not write the token to `.git/config`; the one-shot URL above is the whole
 point. Until then the branch on GitHub stops at `1b77b9d`.
+
+## Last push (2026-10-19, audit-lessons run)
+
+Branch `feat/foccil-db-v0.1`: `1fe3511` — storage input validation + `t_corrupt`
++ `docs/db/{ru,en}/audit-lessons.md`. Gate: 26 + 20 + 17 + 18 + 24 + 3 + 34 + 10
+= **152 tests**.
