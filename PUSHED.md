@@ -69,3 +69,35 @@ The session hit the 128 MB / 10 000-file limit on toolchain docs and rebuild
 output, not on source. `tools/db/clean.sh` trims both and prints the current
 footprint; run it after a long session. Push first — everything that matters is
 on the branch, so the local tree is disposable.
+
+## Verification of the remote (2026-10-19, last run)
+
+```
+$ git ls-remote https://github.com/nc568/fossil-nim.git
+03cddeb04b0ce49d96aff873e4934fc27cbcd4ec	HEAD
+1b77b9dedbc984e380cd5f3eff4b5e43fffde41d	refs/heads/feat/foccil-db-v0.1
+03cddeb04b0ce49d96aff873e4934fc27cbcd4ec	refs/heads/main
+```
+
+`1b77b9d` is on the remote branch — the local tree really was disposable.
+
+**But `main` is no longer `dd7630e`.** It moved to `03cddeb` ("security: full
+audit 2026-10-19 — 33 live-confirmed vulns + PoC suite"), which adds
+`docs/SECURITY_AUDIT_2026-10-19_FULL_RU.md` and `poc/poc_all.py` and touches no
+code. The local `main` ref is stale at `dd7630e`. The audit commit is **not** an
+ancestor of `feat/foccil-db-v0.1`; the two histories are siblings. Nothing has
+been merged either way — that is a decision for the repo owner, and the branch
+stays as instructed until the implementation is complete.
+
+## Pending: the crypto-v2 commit is local only
+
+`eed5283` (XChaCha20, random nonces, MAC over pageId ‖ generation ‖ nonce ‖ ct)
+is committed and green but **not pushed**: this workspace has no remote configured
+and no credential in the environment. To publish it:
+
+```sh
+git push "https://x-access-token:<PAT>@github.com/nc568/fossil-nim.git" feat/foccil-db-v0.1
+```
+
+Do not write the token to `.git/config`; the one-shot URL above is the whole
+point. Until then the branch on GitHub stops at `1b77b9d`.
