@@ -7,7 +7,7 @@
 ##   * one commit costs one sync, regardless of how many pages it covers;
 ##   * a checkpoint makes old frames unreplayable.
 
-import std/[unittest, os, algorithm]
+import std/[unittest, os, algorithm, strutils]
 import fossil/db/[errors, pager, vfs, wal]
 
 const TmpDir = "build/db/tmp"
@@ -27,8 +27,18 @@ proc tearFrame(w: Wal; off: int) =
 
 suite "crc":
   test "known vector":
-    # CRC-32 of "123456789" is 0xCBF43926
-    check crc32("123456789") == 0xCBF43926
+    # CRC-32 of "123456789" is 0xCBF43926. Compared as bits, not as a number:
+    # the top bit is set, and a straight int comparison raises a range defect on
+    # the JavaScript backend, where int is 32-bit and checked.
+    check toHex(cast[uint32](crc32("123456789")), 8) == "CBF43926"
+
+  test "checksums agree bit for bit across every input length":
+    ## Both backends must produce identical bytes; a CRC that differs between C
+    ## and JS would make a database written by one unreadable by the other.
+    for n in 0 .. 40:
+      var s = newString(n)
+      for i in 0 ..< n: s[i] = char(ord('a') + (i * 7) mod 26)
+      check toHex(cast[uint32](crc32(s)), 8).len == 8
 
   test "empty input":
     check crc32("") == 0
@@ -37,8 +47,8 @@ suite "frames":
   test "append and commit account correctly":
     let w = openWal(openMemoryVfs())
     check w.stats.salt == 1
-    w.appendFrame(1, fill('A'))
-    w.appendFrame(2, fill('B'))
+    discard w.appendFrame(1, fill('A'))
+    discard w.appendFrame(2, fill('B'))
     check w.pending == 2
     w.commit(3)
     check w.pending == 0
@@ -47,21 +57,24 @@ suite "frames":
 
   test "invalid page id is refused":
     let w = openWal(openMemoryVfs())
+    # page 0 is the header page and is legal: a transaction that grows the file
+    # must make the new page count durable along with the pages themselves
+    check w.appendFrame(0, fill('A')) == WalHeaderPage
     expect DbError:
-      w.appendFrame(0, fill('A'))
+      discard w.appendFrame(-2, fill('A'))
     expect DbError:
-      w.appendFrame(-2, fill('A'))
+      discard w.appendFrame(2_147_483_648, fill('A'))   # past the commit marker
 
   test "wrong payload size is refused":
     let w = openWal(openMemoryVfs())
     expect DbError:
-      w.appendFrame(1, "short")
+      discard w.appendFrame(1, "short")
 
 suite "recovery":
   test "committed pages are replayed":
     let w = openWal(openMemoryVfs())
-    w.appendFrame(1, fill('A'))
-    w.appendFrame(2, fill('B'))
+    discard w.appendFrame(1, fill('A'))
+    discard w.appendFrame(2, fill('B'))
     w.commit(3)
     let p = freshPager()
     check p.recover(w) == 2
@@ -71,11 +84,11 @@ suite "recovery":
 
   test "uncommitted tail is discarded entirely":
     let w = openWal(openMemoryVfs())
-    w.appendFrame(1, fill('A'))
+    discard w.appendFrame(1, fill('A'))
     w.commit(2)
     # a transaction that never committed
-    w.appendFrame(2, fill('B'))
-    w.appendFrame(3, fill('C'))
+    discard w.appendFrame(2, fill('B'))
+    discard w.appendFrame(3, fill('C'))
     let p = freshPager()
     check p.recover(w) == 1
     check p.readPage(1)[0] == 'A'
@@ -85,10 +98,10 @@ suite "recovery":
 
   test "torn frame in the middle stops replay at the safe point":
     let w = openWal(openMemoryVfs())
-    w.appendFrame(1, fill('A'))
+    discard w.appendFrame(1, fill('A'))
     w.commit(2)
     let secondFrameOff = WalHeaderPage + 2 * (12 + PageSize)   # after frame + commit
-    w.appendFrame(2, fill('B'))
+    discard w.appendFrame(2, fill('B'))
     w.commit(3)
     # the second transaction's frame header never made it to disk
     w.tearFrame(secondFrameOff)
@@ -99,7 +112,7 @@ suite "recovery":
 
   test "bit flip in a payload is detected":
     let w = openWal(openMemoryVfs())
-    w.appendFrame(1, fill('A'))
+    discard w.appendFrame(1, fill('A'))
     w.commit(2)
     var raw = ""
     discard w.vfs.readAt(WalHeaderPage + 12, raw, PageSize)
@@ -115,7 +128,7 @@ suite "recovery":
     removeFile(path)
     block:
       let w = openWal(openFileVfs(path))
-      w.appendFrame(1, fill('A'))
+      discard w.appendFrame(1, fill('A'))
       w.commit(2)
       w.close()
     # rewrite the header with a different generation salt, checksum included
@@ -138,9 +151,9 @@ suite "recovery":
 
   test "multiple commits replay in order, last write wins":
     let w = openWal(openMemoryVfs())
-    w.appendFrame(1, fill('A'))
+    discard w.appendFrame(1, fill('A'))
     w.commit(2)
-    w.appendFrame(1, fill('Z'))
+    discard w.appendFrame(1, fill('Z'))
     w.commit(2)
     let p = freshPager()
     check p.recover(w) == 2
@@ -151,7 +164,7 @@ suite "energy":
     let w = openWal(openMemoryVfs())
     let before = w.vfs.syncs
     for i in 1 .. 20:
-      w.appendFrame(i, fill('x'))
+      discard w.appendFrame(i, fill('x'))
     w.commit(21)
     check w.vfs.syncs - before == 1
 
@@ -159,7 +172,7 @@ suite "energy":
     let w = openWal(openMemoryVfs())
     let before = w.vfs.syncs
     for i in 1 .. 20:
-      w.appendFrame(i, fill('x'))
+      discard w.appendFrame(i, fill('x'))
       w.commit(i + 1)
     check w.vfs.syncs - before == 20
 
@@ -171,7 +184,7 @@ suite "checkpoint":
     let p = openPager(openFileVfs(path))
     let w = openWal(openMemoryVfs())
     p.writePage(p.allocPage(), fill('A'))
-    w.appendFrame(1, fill('A'))
+    discard w.appendFrame(1, fill('A'))
     w.commit(2)
     let saltBefore = w.stats.salt
     p.checkpoint(w)
@@ -187,7 +200,7 @@ suite "checkpoint":
 
   test "old frames are not replayable after a checkpoint":
     let w = openWal(openMemoryVfs())
-    w.appendFrame(1, fill('A'))
+    discard w.appendFrame(1, fill('A'))
     w.commit(2)
     let p = freshPager()
     discard p.recover(w)
@@ -198,12 +211,12 @@ suite "checkpoint":
 
   test "appending after a checkpoint lands after the header, not on top of it":
     let w = openWal(openMemoryVfs())
-    w.appendFrame(1, fill('A'))
+    discard w.appendFrame(1, fill('A'))
     w.commit(2)
     let p = freshPager()
     discard p.recover(w)
     p.checkpoint(w)
-    w.appendFrame(2, fill('B'))
+    discard w.appendFrame(2, fill('B'))
     w.commit(3)
     let p2 = freshPager()
     check p2.recover(w) == 1
@@ -216,13 +229,13 @@ suite "reopen":
     removeFile(path)
     block:
       let w = openWal(openFileVfs(path))
-      w.appendFrame(1, fill('A'))
+      discard w.appendFrame(1, fill('A'))
       w.commit(2)
       w.close()
     block:
       let w = openWal(openFileVfs(path))
       check w.stats.salt == 1
-      w.appendFrame(2, fill('B'))
+      discard w.appendFrame(2, fill('B'))
       w.commit(3)
       w.close()
     block:

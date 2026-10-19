@@ -31,6 +31,14 @@ type
     nPages*: int                    ## logical page count (excluding page 0)
     freeHead*: int                  ## first page of the freelist, 0 = none
     root*: int                      ## B+tree root page, 0 = no tree yet
+
+    # Write-ahead-log hooks. The pager must not import `wal` — `wal` imports the
+    # pager — so the log plugs in through these instead of through a hard
+    # dependency, and a pager without a log behaves exactly as before.
+    walIndex*: Table[int, int]      ## pid -> offset of its newest live frame
+    walRead*: proc(off: int; payload: var string): bool {.closure.}
+    walStage*: proc(p: Pager) {.closure.}
+    walCommit*: proc(p: Pager) {.closure.}
     hits*, misses*, evictions*, flushes*: int
 
   PagerStats* = object
@@ -60,6 +68,19 @@ proc writeI32(s: var string; at: int; v: int32) =
   s[at + 2] = char((u shr 8) and 0xFF)
   s[at + 3] = char(u and 0xFF)
 
+proc makeHeader(nPages, freeHead, root: int): string   # forward
+proc parseHeader(p: Pager; hdr: string): bool           # forward
+
+proc applyHeaderPage*(p: Pager; data: string) =
+  ## Used by log replay: the header travels through the log as page 0 and has to
+  ## be written back through the header path, not as an ordinary page.
+  if data.len != PageSize or not parseHeader(p, data):
+    fail(corrupt, "log holds an unreadable header page")
+
+proc headerPage*(p: Pager): string =
+  ## The header as bytes. The log stages it like any other page.
+  makeHeader(p.nPages, p.freeHead, p.root)
+
 proc makeHeader(nPages, freeHead, root: int): string =
   result = blankPage()
   for i in 0 ..< DbMagic.len: result[i] = DbMagic[i]
@@ -82,7 +103,13 @@ proc parseHeader(p: Pager; hdr: string): bool =
 # cache
 # ---------------------------------------------------------------------------
 
+iterator dirtyPages*(p: Pager): int =
+  ## Page ids that changed since they were last staged. The log needs the list;
+  ## everything else should go through `readPage`.
+  for pid in p.dirty: yield pid
+
 proc flush*(p: Pager)   # forward: eviction may force a flush
+proc flushToVfs*(p: Pager)   # forward: flush falls back to it
 
 proc touch(p: Pager; pid: int) =
   var i = 0
@@ -115,6 +142,12 @@ proc evictOne(p: Pager) =
   p.lru.delete(0)
 
 proc loadPage(p: Pager; pid: int): string =
+  # A page whose newest image is in the log must not be read from the main
+  # file: the file is one commit behind. This is the whole reason the index
+  # exists — drop it and an eviction silently serves stale rows.
+  if p.walRead != nil and p.walIndex.hasKey(pid):
+    var payload = ""
+    if p.walRead(p.walIndex[pid], payload): return payload
   result = blankPage()
   let off = pid * PageSize
   var buf = ""
@@ -151,7 +184,19 @@ proc writePage*(p: Pager; pid: int; data: string) =
   if pid >= p.nPages: p.nPages = pid + 1
 
 proc flush*(p: Pager) =
-  ## Writes every dirty page, then the header, then syncs once.
+  ## With a log attached this *stages*: frames go to the log, no sync. Durability
+  ## is the commit's job, and one commit costs one fsync however many pages it
+  ## covers. Without a log it keeps the old meaning: write, header, sync.
+  if p.walStage != nil:
+    p.walStage(p)
+    p.dirty.clear()
+    inc p.flushes
+    return
+  p.flushToVfs()
+
+proc flushToVfs*(p: Pager) =
+  ## Bypasses the log on purpose: a checkpoint has to put pages in the main file
+  ## while the log is still authoritative, or the fold would feed itself.
   for pid in p.dirty:
     if not p.vfs.writeAt(pid * PageSize, p.pages[pid]):
       failf(ioErr, "write failed on page $1", pid)
@@ -209,13 +254,21 @@ proc freeCount*(p: Pager): int =
 # lifecycle
 # ---------------------------------------------------------------------------
 
-proc openPager*(vfs: Vfs; cachePages = DefaultCachePages): Pager =
+proc openPager*(vfs: Vfs; cachePages = DefaultCachePages;
+                allowTornHeader = false): Pager =
   result = Pager(vfs: vfs, capacity: max(cachePages, 4),
                  pages: initTable[int, string](), dirty: initHashSet[int]())
-  if vfs.size == 0:
-    # Brand new store. Page 0 is the header, so the first data page is 1.
+  if vfs.size < PageSize and vfs.size > 0 and not allowTornHeader:
+    # A short file is corruption unless someone can repair it. Only the log
+    # path may ask for leniency, because only the log can supply page 0.
+    fail(corrupt, "database file is shorter than one page")
+  if vfs.size < PageSize:
+    # Brand new store, or a header whose write was torn and which the log will
+    # restore from its own page-0 frame. Refusing to open here would turn a
+    # recoverable crash into permanent data loss.
     result.nPages = 1
     result.freeHead = 0
+    result.root = 0
     discard vfs.writeAt(0, makeHeader(0, 0, 0))
     return
   var hdr = ""
@@ -228,6 +281,7 @@ proc openPager*(vfs: Vfs; cachePages = DefaultCachePages): Pager =
 proc close*(p: Pager) =
   ## Flushes, then releases. Closing never discards dirty pages.
   if p.dirty.len > 0: p.flush()
+  if p.walCommit != nil: p.walCommit(p)     # staged frames must become durable
   p.pages.clear()
   p.lru.setLen(0)
   p.vfs.close()

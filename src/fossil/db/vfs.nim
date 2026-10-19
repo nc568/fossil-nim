@@ -35,6 +35,14 @@ type
     syncs*: int              ## number of fsync calls (energy proxy)
     bytesMoved*: int
 
+    # Crash injection, off by default and zero cost when off. Set `crashAt` to a
+    # byte count and the store dies once that many bytes have been written: the
+    # write that crosses the line is torn (only its head lands) and every later
+    # write is dropped, which is what a power cut actually looks like. Reads keep
+    # working, because the bytes are still on the platter.
+    crashAt*: int
+    dead*: bool
+
 proc openMemoryVfs*(): Vfs =
   Vfs(kind: vfsMemory, mem: "", isOpen: true)
 
@@ -101,25 +109,50 @@ proc readAt*(v: Vfs; off: int; dst: var string; len: int): bool =
 
 proc writeAt*(v: Vfs; off: int; src: string): bool =
   ## Grows the store as needed; a gap is zero-filled, never left as garbage.
+  if v.dead and v.crashAt > 0: return false      # the machine is off
   if not v.isOpen or off < 0: return false
+  var body = src
+  if v.crashAt > 0 and v.bytesMoved + body.len > v.crashAt:
+    # Tear this write, then stay dead. Truncating instead of dropping the whole
+    # write is the point: a half-written page is exactly what recovery must
+    # survive, and a store that only ever loses whole writes tests nothing.
+    let room = max(0, v.crashAt - v.bytesMoved)
+    body.setLen(min(room, body.len))
+    v.dead = true
   case v.kind
   of vfsMemory:
-    if off + src.len > v.mem.len:
-      let newLen = off + src.len
+    if off + body.len > v.mem.len:
+      let newLen = off + body.len
       let old = v.mem.len
       v.mem.setLen(newLen)
       for i in old ..< newLen: v.mem[i] = '\0'
-    for i in 0 ..< src.len: v.mem[off + i] = src[i]
+    for i in 0 ..< body.len: v.mem[off + i] = body[i]
   of vfsFile:
     when not defined(js):
       setFilePos(v.f, off, fspSet)
-      if src.len > 0:
-        if writeChars(v.f, src, 0, src.len) != src.len: return false
+      if body.len > 0:
+        if writeChars(v.f, body, 0, body.len) != body.len: return false
     else:
       return false
   inc v.ioWrites
-  inc v.bytesMoved, src.len
+  inc v.bytesMoved, body.len
   true
+
+proc snapshot*(v: Vfs): string =
+  ## The bytes as they are on the platter right now. Used by the crash tests to
+  ## restart from exactly what survived, not from what the program wanted.
+  case v.kind
+  of vfsMemory: v.mem
+  of vfsFile:
+    when not defined(js):
+      var all = ""
+      discard v.readAt(0, all, v.size)
+      all
+    else: ""
+
+proc reopenFrom*(v: Vfs; bytes: string): Vfs =
+  result = openMemoryVfs()
+  result.mem = bytes
 
 proc truncate*(v: Vfs; n: int) =
   if not v.isOpen or n < 0: return

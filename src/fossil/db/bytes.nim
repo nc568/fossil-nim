@@ -18,13 +18,13 @@ proc getI32*(s: string; at: int): int =
   var u: uint32
   for i in 0 .. 3:
     u = (u shl 8) or uint32(uint8(s[at + i]))
-  when sizeof(int) == 8:
-    if (u and 0x8000_0000'u32) != 0: int(u) - (1 shl 32) else: int(u)
-  else:
-    cast[int32](u).int
+  cast[int32](u).int
 
 proc putI32*(s: var string; at: int; v: int) =
-  let u = uint32(v)
+  # `uint32(v)` range-checks: a negative value is a defect in a debug build and
+  # a silently wrong number in some others. The field is a 32-bit pattern, not a
+  # number, so reinterpret the bits instead of converting them.
+  let u = cast[uint32](v)
   s[at] = char((u shr 24) and 0xFF)
   s[at + 1] = char((u shr 16) and 0xFF)
   s[at + 2] = char((u shr 8) and 0xFF)

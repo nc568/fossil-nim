@@ -23,7 +23,8 @@
 ## Deliberately absent: any notion of a second writer. A single-writer log is the
 ## whole reason SQLite users get "database is locked" at 3 a.m.
 
-import fossil/db/[errors, vfs, pager]
+import std/tables
+import fossil/db/[bytes, errors, pager, vfs]
 
 const
   WalMagic* = "FOCWAL01"
@@ -44,6 +45,7 @@ type
     staged*: int                      ## frames written but not yet committed
     commits*: int
     appliedOnRecovery*: int
+    index*: Table[int, int]           ## pid -> offset of its newest live frame
 
   WalStats* = object
     salt*: int
@@ -54,19 +56,6 @@ type
 # ---------------------------------------------------------------------------
 # binary helpers — big-endian, no casts, no pointers
 # ---------------------------------------------------------------------------
-
-proc putI32(s: var string; at: int; v: int) =
-  let u = uint32(v)
-  s[at + 0] = char((u shr 24) and 0xFF)
-  s[at + 1] = char((u shr 16) and 0xFF)
-  s[at + 2] = char((u shr 8) and 0xFF)
-  s[at + 3] = char(u and 0xFF)
-
-proc getI32(s: string; at: int): int =
-  var u: uint32 = 0
-  for i in 0 .. 3:
-    u = (u shl 8) or uint32(uint8(s[at + i]))
-  int(u)
 
 proc crc32*(data: string; fromPos = 0; toPos = -1): int =
   ## CRC-32 (IEEE 802.3), computed bitwise.
@@ -84,7 +73,11 @@ proc crc32*(data: string; fromPos = 0; toPos = -1): int =
         c = (c shr 1) xor 0xEDB88320'u32
       else:
         c = c shr 1
-  int(c xor 0xFFFFFFFF'u32)
+  # `int(bits)` raises in JavaScript as soon as the top bit is set, because Nim's
+  # `int` is range-checked there while C is not — the two backends would disagree
+  # on roughly half of all checksums. Casting through int32 keeps the same bits
+  # and behaves identically in both.
+  cast[int32](c xor 0xFFFFFFFF'u32).int
 
 proc frameCrc(pid, salt: int; payload: string): int =
   ## Checksum covers pid, salt and payload — and *not* the checksum field
@@ -142,7 +135,7 @@ proc openWal*(vfs: Vfs; basePages = 1): Wal =
           var payload = ""
           if not vfs.readAt(off + 12, payload, PageSize): break
           if frameCrc(pid, salt, payload) != hdr.getI32(8): break
-          if pid < 1 or pid > CommitPid: break
+          if pid < 0 or pid > CommitPid: break
           off += 12 + PageSize
         result.nextOff = off
         return
@@ -161,21 +154,27 @@ proc stats*(w: Wal): WalStats =
 # append
 # ---------------------------------------------------------------------------
 
-proc appendFrame*(w: Wal; pid: int; payload: string) =
+proc appendFrame*(w: Wal; pid: int; payload: string): int =
   ## Stages one page image. No sync: durability is decided by `commit`.
+  ## Returns the frame's offset, which is how the pager later finds a page whose
+  ## newest image only exists here.
   if payload.len != PageSize:
     failf(mismatch, "WAL payload must be $1 bytes, got $2", PageSize, payload.len)
-  if pid < 1 or pid > CommitPid:      # CommitPid is the commit marker itself
+  # Page 0 is the header page. It has to travel through the log like any other
+  # page, otherwise a transaction that changes the page count is only half
+  # durable: the pages land, the count does not.
+  if pid < 0 or pid > CommitPid:      # CommitPid is the commit marker itself
     failf(range, "invalid page id in WAL: $1", pid)
   var hdr = newString(12)
   hdr.putI32(0, pid)
   hdr.putI32(4, w.salt)
   hdr.putI32(8, frameCrc(pid, w.salt, payload))
+  result = w.nextOff
   discard w.vfs.writeAt(w.nextOff, hdr & payload)
   w.nextOff += 12 + PageSize
   inc w.staged
 
-proc appendPage*(w: Wal; pid: int; page: string) =
+proc appendPage*(w: Wal; pid: int; page: string): int =
   ## Convenience for closed page images.
   w.appendFrame(pid, page)
 
@@ -184,7 +183,7 @@ proc commit*(w: Wal; nPages: int) =
   var payload = newString(PageSize)
   for i in 0 ..< PageSize: payload[i] = '\0'
   payload.putI32(0, nPages)
-  w.appendFrame(CommitPid, payload)
+  discard w.appendFrame(CommitPid, payload)
   w.vfs.sync()
   w.staged = 0
   inc w.commits
@@ -205,7 +204,13 @@ proc readFrame(w: Wal; off: int; pid: var int; payload: var string): bool =
   if not w.vfs.readAt(off + 12, payload, PageSize): return false
   pid = hdr.getI32(0)
   if frameCrc(pid, hdr.getI32(4), payload) != hdr.getI32(8): return false
-  pid >= 1 and pid <= CommitPid
+  pid >= 0 and pid <= CommitPid
+
+proc readFrameAt*(w: Wal; off: int; payload: var string): bool =
+  ## Payload of the frame at `off`, checked. Used by the pager to serve a read
+  ## for a page whose newest image only exists in the log.
+  var pid = 0
+  w.readFrame(off, pid, payload)
 
 proc recover*(p: Pager; w: Wal): int =
   ## Replays the committed prefix of the log into the pager.
@@ -244,8 +249,12 @@ proc recover*(p: Pager; w: Wal): int =
       if applied >= committedPages: break        # boundary reached
     else:
       if applied >= committedPages: break
-      if pid >= p.nPages: p.nPages = pid + 1
-      p.writePage(pid, payload)
+      if pid == 0:
+        p.applyHeaderPage(payload)        # page count, freelist, tree root
+      else:
+        if pid >= p.nPages: p.nPages = pid + 1
+        p.writePage(pid, payload)
+      w.index[pid] = off
       inc applied
     off += 12 + PageSize
     inc seen

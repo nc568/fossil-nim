@@ -17,12 +17,13 @@ WebAssembly. Not a port of SQLite — a rewrite with the legacy cut out.
 | [Storage engine](../en/storage.md) | VFS tiers, 4 KiB pages, LRU cache, freelist |
 | [WAL](../en/wal.md) | durability contract, frame checksums, group commit, checkpoint |
 | [B+tree](../en/btree.md) | page format, per-child minimums, overflow values, verification |
+| [Crash recovery](../en/recovery.md) | write-through log, checkpoint ordering, 1000-iteration crash fuzzer |
 
 ## Quick facts
 
 ```
 Engine size        4 492 LOC          (SQLite: ~150 000)
-Tests              26 core + 20 security + 17 storage + 17 WAL + 24 btree
+Tests              26 core + 20 security + 17 storage + 18 WAL + 24 btree + 3 crash
 Backend parity     native == JS, byte for byte (md5 0376a7c4…)
 wasm              328 KB, no emscripten, no wasi-sdk
 Point lookup      185 842 q/s  (was 56 q/s before the index planner)
