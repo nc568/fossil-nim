@@ -61,6 +61,8 @@ type
     fonts*: seq[WebFontSlot]
     images*: seq[WebImageSlot]
     eventQueue*: seq[Event]
+    minViewportW*: int          ## floor the application asked for (0 = none)
+    minViewportH*: int
     frameId*: int
     lastPayloadHash*: uint64
     lastFrameJson*: string
@@ -95,6 +97,20 @@ proc fnv1a64*(s: string): uint64 {.inline.} =
     result = uint64(h)
   else:
     result = 14695981039346656037'u64
+    for i in 0 ..< s.len:
+      result = (result xor uint64(ord(s[i]))) * 1099511628211'u64
+
+proc fnv1a64Step*(h: uint64; s: string): uint64 {.inline.} =
+  ## Folds `s` into a running FNV-1a hash. Lets a caller hash a structured
+  ## frame without concatenating it into one throwaway string first.
+  when defined(js):
+    var g = uint32(h and 0xFFFFFFFF'u64)
+    for i in 0 ..< s.len:
+      g = g xor uint32(ord(s[i]))
+      g = uint32((uint64(g) * 16777619'u64) and 0xFFFFFFFF'u64)
+    result = uint64(g)
+  else:
+    result = h
     for i in 0 ..< s.len:
       result = (result xor uint64(ord(s[i]))) * 1099511628211'u64
 
@@ -656,6 +672,21 @@ proc webRestoreState*() =
 proc webSetClipRect*(r: Rect) =
   webCore.currentClip = WebClipState(enabled: true, rect: r)
 
+proc webSetMinViewport*(w, h: int) =
+  ## Publishes the application's floor and re-measures at once, so the very
+  ## first frame is drawn at a size the app can actually lay out.
+  webCore.minViewportW = max(0, w)
+  webCore.minViewportH = max(0, h)
+  when defined(js):
+    let wv = webCore.minViewportW
+    let hv = webCore.minViewportH
+    {.emit: """
+    window.__uirAppMinViewport = { w: `wv`, h: `hv` };
+    if (typeof window.__uirSyncViewportSize === "function") {
+      window.__uirSyncViewportSize();
+    }
+    """.}
+
 proc webSetCursor*(c: CursorKind) =
   webCore.currentCursor = c
 
@@ -913,8 +944,13 @@ proc webInjectMouse*(kind: EventKind; x, y: int; button = LeftButton; clicks = 1
   ))
 
 proc webInjectResize*(w, h: int; uiScale = 100) =
-  let clampedW = clamp(w, 120, 4096)
-  let clampedH = clamp(h, 120, 4096)
+  # The application's own floor raises the built-in one: a browser may offer
+  # less room than the app can draw in, but the app still has to be handed a
+  # size it can lay out, or it renders interface nobody can reach.
+  let floorW = max(120, webCore.minViewportW)
+  let floorH = max(120, webCore.minViewportH)
+  let clampedW = clamp(w, floorW, max(floorW, 4096))
+  let clampedH = clamp(h, floorH, max(floorH, 4096))
   let clampedScale = clamp(uiScale, 50, 400)
   webCore.layout.width = clampedW
   webCore.layout.height = clampedH
@@ -1314,7 +1350,15 @@ when defined(js):
       };
       var viewportMin = function() {
         var m = window.__uirMinViewport;
-        return { w: (m && m.w > 0) ? m.w : 320, h: (m && m.h > 0) ? m.h : 240 };
+        var a = window.__uirAppMinViewport;
+        var w = (m && m.w > 0) ? m.w : 320;
+        var h = (m && m.h > 0) ? m.h : 240;
+        // The two floors combine by taking the larger of each. An embedder can
+        // give an application more room than it needs; it can never take away
+        // room the application declared it cannot draw without.
+        if (a && a.w > w) w = a.w;
+        if (a && a.h > h) h = a.h;
+        return { w: w, h: h };
       };
       var viewportInset = function() {
         var i = window.__uirViewportInset;

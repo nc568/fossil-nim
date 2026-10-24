@@ -69,7 +69,19 @@ Native Nim UI library based on the idea of **"relays"** — dependency injection
 Требуется только Nim **2.2+** (проверено на 2.2.4) и, для `jsdom`-набора,
 `node` с `npm` (зависимость ставится автоматически). Всё остальное тесты
 находят сами или пропускают. Полный прогон — `nim c --mm:arc -r tests/tester.nim`;
-он же показал `SKIP` для тех наборов, чей инструмент не установлен.
+он печатает `SKIP` для тех наборов, чей инструмент не установлен.
+
+Если Nim в системе нет, его соберёт `tools/bootstrap_nim.sh` — из исходников с
+GitHub, через штатный `csources_v2` + `koch boot` (нужны только `git` и `gcc`):
+
+```sh
+sh tools/bootstrap_nim.sh                 # соберёт в ~/.local/nim-2.2.4
+export PATH="$HOME/.local/nim-2.2.4/bin:$PATH"
+sh tools/bootstrap_nim.sh                 # повторно просто найдёт его и смолчит
+```
+
+Скрипт уважает `NIM=/path/to/nim` — его же читают и обёртки тестов, так что
+свой компилятор можно не пересобирать.
 
 ```sh
 # Браузер не нужен, сеть не нужна:
@@ -133,6 +145,29 @@ nim c --mm:arc -d:canvas examples/paint.nim
   `Error: Must use \`-d:nimStringHash2\` when using \`--jsbigint64:off\``.
   Pick one pair and use it consistently for every JS artifact you link
   together.
+
+### Declaring your minimum window size
+
+A web app should tell the backend the smallest window it can be laid out in:
+
+```nim
+let win = createWindow(680, 520)
+setMinViewport(680, 520)     # the layout below is drawn for this size
+```
+
+Without it the only lever an app has is clamping its own layout variable
+(`width = max(680, ev.x)`), which makes the drawing *wider than the window*
+instead of making the window big enough. `overflow:hidden` then does not make
+the overflow reachable — it hides it, and with it every button that happened to
+be on the far side.
+
+`setMinViewport` is an optional relay: the web backends enforce it, backends
+that have no say in how small their window may get ignore it, so an app should
+still clamp its own layout for portability. Where an embedder also declares a
+floor (`window.__uirMinViewport`), the two combine component-wise by maximum —
+an embedder can give an app more room, never less than it asked for.
+
+Every example under `examples/` declares its own design size this way.
 
 ---
 

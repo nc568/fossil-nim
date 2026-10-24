@@ -82,6 +82,10 @@ proc brighten(c: Color; delta: int): Color =
 
 proc main() {.uirApp.} =
   let win = createWindow(680, 520)
+  # The layout below is drawn for 680x520 and does not reflow below it:
+  # declaring the floor keeps the viewport from shrinking into
+  # territory where the interface is clipped away and unreachable.
+  setMinViewport(680, 520)
   var width = win.width
   var height = win.height
 
@@ -356,8 +360,8 @@ proc main() {.uirApp.} =
       of QuitEvent, WindowCloseEvent:
         running = false
       of WindowResizeEvent, WindowMetricsEvent:
-        width = max(420, ev.x)
-        height = max(360, ev.y)
+        width = max(680, ev.x)
+        height = max(520, ev.y)
       of MouseMoveEvent:
         mouseX = ev.x
         mouseY = ev.y

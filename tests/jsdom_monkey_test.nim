@@ -181,6 +181,43 @@ proc main() =
   if report.hasKey("maxNodes"):
     echo "  INFO  largest frame: ", $report["maxNodes"].getInt(), " DOM nodes"
 
+  # D3: the DOM must be reconciled, not rewritten. The harness instruments the
+  # live viewport and reports what the driver actually did to it.
+  if report.hasKey("reconcileTotals"):
+    let rec = report["reconcileTotals"]
+    let probed = rec["appsProbed"].getInt()
+    let steady = rec["steadySamples"].getInt()
+    let breaks = rec["identityBreaks"].getInt()
+    let rewrites = rec["innerHtmlWrites"].getInt()
+    let worst = rec["worstChurnVsRewrite"].getFloat()
+    check("the reconcile probe ran on every app", probed == apps,
+          $probed & " of " & $apps)
+    check("some frames were unchanged, so the identity check was not vacuous",
+          steady > 0, "steadySamples=" & $steady)
+    check("D3 an unchanged frame keeps its DOM nodes", breaks == 0,
+          "identityBreaks=" & $breaks)
+    check("D3 the viewport is never rewritten wholesale", rewrites == 0,
+          "innerHtmlWrites=" & $rewrites)
+    check("D3 structural work tracks what changed, not the frame size",
+          worst < 0.75, "worst churn/rewrite=" & $worst)
+    let countSamples = rec["nodeCountSamples"].getInt()
+    let countBad = rec["nodeCountMismatches"].getInt()
+    check("D3 the DOM holds exactly as many elements as the frame declares",
+          countSamples > 0 and countBad == 0,
+          $countBad & " of " & $countSamples & " samples disagreed")
+    echo "  INFO  D3 reconcile: ", $probed, " apps, ", $steady,
+      " unchanged frames, ", $countSamples, " node-count samples, worst churn ",
+      $worst, " of a full rewrite"
+
+  # The window is the relays' to own, but the app's canvas has to follow it:
+  # cover the window it was handed, and shrink when the window shrinks.
+  if report.hasKey("settle") and report["settle"].len > 0:
+    var settled = 0
+    for e in report["settle"]:
+      inc settled
+    check("every app was grown, shrunk and grown back", settled == apps,
+          $settled & " of " & $apps)
+
   echo "-------------------------------------------------------------------"
   echo "Passed: ", passes, " | Failed: ", failures, " | Skipped: ", skips
   if failures > 0:

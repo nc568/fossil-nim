@@ -9,6 +9,8 @@ import std/[strutils, os, osproc]
 import uirelays
 import uirelays/drivers/[web_common, html_driver]
 
+export html_driver.HtmlPrim, html_driver.HtmlPrimKind
+
 var passes = 0
 var failures = 0
 
@@ -110,6 +112,163 @@ when defined(html):
         "rects=" & $bgFrame.countOccurrences("class=\"uir-rect\""))
 
 # ---------------------------------------------------------------------------
+# D3 -- the frame is a list of primitives, and the model is faithful
+# ---------------------------------------------------------------------------
+
+when defined(html):
+  fillRect(rect(0, 0, 4, 4), color(1, 2, 3))
+  drawLine(0, 0, 40, 40, color(4, 5, 6))      # diagonal -> svg
+  drawLine(0, 8, 40, 8, color(7, 8, 9))       # horizontal -> div
+  drawPoint(2, 2, color(10, 11, 12))
+  discard drawText(fMono, 0, 20, "prim model", color(255, 255, 255), color(0, 0, 0, 0))
+  let model = htmlPrimsSnapshot()
+  check("D3 the frame is a list of primitives, not a string", model.len == 5,
+        $model.len)
+  check("D3 each primitive keeps its kind",
+        model.len == 5 and
+        model[0].kind == hpRect and model[1].kind == hpSvgLine and
+        model[2].kind == hpLineH and model[3].kind == hpPoint and
+        model[4].kind == hpText,
+        (if model.len == 5: $model[0].kind & "," & $model[1].kind & "," &
+           $model[2].kind & "," & $model[3].kind & "," & $model[4].kind
+         else: "len=" & $model.len))
+  check("D3 a diagonal line carries its own viewBox",
+        model[1].extra == "0 0 42 42", model[1].extra)
+  check("D3 a text primitive carries escaped markup",
+        model[4].text == "prim model", model[4].text)
+  let modelHtml = htmlRenderPrims(model)
+  check("D3 serialising the primitives produces real elements",
+        modelHtml.countOccurrences("class=\"uir-rect\"") == 1 and
+        modelHtml.countOccurrences("class=\"uir-svg-line\"") == 1 and
+        modelHtml.countOccurrences("class=\"uir-line-h\"") == 1 and
+        modelHtml.countOccurrences("class=\"uir-point\"") == 1 and
+        modelHtml.countOccurrences("class=\"uir-text\"") == 1, modelHtml)
+  refresh()
+  check("D3 what the driver publishes is exactly what the model serialises",
+        lastPublishedHtml == modelHtml,
+        "published " & $lastPublishedHtml.len & " vs model " & $modelHtml.len)
+
+  # A clip is a container, so it is emitted as a balanced pair: an unpaired
+  # marker would corrupt the DOM nesting on the next frame.
+  # `saveState`/`restoreState` is how a clip is closed -- see the check on
+  # the zero-area rect below for why `setClipRect` is not.
+  saveState()
+  setClipRect(rect(10, 10, 20, 20))
+  fillRect(rect(11, 11, 4, 4), color(20, 21, 22))
+  restoreState()
+  fillRect(rect(40, 40, 4, 4), color(30, 31, 32))
+  let clipped = htmlPrimsSnapshot()
+  check("D3 a clip opens and closes around its contents",
+        clipped.len == 4 and clipped[0].kind == hpClipOpen and
+        clipped[1].kind == hpRect and clipped[2].kind == hpClipClose and
+        clipped[3].kind == hpRect,
+        (if clipped.len == 4: $clipped[0].kind & "," & $clipped[1].kind & "," &
+           $clipped[2].kind & "," & $clipped[3].kind else: "len=" & $clipped.len))
+  check("D3 the clip marker carries the rect it was opened with",
+        clipped[0].extra == "10,10,20,20", clipped[0].extra)
+  refresh()
+  let clippedHtml = lastPublishedHtml
+  check("D3 a clipped frame nests and stays balanced",
+        clippedHtml.countOccurrences("<div class=\"uir-clip\"") == 1 and
+        clippedHtml.countOccurrences("<div") ==
+          clippedHtml.countOccurrences("</div>"),
+        "open " & $clippedHtml.countOccurrences("<div") & " close " &
+          $clippedHtml.countOccurrences("</div>") & ": " & clippedHtml)
+  check("D3 only what was drawn inside the clip is inside the clip",
+        clippedHtml.contains("pointer-events:none;\"><div class=\"uir-rect\"") and
+        clippedHtml.contains("</div><div class=\"uir-rect\" style=\"left:40px"),
+        clippedHtml)
+
+  # A zero-area clip rect is *not* a reset: it clips everything away. That is
+  # what X11, WinAPI and SDL do too, so a web backend that "helpfully"
+  # treated it as "no clip" would render differently from the same app run
+  # natively. Pinned here so nobody fixes it in one backend only.
+  saveState()
+  setClipRect(rect(0, 0, 0, 0))
+  fillRect(rect(0, 0, 10, 10), color(40, 41, 42))
+  restoreState()
+  let zeroClip = htmlPrimsSnapshot()
+  check("D3 a zero-area clip stays a clip, like every other backend",
+        zeroClip.len == 2 and zeroClip[0].kind == hpClipOpen and
+        zeroClip[0].extra == "0,0,0,0",
+        (if zeroClip.len == 2: $zeroClip[0].kind & " " & zeroClip[0].extra
+         else: "len=" & $zeroClip.len))
+  refresh()
+  check("D3 a zero-area clip collapses to an empty polygon and still closes",
+        lastPublishedHtml.contains(
+          "clip-path:polygon(0px 0px,0px 0px,0px 0px,0px 0px)") and
+        lastPublishedHtml.countOccurrences("<div") ==
+          lastPublishedHtml.countOccurrences("</div>"),
+        lastPublishedHtml)
+
+  # The hash now runs over the primitives. Frame deduplication is the one
+  # externally visible consequence, so it is the thing to assert on: an
+  # identical frame must still be dropped, a changed one must still go out.
+  proc frameIdNow(): int =
+    webCore.frameId
+  proc drawStaticFrame() =
+    fillRect(rect(0, 0, 60, 40), color(70, 80, 90))
+    fillRect(rect(4, 4, 8, 8), color(91, 92, 93))
+    discard drawText(fMono, 6, 20, "dedup", color(255, 255, 255), color(0, 0, 0, 0))
+  drawStaticFrame()
+  refresh()
+  let idAfterFirst = frameIdNow()
+  drawStaticFrame()
+  refresh()
+  check("D3 an identical frame is still deduplicated", frameIdNow() == idAfterFirst,
+        $frameIdNow() & " vs " & $idAfterFirst)
+  drawStaticFrame()
+  fillRect(rect(20, 20, 3, 3), color(101, 102, 103))
+  refresh()
+  check("D3 a changed frame still goes out", frameIdNow() == idAfterFirst + 1,
+        $frameIdNow() & " vs " & $(idAfterFirst + 1))
+  drawStaticFrame()
+  refresh()
+  check("D3 removing the change changes the frame back",
+        frameIdNow() == idAfterFirst + 2, $frameIdNow())
+
+  # The published node count is what the browser is told to expect in the
+  # viewport, and a jsdom monkey compares it with the live element count every
+  # sample -- so it has to be exact, including the clip containers.
+  proc elementCount(prims: seq[HtmlPrim]): int =
+    ## One element per primitive, except `hpClipClose`, which only closes the
+    ## container its `hpClipOpen` already counted.
+    for p in prims:
+      if p.kind != hpClipClose: inc result
+
+  drawStaticFrame()
+  let counted = htmlPrimsSnapshot()
+  refresh()
+  check("D3 the published DOM node count matches the primitive count",
+        webCore.domNodeCount == elementCount(counted),
+        $webCore.domNodeCount & " vs " & $elementCount(counted))
+
+  saveState()
+  setClipRect(rect(5, 5, 30, 30))
+  fillRect(rect(6, 6, 4, 4), color(11, 12, 13))
+  fillRect(rect(12, 12, 4, 4), color(14, 15, 16))
+  restoreState()
+  let withClip = htmlPrimsSnapshot()
+  refresh()
+  check("D3 a clip container counts as the element it becomes",
+        webCore.domNodeCount == elementCount(withClip),
+        "domNodeCount=" & $webCore.domNodeCount & " prims=" & $withClip.len &
+        " expected=" & $elementCount(withClip))
+  # The same number the browser is handed, counted the way the browser would
+  # count it: one per opening tag, ignoring the `<img>`/`<line>` that live
+  # *inside* a primitive. This is exactly what the jsdom monkey compares
+  # against `viewport.querySelectorAll("*").length` on every sample.
+  let openedTags = lastPublishedHtml.countOccurrences("<div") +
+                   lastPublishedHtml.countOccurrences("<span") +
+                   lastPublishedHtml.countOccurrences("<svg")
+  check("D3 the published count equals the number of elements in the markup",
+        webCore.domNodeCount == openedTags,
+        "domNodeCount=" & $webCore.domNodeCount & " tags=" & $openedTags)
+  check("D3 a clipped frame really does contain a clip container",
+        lastPublishedHtml.countOccurrences("class=\"uir-clip\"") == 1,
+        lastPublishedHtml)
+
+# ---------------------------------------------------------------------------
 # Event queue: a full queue must not swallow the event that releases a button
 # ---------------------------------------------------------------------------
 
@@ -178,6 +337,61 @@ check("resize is clamped to a usable maximum",
       webCore.layout.width <= 4096 and webCore.layout.height <= 4096,
       $webCore.layout.width & "x" & $webCore.layout.height)
 var drained = Event()
+while pollEvent(drained):
+  discard
+
+# ---------------------------------------------------------------------------
+# N6 -- an application can declare the smallest window it can be drawn in.
+#
+# Without this the app could only clamp its own layout variable, which leaves
+# the viewport smaller than the interface: `overflow:hidden` does not make the
+# clipped part reachable, it hides it. Every shipped example hit exactly that.
+# ---------------------------------------------------------------------------
+
+setMinViewport(700, 500)
+check("N6 the declared floor is recorded",
+      webCore.minViewportW == 700 and webCore.minViewportH == 500,
+      $webCore.minViewportW & "x" & $webCore.minViewportH)
+
+proc drainResizes(): tuple[n: int; w, h: int] =
+  ## Drains the queue and reports the last resize the app would have seen.
+  var ev = Event()
+  while pollEvent(ev):
+    if ev.kind == WindowResizeEvent:
+      result.n += 1
+      result.w = ev.x
+      result.h = ev.y
+
+webCore.eventQueue.setLen(0)
+webInjectResize(100, 100)
+check("N6 a window below the floor is raised to it",
+      webCore.layout.width == 700 and webCore.layout.height == 500,
+      $webCore.layout.width & "x" & $webCore.layout.height)
+let r1 = drainResizes()
+check("N6 the app is told the floored size, not the raw one",
+      r1.n == 1 and r1.w == 700 and r1.h == 500, $r1)
+
+webInjectResize(900, 700)
+check("N6 a window above the floor is left alone",
+      webCore.layout.width == 900 and webCore.layout.height == 700,
+      $webCore.layout.width & "x" & $webCore.layout.height)
+let r2 = drainResizes()
+check("N6 a comfortable size is passed through unchanged",
+      r2.n == 1 and r2.w == 900 and r2.h == 700, $r2)
+
+webInjectResize(99999, 99999)
+check("N6 the floor does not lift the built-in maximum",
+      webCore.layout.width == 4096 and webCore.layout.height == 4096,
+      $webCore.layout.width & "x" & $webCore.layout.height)
+let r3 = drainResizes()
+check("N6 an absurd size is still clamped to the maximum",
+      r3.n == 1 and r3.w == 4096 and r3.h == 4096, $r3)
+
+setMinViewport(0, 0)
+webInjectResize(10, 10)
+check("N6 clearing the floor restores the built-in minimum",
+      webCore.layout.width == 120 and webCore.layout.height == 120,
+      $webCore.layout.width & "x" & $webCore.layout.height)
 while pollEvent(drained):
   discard
 

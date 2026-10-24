@@ -274,6 +274,144 @@ function installLayout(window, opts) {
 
 const BAD_STYLE = /NaN|undefined|Infinity|null/;
 
+// ---------------------------------------------------------------------------
+// D3 -- a frame must be reconciled into the live DOM, not rewritten over it.
+//
+// `viewport.innerHTML = frame` throws the whole subtree away every frame.
+// The markup can come out byte-identical and the page still loses focus,
+// text selection and scroll position, because the nodes that held them are
+// gone. So the assertion is about *identity*, not about content: when a
+// frame changes nothing, the elements must still be the same objects.
+// ---------------------------------------------------------------------------
+
+function installReconcileProbe(window, vp, appId) {
+  if (!vp || vp.id !== "uir-viewport") return null;   // canvas backend: N/A
+  const probe = {
+    appId: appId,
+    innerHtmlWrites: 0,   // wholesale rewrites of the viewport subtree
+    nodesAdded: 0,
+    nodesRemoved: 0,
+    nodesTouched: 0,      // in-place attribute / text updates
+    repaints: 0,          // frames that actually restructured the DOM
+    nodeCountSamples: 0,  // samples where the driver published a node count
+    nodeCountMismatches: 0,
+    reportedCountMismatch: false,
+    steadySamples: 0,     // samples where nothing structural moved
+    identityBreaks: 0,    // steady samples that still replaced nodes
+    prevNodes: null,
+    lastAdded: 0, lastRemoved: 0, lastTouched: 0
+  };
+
+  // Shadow the inherited innerHTML accessor on this one element, so any
+  // `vp.innerHTML = ...` the bundle performs is counted instead of silently
+  // wiping the tree.
+  const desc = Object.getOwnPropertyDescriptor(window.Element.prototype, "innerHTML");
+  if (desc && desc.set) {
+    Object.defineProperty(vp, "innerHTML", {
+      configurable: true,
+      enumerable: false,
+      get() { return desc.get.call(this); },
+      set(v) { probe.innerHtmlWrites += 1; return desc.set.call(this, v); }
+    });
+  }
+
+  probe.observer = new window.MutationObserver((records) => {
+    let structural = false;
+    for (const r of records) {
+      if (r.type === "childList") {
+        probe.nodesAdded += r.addedNodes.length;
+        probe.nodesRemoved += r.removedNodes.length;
+        structural = true;
+      } else {
+        probe.nodesTouched += 1;
+      }
+    }
+    // One batch per animation frame, so this counts the frames that really
+    // repainted -- the denominator the churn ratio needs. Counting harness
+    // steps instead would flatter a driver that rewrites everything, because
+    // deduplication hides most of the rewrites.
+    if (structural) probe.repaints += 1;
+  });
+  probe.observer.observe(vp, {
+    childList: true, subtree: true, attributes: true, characterData: true
+  });
+  window.__uirReconcileProbe = probe;
+  return probe;
+}
+
+function checkReconcile(window, nodes, errs) {
+  const probe = window.__uirReconcileProbe;
+  if (!probe) return;
+  const churn = (probe.nodesAdded - probe.lastAdded) +
+                (probe.nodesRemoved - probe.lastRemoved) +
+                (probe.nodesTouched - probe.lastTouched);
+  probe.lastAdded = probe.nodesAdded;
+  probe.lastRemoved = probe.nodesRemoved;
+  probe.lastTouched = probe.nodesTouched;
+
+  if (churn !== 0) {
+    // Something legitimately changed this sample; identity says nothing.
+    probe.prevNodes = Array.prototype.slice.call(nodes);
+    return;
+  }
+  // The driver publishes how many elements the frame it just rendered should
+  // have put in the viewport. Comparing that with the live DOM catches a
+  // reconciler that leaks a node, drops one, or inserts one twice -- which no
+  // amount of markup inspection would notice, because the leaked node can be
+  // an exact copy of a legitimate one.
+  // The driver publishes how many elements the frame it just rendered should
+  // have put in the viewport. Comparing that with the live DOM catches a
+  // reconciler that leaks a node, drops one, or inserts one twice -- which no
+  // amount of markup inspection would notice, because the leaked node can be
+  // an exact copy of a legitimate one.
+  //
+  // Three primitives carry an inner element of their own (a diagonal line is
+  // an <svg> wrapping a <line>, an image and a blit are a <div> wrapping an
+  // <img>), so those have to be added to the declared count before comparing.
+  const published = window.__uirDomNodeCount;
+  if (typeof published === "number") {
+    // `tagName` is uppercase for HTML elements and lowercase for SVG ones, so
+    // fold it before comparing -- an <img> missed here looks exactly like a
+    // leaked node.
+    let inner = 0;
+    for (let i = 0; i < nodes.length; i++) {
+      const t = (nodes[i].tagName || "").toUpperCase();
+      if (t === "LINE" || t === "IMG") inner++;
+    }
+    probe.nodeCountSamples += 1;
+    if (published + inner !== nodes.length) {
+      probe.nodeCountMismatches += 1;
+      if (errs.length < 40 && !probe.reportedCountMismatch) {
+        probe.reportedCountMismatch = true;
+        errs.push(probe.appId + ": the frame declares " + published + " node(s)" +
+          " (+" + inner + " inner) but the viewport holds " + nodes.length +
+          " -- the reconciler leaked or dropped elements");
+      }
+    }
+  }
+
+  // A quiet frame: no mutation of any kind was recorded. Every element must
+  // therefore still be the same object as last sample. A full `innerHTML`
+  // rewrite cannot get here at all -- it always records churn -- and a
+  // rebuild-that-happens-to-match fails the pointer comparison below.
+  probe.steadySamples += 1;
+  if (probe.prevNodes && probe.prevNodes.length === nodes.length) {
+    let replaced = 0;
+    for (let i = 0; i < nodes.length; i++) {
+      if (nodes[i] !== probe.prevNodes[i]) replaced++;
+    }
+    if (replaced > 0) {
+      probe.identityBreaks += 1;
+      if (errs.length < 40) {
+        errs.push(probe.appId + ": a frame that changed nothing replaced " +
+          replaced + "/" + nodes.length + " DOM nodes (rewrite, not reconcile)");
+      }
+    }
+  }
+  probe.prevNodes = Array.prototype.slice.call(nodes);
+
+}
+
 function checkViewport(window, report) {
   const vp = window.document.getElementById("uir-viewport") ||
              window.document.getElementById("uir-canvas");
@@ -296,7 +434,8 @@ function checkViewport(window, report) {
     const styleAttr = el.getAttribute("style") || "";
     if (BAD_STYLE.test(styleAttr)) {
       if (bad < 5) {
-        report.errors.push("malformed inline style on ." + el.className + ": " +
+        report.errors.push("malformed inline style on ." +
+          (el.getAttribute("class") || el.tagName) + ": " +
           styleAttr.slice(0, 120));
       }
       bad++;
@@ -326,6 +465,7 @@ function checkViewport(window, report) {
   report.badStyles += bad;
   report.hugeNodes += huge;
   report.maxTextOverflowPx = Math.max(report.maxTextOverflowPx, overflow);
+  if (report.errors) checkReconcile(window, nodes, report.errors);
 }
 
 // ---------------------------------------------------------------------------
@@ -425,9 +565,16 @@ async function floorStorm(window, errs, label, floorW, floorH) {
     const vp = w.document.getElementById("uir-viewport");
     if (!vp) { errs.push("[" + label + "] the viewport vanished during a resize storm"); break; }
     const r = vp.getBoundingClientRect();
-    if (r.width < floorW || r.height < floorH) {
-      errs.push("[" + label + "] viewport fell below the requested floor " +
-                floorW + "x" + floorH + " at stage " + sw + "x" + sh +
+    // The floor in force is the larger of what this test asked for and what
+    // the application declared with `setMinViewport`: an embedder can give an
+    // app more room, never less than the app says it needs.
+    const appMin = w.__uirAppMinViewport;
+    const needW = Math.max(floorW, appMin && appMin.w > 0 ? appMin.w : 0);
+    const needH = Math.max(floorH, appMin && appMin.h > 0 ? appMin.h : 0);
+    if (r.width < needW || r.height < needH) {
+      errs.push("[" + label + "] viewport fell below the floor " +
+                needW + "x" + needH + (appMin ? " (app declared " + appMin.w +
+                "x" + appMin.h + ")" : "") + " at stage " + sw + "x" + sh +
                 ": " + r.width + "x" + r.height);
     }
   }
@@ -438,6 +585,142 @@ async function floorStorm(window, errs, label, floorW, floorH) {
   if (typeof w.__uirTriggerResizeObservers === "function") w.__uirTriggerResizeObservers();
   if (typeof w.__uirSyncViewportSize === "function") w.__uirSyncViewportSize();
   await sleep(30);
+}
+
+// ---------------------------------------------------------------------------
+// Does the app's own canvas follow the window?
+//
+// Measured off the full-window background rectangle the app paints first, not
+// off its text: a fixed instruction string legitimately stays put when the
+// window resizes, so text position cannot tell a responsive layout from a
+// dead one. The background rect is the app's own declaration of "this is how
+// big I think I am", and it is what has to track the size it was handed.
+//
+// Three things must hold after the window settles:
+//   1. the canvas covers the viewport -- otherwise part of the window shows
+//      the shell's background instead of the app;
+//   2. shrinking the window shrinks the canvas -- otherwise the resize never
+//      reached the app at all;
+//   3. nothing is drawn wholly outside the canvas -- an element starting past
+//      the app's own right edge is unreachable at every window size, which is
+//      what a hardcoded coordinate produces.
+//
+// `#uir-viewport` carries `overflow:hidden` and `contain:paint`, so the one
+// frame where the previous layout is still up is clipped rather than spilled.
+// That transient is what `maxTextOverflowPx` sometimes reports.
+// ---------------------------------------------------------------------------
+
+function parseStylePx(style, prop) {
+  // jsdom normalises `style.cssText` to "left: 0px; top: 0px; ...", so both
+  // the separator and the colon can be followed by a space.
+  const m = new RegExp("(?:^|;)\\s*" + prop + ":\\s*(-?[0-9.]+)px").exec(style || "");
+  return m ? Math.round(parseFloat(m[1])) : null;
+}
+
+function appCanvas(window) {
+  const vp = window.document.getElementById("uir-viewport");
+  if (!vp) return null;
+  const box = vp.getBoundingClientRect();
+  // The app's background: the rect anchored at its own origin, biggest first.
+  let best = null;
+  for (const el of vp.querySelectorAll(".uir-rect")) {
+    const st = el.getAttribute("style") || "";
+    if (parseStylePx(st, "left") !== 0 || parseStylePx(st, "top") !== 0) continue;
+    const w = parseStylePx(st, "width"), h = parseStylePx(st, "height");
+    if (w === null || h === null) continue;
+    if (!best || w * h > best.w * best.h) best = { w, h };
+  }
+  // Anything drawn wholly past the canvas cannot be reached at any size.
+  // Except inside a `.uir-clip`: that container exists precisely to hide
+  // content scrolled out of a panel, so an editor line at x=1547 in a 480px
+  // window is the clip doing its job, not a misplaced element.
+  // Labels and images only. Rects, points and lines are deliberately left
+  // out: they are the *payload* of a drawing app, not its chrome. `paint`
+  // stores every stroke at the absolute position the drag put it, so when the
+  // window shrinks the old strokes are legitimately outside the new canvas --
+  // that is a painting, not a misplaced button. A caption or an image past the
+  // edge is always a layout bug, because it is how the app labels itself.
+  const offscreen = [];
+  if (best) {
+    const prims = vp.querySelectorAll(".uir-text,.uir-img-crop,.uir-blit-clip");
+    for (const el of prims) {
+      // Inside a `.uir-clip` the whole point is that content is hidden, so
+      // scrolled-out rows of an editor or a list are not a misplacement.
+      if (typeof el.closest === "function" && el.closest(".uir-clip")) continue;
+      const st = el.getAttribute("style") || "";
+      const x = parseStylePx(st, "left");
+      const y = parseStylePx(st, "top");
+      // The app's own background is the canvas itself; skip anything that
+      // spans it, since "starts at 0 and covers the window" is the goal.
+      const w = parseStylePx(st, "width") || 0;
+      const h = parseStylePx(st, "height") || 0;
+      if (x === 0 && y === 0 && w >= best.w && h >= best.h) continue;
+      if ((x !== null && x >= best.w) || (y !== null && y >= best.h)) {
+        offscreen.push({
+          x: x, y: y, cls: el.getAttribute("class"),
+          text: (el.textContent || "").slice(0, 30)
+        });
+      }
+    }
+  }
+  return { vpW: Math.round(box.width), vpH: Math.round(box.height),
+           canvas: best, offscreen };
+}
+
+async function settleStorm(window, errs, label) {
+  const stage = window.__uirStage;
+  if (!stage) return null;
+  const orig = { w: stage.w, h: stage.h };
+
+  const settle = async () => {
+    if (typeof window.__uirTriggerResizeObservers === "function") {
+      window.__uirTriggerResizeObservers();
+    }
+    window.dispatchEvent(new window.Event("resize"));
+    if (typeof window.__uirSyncViewportSize === "function") window.__uirSyncViewportSize();
+    for (let i = 0; i < 12; i++) {
+      if (typeof window.__uirRequestStep === "function") {
+        try { window.__uirRequestStep(); } catch (e) { /* the loop may be done */ }
+      }
+      await sleep(25);
+    }
+  };
+
+  const measure = async (sw, sh) => {
+    stage.w = sw; stage.h = sh;
+    await settle();
+    return appCanvas(window);
+  };
+
+  const wide = await measure(Math.max(orig.w, 1280), Math.max(orig.h, 400));
+  const narrow = await measure(360, 640);
+  const back = await measure(orig.w, orig.h);
+
+  for (const [name, m] of [["wide", wide], ["narrow", narrow], ["back", back]]) {
+    if (!m || !m.canvas) continue;
+    // 1. the app must paint over the whole window it was given
+    if (m.canvas.w < m.vpW || m.canvas.h < m.vpH) {
+      errs.push("[" + label + "] " + name + ": the app canvas " + m.canvas.w +
+        "x" + m.canvas.h + " does not cover the " + m.vpW + "x" + m.vpH +
+        " window it was handed");
+    }
+    // 3. nothing may sit wholly outside the app's own canvas
+    if (m.offscreen.length > 0) {
+      const o = m.offscreen[0];
+      errs.push("[" + label + "] " + name + ": " + m.offscreen.length +
+        " element(s) start past the app's own " + m.canvas.w + "x" +
+        m.canvas.h + " canvas and can never be seen, e.g. ." + o.cls +
+        " \"" + o.text + "\" at (" + o.x + "," + o.y + ")");
+    }
+  }
+  // 2. the canvas has to follow the window down
+  if (wide && narrow && wide.canvas && narrow.canvas &&
+      narrow.canvas.w >= wide.canvas.w) {
+    errs.push("[" + label + "] the canvas ignored the window shrinking from " +
+      wide.vpW + "px to " + narrow.vpW + "px: it is still " +
+      narrow.canvas.w + "px wide (it was " + wide.canvas.w + "px when wide)");
+  }
+  return { wide, narrow, back };
 }
 
 // Squeeze the stage down to nothing and back. An app that survives this is an
@@ -485,7 +768,11 @@ async function resizeStorm(window, errs, label) {
 const KEYS = [
   ["a", "KeyA"], ["b", "KeyB"], ["z", "KeyZ"], ["0", "Digit0"], ["7", "Digit7"],
   ["Enter", "Enter"], ["Backspace", "Backspace"], ["Tab", "Tab"], [" ", "Space"],
-  ["Escape", "Escape"], ["ArrowLeft", "ArrowLeft"], ["ArrowRight", "ArrowRight"],
+  // No Escape: it is the quit key for hello, paint and web_showcase. A monkey
+  // that kills the app halfway through leaves a frozen DOM behind, and every
+  // measurement after that point describes a corpse rather than the backend.
+  // Quitting is worth testing -- in the server monkey, where it is the point.
+  ["ArrowLeft", "ArrowLeft"], ["ArrowRight", "ArrowRight"],
   ["ArrowUp", "ArrowUp"], ["ArrowDown", "ArrowDown"], ["Home", "Home"],
   ["End", "End"], ["Delete", "Delete"], ["PageUp", "PageUp"], ["PageDown", "PageDown"],
   [".", "Period"], [",", "Comma"], ["-", "Minus"], ["=", "Equal"], ["/", "Slash"],
@@ -547,6 +834,10 @@ async function monkeyOneApp(window, appId, opts, report) {
   }
   const vw = vp.clientWidth;
   const vh = vp.clientHeight;
+
+  // D3: from the first painted frame on, watch what the driver does to the
+  // live DOM instead of trusting the markup it leaves behind.
+  installReconcileProbe(window, vp, appId);
 
   const pick = (arr) => arr[Math.floor(rnd() * arr.length) % arr.length];
   const rndX = () => Math.floor(rnd() * (vw + 40)) - 20;
@@ -622,6 +913,42 @@ async function monkeyOneApp(window, appId, opts, report) {
   await sleep(30);
   checkViewport(window, report);
   report.textClicks += textClicks;
+
+  const probe = window.__uirReconcileProbe;
+  if (probe) {
+    // What repainting every one of these frames from scratch would have
+    // cost, in node insertions + removals: every element out, every element
+    // back in, once per frame that actually repainted.
+    const rewriteCost = Math.max(1, report.maxNodes * probe.repaints * 2);
+    const structural = probe.nodesAdded + probe.nodesRemoved;
+    report.reconcile.push({
+      app: appId,
+      steadySamples: probe.steadySamples,
+      identityBreaks: probe.identityBreaks,
+      innerHtmlWrites: probe.innerHtmlWrites,
+      nodesAdded: probe.nodesAdded,
+      nodesRemoved: probe.nodesRemoved,
+      nodesTouched: probe.nodesTouched,
+      nodeCountSamples: probe.nodeCountSamples,
+      nodeCountMismatches: probe.nodeCountMismatches,
+      domNodes: report.maxNodes,
+      repaints: probe.repaints,
+      churnVsRewrite: Math.round(structural / rewriteCost * 1000) / 1000
+    });
+    if (probe.innerHtmlWrites > 0) {
+      report.errors.push(appId + ": the viewport subtree was rewritten " +
+        "wholesale " + probe.innerHtmlWrites + " time(s) via innerHTML " +
+        "instead of being reconciled");
+    }
+    // A probe that never saw a quiet frame proved nothing, so say so rather
+    // than reporting a vacuous pass.
+    if (probe.steadySamples === 0 && vp.id === "uir-viewport") {
+      report.errors.push(appId + ": no unchanged frame was ever observed, " +
+        "so the D3 reconcile check never ran");
+    }
+    if (probe.observer) probe.observer.disconnect();
+    window.__uirReconcileProbe = null;
+  }
   return true;
 }
 
@@ -674,7 +1001,9 @@ async function main() {
     canvasByOp: {},
     canvasBadNumbers: 0,
     clipboardWrites: 0,
-    missingShellElements: []
+    missingShellElements: [],
+    reconcile: [],
+    settle: []
   };
 
   await sleep(60);
@@ -703,13 +1032,24 @@ async function main() {
     };
     const sub = {
       errors: [], badStyles: 0, hugeNodes: 0, maxNodes: 0,
-      maxTextOverflowPx: 0, textClicks: 0
+      maxTextOverflowPx: 0, textClicks: 0, reconcile: []
     };
     const rendered = await monkeyOneApp(window, appId, opts, sub);
+    for (const r of sub.reconcile) report.reconcile.push(r);
     checkBridge(window, sub.errors, appId || "standalone");
     await resizeStorm(window, sub.errors, appId || "standalone");
     await floorStorm(window, sub.errors, appId || "standalone", 500, 400);
     checkBridge(window, sub.errors, appId || "standalone");
+    const settled = await settleStorm(window, sub.errors, appId || "standalone");
+    if (settled) {
+      const c = (m) => (m && m.canvas ? m.canvas.w + "x" + m.canvas.h : "none");
+      report.settle.push({
+        app: appId || "(standalone)",
+        wide: c(settled.wide) + " in " + (settled.wide ? settled.wide.vpW + "x" + settled.wide.vpH : "?"),
+        narrow: c(settled.narrow) + " in " + (settled.narrow ? settled.narrow.vpW + "x" + settled.narrow.vpH : "?"),
+        back: c(settled.back) + " in " + (settled.back ? settled.back.vpW + "x" + settled.back.vpH : "?")
+      });
+    }
     perApp.rendered = rendered;
     perApp.errors = sub.errors.length;
     perApp.domNodes = sub.maxNodes;
@@ -742,6 +1082,44 @@ async function main() {
   }
   const clip = window.__uirClipboardWrites;
   if (clip) report.clipboardWrites = clip.writes;
+
+  // D3 roll-up: the whole point is that an unchanged frame costs nothing.
+  const rec = report.reconcile;
+  report.reconcileTotals = {
+    appsProbed: rec.length,
+    steadySamples: rec.reduce((a, r) => a + r.steadySamples, 0),
+    identityBreaks: rec.reduce((a, r) => a + r.identityBreaks, 0),
+    innerHtmlWrites: rec.reduce((a, r) => a + r.innerHtmlWrites, 0),
+    nodesAdded: rec.reduce((a, r) => a + r.nodesAdded, 0),
+    nodesRemoved: rec.reduce((a, r) => a + r.nodesRemoved, 0),
+    nodesTouched: rec.reduce((a, r) => a + r.nodesTouched, 0),
+    nodeCountSamples: rec.reduce((a, r) => a + r.nodeCountSamples, 0),
+    nodeCountMismatches: rec.reduce((a, r) => a + r.nodeCountMismatches, 0),
+    worstChurnVsRewrite: rec.reduce((a, r) => Math.max(a, r.churnVsRewrite), 0)
+  };
+  // Reconciling means the structural work tracks what actually changed. A
+  // driver that rebuilds the subtree scores 1.0 of the rewrite budget on
+  // every repainted frame, so anything near that is not diffing at all.
+  if (report.reconcileTotals.worstChurnVsRewrite > 0.75 && errors.length < 40) {
+    const worst = rec.filter((r) => r.churnVsRewrite ===
+      report.reconcileTotals.worstChurnVsRewrite)[0];
+    errors.push("D3: " + (worst ? worst.app : "?") + " rebuilt " +
+      Math.round(report.reconcileTotals.worstChurnVsRewrite * 100) +
+      "% of a full DOM rewrite every frame -- the frame is not being diffed");
+  }
+  if (report.reconcileTotals.identityBreaks > 0 && errors.length < 40) {
+    errors.push("D3: " + report.reconcileTotals.identityBreaks +
+      " unchanged frame(s) still rebuilt their DOM nodes");
+  }
+  if (report.reconcileTotals.nodeCountMismatches > 0 && errors.length < 40) {
+    errors.push("D3: " + report.reconcileTotals.nodeCountMismatches + " of " +
+      report.reconcileTotals.nodeCountSamples +
+      " samples had a DOM whose element count did not match the frame");
+  }
+  if (report.reconcileTotals.innerHtmlWrites > 0 && errors.length < 40) {
+    errors.push("D3: the viewport was rewritten via innerHTML " +
+      report.reconcileTotals.innerHtmlWrites + " time(s)");
+  }
 
   report.ok = errors.length === 0 && report.badStyles === 0 && report.hugeNodes === 0;
   if (opts.json) {

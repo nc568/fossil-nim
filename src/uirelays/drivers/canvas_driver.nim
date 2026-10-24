@@ -1184,7 +1184,8 @@ proc initCanvasDriver*() =
     restoreState: canvasRestoreState,
     setClipRect: canvasSetClipRect,
     setCursor: webSetCursor,
-    setWindowTitle: webSetWindowTitle
+    setWindowTitle: webSetWindowTitle,
+    setMinViewport: webSetMinViewport
   )
   fontRelays = FontRelays(
     openFont: webOpenFont,
