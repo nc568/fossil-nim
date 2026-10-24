@@ -12,3 +12,7 @@ nimble.develop
 nimble.paths
 nimbledeps
 .github/
+
+# Dependencies and scratch output of the test harnesses
+node_modules/
+tests/jsdom/node_modules/

@@ -51,9 +51,48 @@ Native Nim UI library based on the idea of **"relays"** — dependency injection
 Все тесты написаны на чистом Nim (`--mm:arc`) и запускаются через `tests/tester.nim`:
 - `tests/web_html_test.nim` — **57 / 57 PASS** (проверка всех примитивов DOM-драйвера, отсутствия `<canvas>` и `WebAssembly`, UTF-8 метрик, PNG-кодировщика, событий и HTTP/SSE).
 - `tests/web_canvas_test.nim` — **25 / 25 PASS** (проверка команд `<canvas>` 2D, дедупликации кадров FNV-1a, `blitRGBA`, событий и HTTP/SSE).
+- `tests/web_backend_regression_test.nim` — **25 / 25 PASS** (`-d:html`), **21 / 21 PASS** (`-d:canvas`): по одной проверке на каждый исправленный дефект, чтобы он не вернулся незамеченным (пропорциональные метрики, полноэкранная заливка, политика переполнения очереди, битый JSON, клампинг ресайза, диагностика `{.uirApp.}`).
+- `tests/server_monkey_test.nim` — **56 / 56 PASS** (обезьяньи тесты живого нативного HTTP/SSE-сервера: неизвестные пути, `405`/`204`, `/health`, битый JSON, флуд событиями, 24 SSE-клиента, чистое завершение). Браузер не нужен.
+- `tests/jsdom_monkey_test.nim` — **7 / 7 PASS** (обезьяньи тесты экспортированного бандла под `node` + `jsdom`: 9 приложений, 120 случайных шагов на каждое, шторм ресайзов, контракт моста). Браузер не нужен, сеть не нужна.
 - `tests/standalone_html_monkey_test.nim` — **9 / 9 APPS PASS** (запуск автономного `.html` бандла в Headless Chromium через `file://` без сети, проверка нажатий кнопок, анимаций, ввода/редактирования текста в `Focim IDE` и `Todo`, точности выравнивания глифов `8.000px` и динамического ресайза окна).
-- `tests/monkey_browser_test.nim` — **218 / 218 PASS** (стресс-тестирование живых серверов в Headless Chromium).
+- `tests/monkey_browser_test.nim` — **56 / 56 PASS** (стресс-тестирование живых серверов в Headless Chromium; проверки, которым нужен браузер, корректно пропускаются, если он не установлен).
 - Отчет и комментарии по работе `fossil-nim` сохранены в [`FOSSIL_NIM_COMMENTS_RU.md`](FOSSIL_NIM_COMMENTS_RU.md).
+- Разбор найденных и исправленных дефектов: [`doc/WEB_BACKEND_DEFECTS.md`](doc/WEB_BACKEND_DEFECTS.md).
+
+### Воспроизводимость на чистом клоне
+
+Ни один тест не ссылается на пути вида `/home/user/...`. Всё ищется относительно
+корня репозитория (`UIRELAYS_ROOT` переопределяет его). Тесты, которым нужен
+браузер, пропускаются, если браузера нет, — вместо них запускайте
+`server_monkey_test` и `jsdom_monkey_test`.
+
+Требуется только Nim **2.2+** (проверено на 2.2.4) и, для `jsdom`-набора,
+`node` с `npm` (зависимость ставится автоматически). Всё остальное тесты
+находят сами или пропускают. Полный прогон — `nim c --mm:arc -r tests/tester.nim`;
+он печатает `SKIP` для тех наборов, чей инструмент не установлен.
+
+Если Nim в системе нет, его соберёт `tools/bootstrap_nim.sh` — из исходников с
+GitHub, через штатный `csources_v2` + `koch boot` (нужны только `git` и `gcc`):
+
+```sh
+sh tools/bootstrap_nim.sh                 # соберёт в ~/.local/nim-2.2.4
+export PATH="$HOME/.local/nim-2.2.4/bin:$PATH"
+sh tools/bootstrap_nim.sh                 # повторно просто найдёт его и смолчит
+```
+
+Скрипт уважает `NIM=/path/to/nim` — его же читают и обёртки тестов, так что
+свой компилятор можно не пересобирать.
+
+```sh
+# Браузер не нужен, сеть не нужна:
+nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/server_monkey_test.nim
+nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/jsdom_monkey_test.nim   # нужен node + npm
+nim c --mm:arc -d:html   --outdir:/tmp/uirelays_bins -r tests/web_html_test.nim
+nim c --mm:arc -d:canvas --outdir:/tmp/uirelays_bins -r tests/web_canvas_test.nim
+
+# Нужен headless-браузер (или UIRELAYS_BROWSER=/path/to/browser):
+UIRELAYS_BROWSER=$(command -v chromium) nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/monkey_browser_test.nim
+```
 
 ---
 
@@ -85,6 +124,50 @@ nim c --mm:arc -d:html --path:src --path:focim_web_port focim_web_port/focim_bro
 nim c --mm:arc -d:canvas examples/web_showcase.nim
 nim c --mm:arc -d:canvas examples/paint.nim
 ```
+
+### JavaScript target notes
+
+- `int64` on the JS target is emulated with `BigInt` unless you pass
+  `--jsbigint64:off`. **Both work**, but the switch is not free:
+  `--jsbigint64:off` additionally requires `-d:nimStringHash2`, otherwise the
+  build fails inside the standard library:
+
+  ```sh
+  # default: int64 -> BigInt, no extra flags
+  nim js --mm:arc -d:html --path:src examples/calculator.nim
+
+  # smaller and faster on 32-bit-safe code, but needs the hash define too
+  nim js --mm:arc -d:html --jsbigint64:off -d:nimStringHash2 --path:src examples/calculator.nim
+  ```
+
+  Mixing the two is the usual trap: `--jsbigint64:off` without
+  `-d:nimStringHash2` fails with
+  `Error: Must use \`-d:nimStringHash2\` when using \`--jsbigint64:off\``.
+  Pick one pair and use it consistently for every JS artifact you link
+  together.
+
+### Declaring your minimum window size
+
+A web app should tell the backend the smallest window it can be laid out in:
+
+```nim
+let win = createWindow(680, 520)
+setMinViewport(680, 520)     # the layout below is drawn for this size
+```
+
+Without it the only lever an app has is clamping its own layout variable
+(`width = max(680, ev.x)`), which makes the drawing *wider than the window*
+instead of making the window big enough. `overflow:hidden` then does not make
+the overflow reachable — it hides it, and with it every button that happened to
+be on the far side.
+
+`setMinViewport` is an optional relay: the web backends enforce it, backends
+that have no say in how small their window may get ignore it, so an app should
+still clamp its own layout for portability. Where an embedder also declares a
+floor (`window.__uirMinViewport`), the two combine component-wise by maximum —
+an embedder can give an app more room, never less than it asked for.
+
+Every example under `examples/` declares its own design size this way.
 
 ---
 

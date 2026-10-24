@@ -78,6 +78,10 @@ proc isOpposite(a, b: Direction): bool =
 
 proc main() {.uirApp.} =
   let win = createWindow(780, 520)
+  # The layout below is drawn for 780x520 and does not reflow below it:
+  # declaring the floor keeps the viewport from shrinking into
+  # territory where the interface is clipped away and unreachable.
+  setMinViewport(780, 520)
   var width = win.width
   var height = win.height
 
@@ -266,8 +270,8 @@ proc main() {.uirApp.} =
       of QuitEvent, WindowCloseEvent:
         running = false
       of WindowResizeEvent, WindowMetricsEvent:
-        width = max(520, ev.x)
-        height = max(380, ev.y)
+        width = max(780, ev.x)
+        height = max(520, ev.y)
       of MouseMoveEvent:
         mouseX = ev.x
         mouseY = ev.y

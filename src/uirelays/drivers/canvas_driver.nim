@@ -217,6 +217,12 @@ const CanvasDriverPageTemplate = """<!DOCTYPE html>
 
   function renderCommands(cmds) {
     if (!Array.isArray(cmds)) return;
+    // A frame starts empty: an app that does not paint a background must not
+    // see the previous frame still lying around.
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
     ctx.save();
     let clipActive = false;
     const stateStack = [];
@@ -321,10 +327,20 @@ const CanvasDriverPageTemplate = """<!DOCTYPE html>
     lastFrameId = data.frameId;
 
     if (typeof data.width === "number" && typeof data.height === "number") {
-      if (canvas.width !== data.width || canvas.height !== data.height) {
-        canvas.width = data.width;
-        canvas.height = data.height;
+      // CSS pixels for layout, device pixels for the backing store: on a
+      // retina display a 1:1 backing store is stretched by the browser and
+      // every glyph and line comes out blurred.
+      var dpr = (window.devicePixelRatio || 1);
+      if (!(dpr > 0)) dpr = 1;
+      var bw = Math.max(1, Math.round(data.width * dpr));
+      var bh = Math.max(1, Math.round(data.height * dpr));
+      if (canvas.width !== bw || canvas.height !== bh) {
+        canvas.width = bw;
+        canvas.height = bh; // resets the context, so set the transform below
       }
+      canvas.style.width = data.width + "px";
+      canvas.style.height = data.height + "px";
+      if (ctx.setTransform) ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       sizeEl.textContent = data.width + "×" + data.height;
     }
     if (typeof data.title === "string") {
@@ -832,7 +848,7 @@ proc canvasDrawText(f: Font; x, y: int; text: string; fg, bg: Color): TextExtent
     "y": y,
     "w": result.w,
     "h": result.h,
-    "cw": slot.charWidth,
+    "cw": (if slot.isMonospace: slot.charWidth else: 0),
     "t": text,
     "font": buildCanvasFontShorthand(slot),
     "ascent": slot.metrics.ascent,
@@ -852,7 +868,7 @@ proc canvasDrawMeasuredText(f: Font; x, y: int; text: string; fg, bg: Color;
     "y": y,
     "w": size.w,
     "h": size.h,
-    "cw": slot.charWidth,
+    "cw": (if slot.isMonospace: slot.charWidth else: 0),
     "t": text,
     "font": buildCanvasFontShorthand(slot),
     "ascent": slot.metrics.ascent,
@@ -903,6 +919,210 @@ proc canvasBlitRGBA(pixels: ptr UncheckedArray[uint32]; w, h: int; dst: Rect): b
   })
   result = true
 
+# ---------------------------------------------------------------------------
+# Standalone (`nim js`) rendering
+# ---------------------------------------------------------------------------
+#
+# `nim js -d:canvas` has no server behind it, so `broadcastSseFrame` sends the
+# commands nowhere and the page stays blank while the app looks perfectly
+# alive. The commands are executed right here instead: the same JSON stream
+# the server would have sent is played onto the page's <canvas>, in Nim, with
+# no eval and no CSP exception.
+
+when defined(js):
+  type
+    JsElement {.importc.} = ref object ## a DOM element, reached only through `importjs`
+    JsCtx {.importc.} = ref object     ## CanvasRenderingContext2D
+    JsImage {.importc.} = ref object   ## HTMLImageElement
+
+  proc jsGetElementById(id: cstring): JsElement {.importjs: "document.getElementById(#)".}
+  proc jsGetContext(el: JsElement; kind: cstring): JsCtx {.importjs: "#.getContext(#)".}
+  proc jsElementWidth(el: JsElement): int {.importjs: "#.width".}
+  proc jsSetElementWidth(el: JsElement; v: int) {.importjs: "#.width = #".}
+  proc jsElementHeight(el: JsElement): int {.importjs: "#.height".}
+  proc jsSetElementHeight(el: JsElement; v: int) {.importjs: "#.height = #".}
+  proc jsStyleSet(el: JsElement; prop, value: cstring) {.importjs: "#.style[#] = #".}
+  proc jsDevicePixelRatio(): float {.importjs: "(((window.devicePixelRatio || 1) > 0) ? (window.devicePixelRatio || 1) : 1)".}
+  proc jsConsoleError(msg: cstring) {.importjs: "((typeof console !== \"undefined\" && console.error) ? console.error(#) : undefined)".}
+
+  proc ctxSave(ctx: JsCtx) {.importjs: "#.save()".}
+  proc ctxRestore(ctx: JsCtx) {.importjs: "#.restore()".}
+  proc ctxSetTransform(ctx: JsCtx; a, b, c, d, e, f: float) {.importjs: "#.setTransform(#,#,#,#,#,#)".}
+  proc ctxClearRect(ctx: JsCtx; x, y, w, h: float) {.importjs: "#.clearRect(#,#,#,#)".}
+  proc ctxFillRect(ctx: JsCtx; x, y, w, h: float) {.importjs: "#.fillRect(#,#,#,#)".}
+  proc ctxFillText(ctx: JsCtx; t: cstring; x, y: float) {.importjs: "#.fillText(#,#,#)".}
+  proc ctxMeasureText(ctx: JsCtx; t: cstring): float {.importjs: "#.measureText(#).width".}
+  proc ctxBeginPath(ctx: JsCtx) {.importjs: "#.beginPath()".}
+  proc ctxMoveTo(ctx: JsCtx; x, y: float) {.importjs: "#.moveTo(#,#)".}
+  proc ctxLineTo(ctx: JsCtx; x, y: float) {.importjs: "#.lineTo(#,#)".}
+  proc ctxStroke(ctx: JsCtx) {.importjs: "#.stroke()".}
+  proc ctxRect(ctx: JsCtx; x, y, w, h: float) {.importjs: "#.rect(#,#,#,#)".}
+  proc ctxClip(ctx: JsCtx) {.importjs: "#.clip()".}
+  proc ctxDrawImage(ctx: JsCtx; img: JsImage;
+                    sx, sy, sw, sh, dx, dy, dw, dh: float) {.importjs: "#.drawImage(#,#,#,#,#,#,#,#,#)".}
+  proc ctxSetFillStyle(ctx: JsCtx; v: cstring) {.importjs: "#.fillStyle = #".}
+  proc ctxSetStrokeStyle(ctx: JsCtx; v: cstring) {.importjs: "#.strokeStyle = #".}
+  proc ctxSetFont(ctx: JsCtx; v: cstring) {.importjs: "#.font = #".}
+  proc ctxSetTextBaseline(ctx: JsCtx; v: cstring) {.importjs: "#.textBaseline = #".}
+  proc ctxSetLineWidth(ctx: JsCtx; v: float) {.importjs: "#.lineWidth = #".}
+  proc ctxSetLetterSpacing(ctx: JsCtx; v: cstring) {.importjs: "#.letterSpacing = #".}
+  proc ctxHasLetterSpacing(ctx: JsCtx): bool {.importjs: "(\"letterSpacing\" in #)".}
+
+  proc newJsImage(): JsImage {.importjs: "new Image()".}
+  proc jsImageComplete(img: JsImage): bool {.importjs: "#.complete".}
+  proc jsImageNaturalWidth(img: JsImage): int {.importjs: "#.naturalWidth".}
+  proc jsImageSetSrc(img: JsImage; src: cstring) {.importjs: "#.src = #".}
+
+  var
+    jsCanvasElement: JsElement
+    jsCanvasContext: JsCtx
+    jsImageCache: seq[(string, JsImage)]
+    jsCanvasMissingWarned: bool
+
+  proc jsCachedImage(src: string): JsImage =
+    for kv in jsImageCache:
+      if kv[0] == src:
+        return kv[1]
+    let img = newJsImage()
+    jsImageCache.add (src, img)
+    jsImageSetSrc(img, cstring(src))
+    result = img
+
+  type JsClipState = object
+    active: bool
+    x, y, w, h: float
+
+  proc jf(node: JsonNode; key: string; def = 0.0): float =
+    let v = node{key}
+    if v.isNil: def else: v.getFloat(def)
+
+  proc jsApplyClip(ctx: JsCtx; clip: JsClipState) =
+    ctxBeginPath(ctx)
+    ctxRect(ctx, clip.x, clip.y, clip.w, clip.h)
+    ctxClip(ctx)
+
+  proc jsExecCanvasCommands(ctx: JsCtx; cmds: seq[JsonNode]) =
+    ctxSave(ctx)
+    var clip = JsClipState()
+    var stack: seq[JsClipState] = @[]
+    for cmd in cmds:
+      if cmd.kind != JObject:
+        continue
+      case cmd{"op"}.getStr("")
+      of "rect":
+        ctxSetFillStyle(ctx, cstring(cmd{"c"}.getStr("")))
+        ctxFillRect(ctx, jf(cmd, "x"), jf(cmd, "y"), jf(cmd, "w"), jf(cmd, "h"))
+      of "point":
+        ctxSetFillStyle(ctx, cstring(cmd{"c"}.getStr("")))
+        ctxFillRect(ctx, jf(cmd, "x"), jf(cmd, "y"), 1.0, 1.0)
+      of "line":
+        let x1 = jf(cmd, "x1")
+        let y1 = jf(cmd, "y1")
+        let x2 = jf(cmd, "x2")
+        let y2 = jf(cmd, "y2")
+        let css = cstring(cmd{"c"}.getStr(""))
+        if y1 == y2:
+          ctxSetFillStyle(ctx, css)
+          ctxFillRect(ctx, min(x1, x2), y1, max(1.0, abs(x2 - x1) + 1.0), 1.0)
+        elif x1 == x2:
+          ctxSetFillStyle(ctx, css)
+          ctxFillRect(ctx, x1, min(y1, y2), 1.0, max(1.0, abs(y2 - y1) + 1.0))
+        else:
+          ctxSetStrokeStyle(ctx, css)
+          ctxSetLineWidth(ctx, 1.25)
+          ctxBeginPath(ctx)
+          ctxMoveTo(ctx, x1 + 0.5, y1 + 0.5)
+          ctxLineTo(ctx, x2 + 0.5, y2 + 0.5)
+          ctxStroke(ctx)
+      of "text":
+        let bg = cmd{"bg"}.getStr("")
+        if bg.len > 0:
+          ctxSetFillStyle(ctx, cstring(bg))
+          ctxFillRect(ctx, jf(cmd, "x"), jf(cmd, "y"), jf(cmd, "w"), jf(cmd, "h"))
+        ctxSetFont(ctx, cstring(cmd{"font"}.getStr("")))
+        let cw = jf(cmd, "cw")
+        if ctxHasLetterSpacing(ctx):
+          ctxSetLetterSpacing(ctx, cstring("0px"))
+          if cw > 0.0:
+            let mAdv = ctxMeasureText(ctx, cstring("M"))
+            ctxSetLetterSpacing(ctx, cstring($(cw - mAdv) & "px"))
+        ctxSetTextBaseline(ctx, cstring("alphabetic"))
+        ctxSetFillStyle(ctx, cstring(cmd{"fg"}.getStr("")))
+        let ascent = jf(cmd, "ascent", 12.0)
+        ctxFillText(ctx, cstring(cmd{"t"}.getStr("")), jf(cmd, "x"), jf(cmd, "y") + ascent)
+        if cmd{"underline"}.getBool(false):
+          ctxFillRect(ctx, jf(cmd, "x"), jf(cmd, "y") + ascent + 2.0, jf(cmd, "w"), 1.0)
+        if cmd{"strike"}.getBool(false):
+          ctxFillRect(ctx, jf(cmd, "x"),
+                      jf(cmd, "y") + float(int(jf(cmd, "h")) div 2),
+                      jf(cmd, "w"), 1.0)
+      of "save":
+        stack.add clip
+      of "restore":
+        if stack.len > 0:
+          clip = stack[^1]
+          stack.setLen stack.len - 1
+        else:
+          clip = JsClipState()
+        ctxRestore(ctx)
+        ctxSave(ctx)
+        if clip.active:
+          jsApplyClip(ctx, clip)
+      of "clip":
+        clip = JsClipState(active: true, x: jf(cmd, "x"), y: jf(cmd, "y"),
+                           w: jf(cmd, "w"), h: jf(cmd, "h"))
+        ctxRestore(ctx)
+        ctxSave(ctx)
+        jsApplyClip(ctx, clip)
+      of "img":
+        let src = cmd{"src"}.getStr("")
+        if src.len > 0:
+          let im = jsCachedImage(src)
+          if jsImageComplete(im) and jsImageNaturalWidth(im) > 0:
+            ctxDrawImage(ctx, im, jf(cmd, "sx"), jf(cmd, "sy"), jf(cmd, "sw"),
+                         jf(cmd, "sh"), jf(cmd, "dx"), jf(cmd, "dy"),
+                         jf(cmd, "dw"), jf(cmd, "dh"))
+      of "blit":
+        let src = cmd{"src"}.getStr("")
+        if src.len > 0:
+          let im = jsCachedImage(src)
+          if jsImageComplete(im) and jsImageNaturalWidth(im) > 0:
+            ctxDrawImage(ctx, im, 0.0, 0.0, jf(cmd, "dw"), jf(cmd, "dh"),
+                         jf(cmd, "dx"), jf(cmd, "dy"), jf(cmd, "dw"), jf(cmd, "dh"))
+      else:
+        discard
+    ctxRestore(ctx)
+
+  proc jsRenderCanvasFrame(cmds: seq[JsonNode]; w, h: int) =
+    ## Plays one frame onto the page's `<canvas id="uir-canvas">`. The backing
+    ## store is sized in device pixels (retina) while drawing stays in CSS
+    ## pixels, exactly like the server-side page template.
+    if jsCanvasElement.isNil:
+      jsCanvasElement = jsGetElementById(cstring("uir-canvas"))
+    if jsCanvasElement.isNil:
+      if not jsCanvasMissingWarned:
+        jsCanvasMissingWarned = true
+        jsConsoleError(cstring("[uirelays] standalone -d:canvas needs <canvas id=\"uir-canvas\"> in the page; nothing is drawn."))
+      return
+    if jsCanvasContext.isNil:
+      jsCanvasContext = jsGetContext(jsCanvasElement, cstring("2d"))
+    if jsCanvasContext.isNil:
+      return
+    if w <= 0 or h <= 0:
+      return
+    let dpr = jsDevicePixelRatio()
+    let bw = max(1, int(float(w) * dpr + 0.5))
+    let bh = max(1, int(float(h) * dpr + 0.5))
+    if jsElementWidth(jsCanvasElement) != bw:
+      jsSetElementWidth(jsCanvasElement, bw)
+    if jsElementHeight(jsCanvasElement) != bh:
+      jsSetElementHeight(jsCanvasElement, bh)
+    jsStyleSet(jsCanvasElement, cstring("width"), cstring($w & "px"))
+    jsStyleSet(jsCanvasElement, cstring("height"), cstring($h & "px"))
+    ctxSetTransform(jsCanvasContext, dpr, 0.0, 0.0, dpr, 0.0, 0.0)
+    ctxClearRect(jsCanvasContext, 0.0, 0.0, float(w), float(h))
+    jsExecCanvasCommands(jsCanvasContext, cmds)
+
 proc canvasRefresh() =
   inc webCore.totalFramesRendered
   webCore.canvasCommandCount = canvasCurrentCmdCount
@@ -918,6 +1138,11 @@ proc canvasRefresh() =
                     cursorToCss(webCore.currentCursor) & "|" &
                     webCore.clipboardText & "|" &
                     cmdsStr
+  when defined(js):
+    # No server in a `nim js` build: play the frame onto the page instead of
+    # broadcasting it into the void.
+    jsRenderCanvasFrame(canvasCmdList, webCore.layout.width, webCore.layout.height)
+
   let h = fnv1a64(metaAndCmds)
   if h != webCore.lastPayloadHash or webCore.frameId == 0:
     webCore.lastPayloadHash = h
@@ -959,7 +1184,8 @@ proc initCanvasDriver*() =
     restoreState: canvasRestoreState,
     setClipRect: canvasSetClipRect,
     setCursor: webSetCursor,
-    setWindowTitle: webSetWindowTitle
+    setWindowTitle: webSetWindowTitle,
+    setMinViewport: webSetMinViewport
   )
   fontRelays = FontRelays(
     openFont: webOpenFont,

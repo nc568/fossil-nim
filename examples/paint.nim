@@ -26,6 +26,10 @@ proc main() {.uirApp.} =
   initBackend()
 
   let layout = createWindow(800, 600)
+  # The layout below is drawn for 800x600 and does not reflow below it:
+  # declaring the floor keeps the viewport from shrinking into
+  # territory where the interface is clipped away and unreachable.
+  setMinViewport(800, 600)
   var width = layout.width
   var height = layout.height
   setWindowTitle("Paint - uirelays example")
@@ -57,10 +61,40 @@ proc main() {.uirApp.} =
       let py = yBase + (if step mod 2 == 0: -14 else: 14)
       strokes.add Stroke(x: px, y: py, size: 8, col: col)
 
+  # The toolbar is anchored to the right edge and shrinks with the window.
+  # It used to be three hardcoded rects at x=210/296/382 plus a readout at
+  # x=474, which is fine in the 800px window the demo asks for and puts
+  # "Clear" and the readout entirely past the edge in a 360px one -- where
+  # `overflow:hidden` does not scroll them back into reach, it hides them.
+  proc toolbarLayout(width, brushSize: int): tuple[minus, plus, clear: Rect;
+      previewX, previewR, textX, textAvail: int] =
+    let paletteRight = 10 + 4 * 30
+    let previewR = min(brushSize, 14)
+    let previewX = width - 12 - previewR
+    let btnW = clamp((width - paletteRight - 40) div 4, 40, 78)
+    let gap = 6
+    let clearX = previewX - previewR - 12 - btnW
+    let plusX = clearX - gap - btnW
+    let minusX = plusX - gap - btnW
+    (rect(minusX, 8, btnW, 24), rect(plusX, 8, btnW, 24),
+     rect(clearX, 8, btnW, 24), previewX, previewR,
+     paletteRight + 8, minusX - gap - (paletteRight + 8))
+
+  ## Shortens `s` until it fits in `avail` pixels. Text that does not fit is
+  ## not a layout problem the backend can solve: the window is the window.
+  proc fitText(f: Font; s: string; avail: int): string =
+    if avail <= 4: return ""
+    result = s
+    while result.len > 1 and measureText(f, result).w > avail:
+      result.setLen(result.len - 1)
+    if result.len < s.len and result.len > 1:
+      result = result[0 ..< result.len - 1] & "\u2026"
+
   while running:
-    let btnMinus = rect(210, 8, 78, 24)
-    let btnPlus  = rect(296, 8, 78, 24)
-    let btnClear = rect(382, 8, 78, 24)
+    let tb = toolbarLayout(width, brushSize)
+    let btnMinus = tb.minus
+    let btnPlus  = tb.plus
+    let btnClear = tb.clear
 
     var e = Event()
     while pollEvent(e):
@@ -68,8 +102,8 @@ proc main() {.uirApp.} =
       of QuitEvent, WindowCloseEvent:
         running = false
       of WindowResizeEvent, WindowMetricsEvent:
-        width = max(360, e.x)
-        height = max(280, e.y)
+        width = max(800, e.x)
+        height = max(600, e.y)
       of KeyDownEvent:
         if e.key == KeyEsc: running = false
         if e.key >= Key1 and e.key <= Key6:
@@ -144,12 +178,16 @@ proc main() {.uirApp.} =
     drawBorder(btnClear, color(88, 91, 112))
     discard drawText(font, btnClear.x + 14, btnClear.y + 5, "Clear", fg, color(140, 60, 75))
 
-    discard drawText(font, 474, 13, "Size: " & $brushSize & "px · Drag to paint (" & $width & "×" & $height & ")", fg, barBg)
+    let sizeMsg = fitText(font,
+      "Size: " & $brushSize & "px · Drag to paint (" & $width & "×" & $height & ")",
+      tb.textAvail)
+    if sizeMsg.len > 0:
+      discard drawText(font, tb.textX, 13, sizeMsg, fg, barBg)
 
     # brush size preview in top-right
-    let previewX = width - 24
+    let previewX = tb.previewX
     let previewY = 20
-    let previewR = min(brushSize, 14)
+    let previewR = tb.previewR
     fillRect(rect(previewX - previewR, previewY - previewR, previewR * 2, previewR * 2), brushColor)
 
     refresh()

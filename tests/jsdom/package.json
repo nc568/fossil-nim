@@ -1,0 +1,10 @@
+{
+  "name": "uirelays-jsdom-monkey",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Headless DOM monkey-test harness for the UIRelays standalone HTML backend.",
+  "license": "MIT",
+  "dependencies": {
+    "jsdom": "^24.1.0"
+  }
+}

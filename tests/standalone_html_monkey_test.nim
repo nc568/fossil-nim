@@ -8,16 +8,63 @@ import std/[os, osproc, strutils]
 proc findNodeIndexByText(html, needle: string): int =
   html.find(needle)
 
+proc repoRoot(): string =
+  ## No /home/user paths: the bundle is looked up inside this checkout.
+  let envRoot = getEnv("UIRELAYS_ROOT", "")
+  if envRoot.len > 0 and dirExists(envRoot / "src" / "uirelays"):
+    return envRoot
+  for start in [getCurrentDir(), getAppDir()]:
+    var dir = start
+    for _ in 0 ..< 8:
+      if dirExists(dir / "src" / "uirelays"):
+        return dir
+      let parent = parentDir(dir)
+      if parent == dir:
+        break
+      dir = parent
+  getCurrentDir()
+
+proc findBrowser(): string =
+  let fromEnv = getEnv("UIRELAYS_BROWSER", "")
+  if fromEnv.len > 0:
+    return fromEnv
+  for name in ["chromium", "chromium-browser", "google-chrome",
+               "google-chrome-stable", "chrome"]:
+    let found = findExe(name)
+    if found.len > 0:
+      return found
+  ""
+
 proc main() =
   echo "======================================================================"
   echo " UIRelays Standalone Offline HTML Interactive & Resize Monkey Test"
   echo "======================================================================"
 
-  # Inject a self-verifying monkey test harness into a temporary copy of uirelays_all_apps.html
-  # and open it in Headless Chromium via file:// with zero network.
-  let bundleSrc = readFile("/home/user/uirelays_all_apps.html")
-  doAssert "<canvas" notin bundleSrc.toLowerAscii(), "Zero <canvas> policy violated!"
-  doAssert "WebAssembly" notin bundleSrc, "Zero WASM policy violated!"
+  # Inject a self-verifying monkey test harness into a temporary copy of the
+  # exported bundle and open it in Headless Chromium via file:// with zero
+  # network. The bundle is built by tools/export_interactive_html.nim; if it
+  # is not there yet, build it -- a clean clone must be able to run this.
+  let root = repoRoot()
+  var bundlePath = getEnv("UIRELAYS_BUNDLE", "")
+  if bundlePath.len == 0:
+    bundlePath = root / "exported_html" / "uirelays_all_apps.html"
+  if not fileExists(bundlePath):
+    echo "  bundle not found at ", bundlePath, " -- exporting it first ..."
+    let exportCmd = "nim c --mm:arc --outdir:" & quoteShell(getTempDir() / "uirelays_bins") &
+                    " -r " & quoteShell(root / "tools" / "export_interactive_html.nim")
+    let exportCode = execShellCmd(exportCmd)
+    doAssert exportCode == 0, "Could not export the standalone bundle: " & exportCmd
+  doAssert fileExists(bundlePath), "Bundle still missing after exporting: " & bundlePath
+
+  let bundleSrc = readFile(bundlePath)
+  # The policy is that the apps do not *use* a canvas or WebAssembly. The
+  # Focim demo embeds this repository's README, which talks about both, so
+  # look for API calls rather than for the words.
+  const forbidden = ["getContext(\"2d\")", "getContext('2d')",
+                     "createElement(\"canvas\")", "createElement('canvas')",
+                     "WebAssembly.", "WebAssembly(", "new WebAssembly"]
+  for needle in forbidden:
+    doAssert needle notin bundleSrc, "Zero <canvas>/WASM policy violated: " & needle
 
   let verifierJs = """
 <script>
@@ -298,11 +345,24 @@ window.addEventListener("load", function() {
 </script>
 """
 
-  let testHtmlPath = "/tmp/test_standalone_all_apps.html"
+  let testHtmlPath = getTempDir() / "test_standalone_all_apps.html"
   writeFile(testHtmlPath, bundleSrc.replace("</body>", verifierJs & "\n</body>"))
 
-  let cmd = "chromium --headless --no-sandbox --disable-gpu --user-data-dir=/tmp/chromium-profile " &
-            "--window-size=1280,820 --virtual-time-budget=15000 --dump-dom file://" & testHtmlPath & " 2>/dev/null"
+  let browserBin = findBrowser()
+  if browserBin.len == 0:
+    echo "======================================================================"
+    echo " SKIPPED: no headless browser installed."
+    echo " Install chromium (or set UIRELAYS_BROWSER=/path/to/browser) to run"
+    echo " the standalone interactive monkey test; tests/jsdom_monkey_test.nim"
+    echo " covers the same ground with node + jsdom and needs no browser."
+    echo "======================================================================"
+    return
+
+  let cmd = quoteShell(browserBin) &
+            " --headless --no-sandbox --disable-gpu --user-data-dir=" &
+            quoteShell(getTempDir() / "uir-chromium-profile") & " " &
+            "--window-size=1280,820 --virtual-time-budget=15000 --dump-dom file://" &
+            testHtmlPath & " 2>/dev/null"
   let (domOut, exitCode) = execCmdEx(cmd)
   doAssert exitCode == 0, "Chromium failed with exit code " & $exitCode
   let idx = findNodeIndexByText(domOut, "<pre id=\"standalone-monkey-summary\">")

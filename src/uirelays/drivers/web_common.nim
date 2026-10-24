@@ -22,10 +22,12 @@ type
     active*: bool
     path*: string
     family*: string
+    cssFont*: string
     size*: int
     style*: FontStyles
     metrics*: FontMetrics
     charWidth*: int
+    isMonospace*: bool
 
   WebImageSlot* = object
     active*: bool
@@ -59,6 +61,8 @@ type
     fonts*: seq[WebFontSlot]
     images*: seq[WebImageSlot]
     eventQueue*: seq[Event]
+    minViewportW*: int          ## floor the application asked for (0 = none)
+    minViewportH*: int
     frameId*: int
     lastPayloadHash*: uint64
     lastFrameJson*: string
@@ -69,6 +73,8 @@ type
     domNodeCount*: int
     canvasCommandCount*: int
     monkeyReportJson*: string
+    droppedEvents*: int
+    inputParseErrors*: int
     # Embedded non-blocking HTTP/SSE server
     serverEnabled*: bool
     serverPort*: int
@@ -91,6 +97,20 @@ proc fnv1a64*(s: string): uint64 {.inline.} =
     result = uint64(h)
   else:
     result = 14695981039346656037'u64
+    for i in 0 ..< s.len:
+      result = (result xor uint64(ord(s[i]))) * 1099511628211'u64
+
+proc fnv1a64Step*(h: uint64; s: string): uint64 {.inline.} =
+  ## Folds `s` into a running FNV-1a hash. Lets a caller hash a structured
+  ## frame without concatenating it into one throwaway string first.
+  when defined(js):
+    var g = uint32(h and 0xFFFFFFFF'u64)
+    for i in 0 ..< s.len:
+      g = g xor uint32(ord(s[i]))
+      g = uint32((uint64(g) * 16777619'u64) and 0xFFFFFFFF'u64)
+    result = uint64(g)
+  else:
+    result = h
     for i in 0 ..< s.len:
       result = (result xor uint64(ord(s[i]))) * 1099511628211'u64
 
@@ -322,6 +342,24 @@ proc parseImageDimensions*(data: string; path: string): tuple[w, h: int, mime: s
 # Font Management (Deterministic Monospace Metrics + Unicode Rune Width)
 # ---------------------------------------------------------------------------
 
+proc isMonospaceFontPath*(path: string): bool =
+  if path.len == 0:
+    return true
+  let lp = path.toLowerAscii()
+  if "mono" in lp or "consolas" in lp or "courier" in lp or
+     "fira code" in lp or "jetbrains" in lp or "menlo" in lp or
+     "iosevka" in lp or "hack" in lp or "source code" in lp or
+     "fixed" in lp or "term" in lp:
+    return true
+  if "sans" in lp or "serif" in lp or "arial" in lp or "inter" in lp or
+     "helvetica" in lp or "roboto" in lp or "segoe" in lp or "system-ui" in lp or
+     "ubuntu" in lp or "noto" in lp or "cantarell" in lp or "georgia" in lp or
+     "times" in lp or "verdana" in lp or "tahoma" in lp or "trebuchet" in lp:
+    return false
+  if '/' in path or '\\' in path or lp.endsWith(".ttf") or lp.endsWith(".otf"):
+    return true
+  return false
+
 proc webOpenFont*(path: string; size: int; style: FontStyles;
                   metrics: var FontMetrics): Font =
   let pxSize = max(6, size)
@@ -337,22 +375,39 @@ proc webOpenFont*(path: string; size: int; style: FontStyles;
     lineHeight: lineHeight
   )
 
+  let isMono = isMonospaceFontPath(path)
+  let lp = path.toLowerAscii()
   let family =
-    if path.len == 0:
-      "'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace"
-    elif '/' in path or '\\' in path or path.toLowerAscii().endsWith(".ttf") or path.toLowerAscii().endsWith(".otf"):
-      "'DejaVu Sans Mono', 'Liberation Mono', Consolas, monospace"
+    if isMono:
+      if path.len == 0 or '/' in path or '\\' in path or lp.endsWith(".ttf") or lp.endsWith(".otf"):
+        "'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace"
+      else:
+        path & ", 'DejaVu Sans Mono', Consolas, monospace"
     else:
-      path & ", monospace"
+      if "serif" in lp and "sans" notin lp:
+        path & ", 'DejaVu Serif', Georgia, serif"
+      elif '/' in path or '\\' in path or lp.endsWith(".ttf") or lp.endsWith(".otf"):
+        "'DejaVu Sans', 'Liberation Sans', Inter, system-ui, sans-serif"
+      else:
+        path & ", 'DejaVu Sans', 'Liberation Sans', Inter, system-ui, sans-serif"
+
+  var cssFont = ""
+  if FontStyle.italics in style:
+    cssFont.add "italic "
+  if FontStyle.bold in style:
+    cssFont.add "700 "
+  cssFont.add $pxSize & "px " & family
 
   webCore.fonts.add WebFontSlot(
     active: true,
     path: path,
     family: family,
+    cssFont: cssFont,
     size: pxSize,
     style: style,
     metrics: metrics,
-    charWidth: charW
+    charWidth: charW,
+    isMonospace: isMono
   )
   result = Font(webCore.fonts.len)
 
@@ -368,9 +423,11 @@ proc webGetFontSlot*(f: Font): WebFontSlot {.inline.} =
   result = WebFontSlot(
     active: true,
     family: "'DejaVu Sans Mono', Consolas, monospace",
+    cssFont: "15px 'DejaVu Sans Mono', Consolas, monospace",
     size: 15,
     metrics: FontMetrics(ascent: 12, descent: 4, lineHeight: 18),
-    charWidth: 9
+    charWidth: 9,
+    isMonospace: true
   )
 
 proc webGetFontMetrics*(f: Font): FontMetrics =
@@ -410,11 +467,113 @@ proc isWideCode(code: int): bool {.inline.} =
   (code >= 0xFF00 and code <= 0xFF60) or
   (code >= 0x1F300 and code <= 0x1FAFF)
 
+proc proportionalCodePermille(code: int): int {.inline.} =
+  ## Calibrated glyph advance in thousandths of em (1000 = 1.0 * pxSize)
+  ## for proportional sans/serif fonts (DejaVu Sans / Liberation Sans / Inter).
+  case code
+  of ord(' '), ord('\t'): 318
+  of ord('i'), ord('l'), ord('I'), ord('|'), ord('!'), ord('.'), ord(','),
+     ord(':'), ord(';'), ord('\''), ord('`'): 295
+  of ord('j'), ord('f'), ord('t'), ord('r'), ord('('), ord(')'),
+     ord('['), ord(']'), ord('{'), ord('}'), ord('"'), ord('-'), ord('/'), ord('\\'): 375
+  of ord('c'), ord('s'), ord('v'), ord('x'), ord('z'), ord('J'), ord('1'): 510
+  of ord('m'), ord('w'): 920
+  of ord('M'), ord('W'), ord('@'), ord('%'): 940
+  of ord('G'), ord('O'), ord('Q'), ord('D'), ord('H'), ord('N'), ord('U'), ord('&'), ord('#'): 735
+  of ord('A')..ord('C'), ord('E')..ord('F'), ord('K')..ord('L'), ord('P'),
+     ord('R')..ord('T'), ord('V'), ord('X')..ord('Z'): 665
+  else:
+    if isWideCode(code): 1000
+    elif code >= 0x0410 and code <= 0x042F:
+      # Cyrillic uppercase (Ж, Ш, Щ, Ю, М, Ф are wider)
+      if code in [0x0416, 0x041C, 0x0424, 0x0428, 0x0429, 0x042B, 0x042E]: 880
+      else: 685
+    elif code >= 0x0430 and code <= 0x044F:
+      # Cyrillic lowercase (ж, ш, щ, ю, м, ф, ы are wider)
+      if code in [0x0436, 0x043C, 0x0444, 0x0448, 0x0449, 0x044B, 0x044E]: 780
+      else: 575
+    else:
+      570
+
+proc measureProportionalFallback(text: string; pxSize: int; isBold: bool): int =
+  var totalPermille = 0
+  var i = 0
+  while i < text.len:
+    let (code, step) = utf8CodeAt(text, i)
+    totalPermille += proportionalCodePermille(code)
+    i += step
+  if isBold:
+    totalPermille = (totalPermille * 106) div 100
+  result = (totalPermille * pxSize + 999) div 1000
+
+when defined(js):
+  proc jsMeasureProportionalText(fontCs, textCs: cstring): int =
+    ## Real advance width of `text` in `font`, measured the way the browser is
+    ## about to draw it: a hidden span, positioned off-screen, in the same
+    ## font, measured with `getBoundingClientRect`. No <canvas> -- the HTML
+    ## backend is not allowed one -- and no WebAssembly.
+    ##
+    ## Results are cached by (font, text): a layout pass measures thousands of
+    ## strings per frame, and each cache miss costs a style recalculation.
+    {.emit: """
+    if (!window.__uirMeasureCache) {
+      window.__uirMeasureCache = (typeof Map === "function") ? new Map() : null;
+      window.__uirMeasureObj = {};
+      window.__uirMeasureCount = 0;
+    }
+    var key = `fontCs` + "\x1f" + `textCs`;
+    if (window.__uirMeasureCache) {
+      var cached = window.__uirMeasureCache.get(key);
+      if (cached !== undefined) { `result` = cached; return `result`; }
+    } else if (window.__uirMeasureObj[key] !== undefined) {
+      `result` = window.__uirMeasureObj[key];
+      return `result`;
+    }
+    `result` = 0;
+    try {
+      var span = document.getElementById("uir-measure-span");
+      if (!span) {
+        span = document.createElement("span");
+        span.id = "uir-measure-span";
+        // off-screen, but laid out: visibility:hidden still measures,
+        // display:none would not.
+        span.setAttribute("style",
+          "position:absolute;left:-9999px;top:0;visibility:hidden;" +
+          "white-space:pre;font-variant-ligatures:none;letter-spacing:normal;" +
+          "padding:0;margin:0;border:0;");
+        if (document.body) document.body.appendChild(span);
+      }
+      span.style.font = `fontCs`;
+      span.textContent = `textCs`;
+      var rect = span.getBoundingClientRect();
+      if (rect && rect.width > 0) `result` = Math.ceil(rect.width);
+    } catch (_) { `result` = 0; }
+    if (`result` > 0) {
+      if (window.__uirMeasureCache) {
+        if (window.__uirMeasureCache.size > 16384) window.__uirMeasureCache.clear();
+        window.__uirMeasureCache.set(key, `result`);
+      } else {
+        if (window.__uirMeasureCount > 16384) { window.__uirMeasureObj = {}; window.__uirMeasureCount = 0; }
+        window.__uirMeasureObj[key] = `result`;
+        window.__uirMeasureCount++;
+      }
+    }
+    """.}
+
 proc webMeasureText*(f: Font; text: string): TextExtent =
   let idx = int(f) - 1
   if idx < 0 or idx >= webCore.fonts.len or not webCore.fonts[idx].active or text.len == 0:
     return TextExtent(w: 0, h: 0)
   let slot = webCore.fonts[idx]
+  if not slot.isMonospace:
+    when defined(js):
+      let w = jsMeasureProportionalText(cstring(slot.cssFont), cstring(text))
+      if w > 0:
+        return TextExtent(w: w, h: slot.metrics.lineHeight)
+    return TextExtent(
+      w: measureProportionalFallback(text, slot.size, FontStyle.bold in slot.style),
+      h: slot.metrics.lineHeight
+    )
   var cols = 0
   var i = 0
   while i < text.len:
@@ -513,11 +672,37 @@ proc webRestoreState*() =
 proc webSetClipRect*(r: Rect) =
   webCore.currentClip = WebClipState(enabled: true, rect: r)
 
+proc webSetMinViewport*(w, h: int) =
+  ## Publishes the application's floor and re-measures at once, so the very
+  ## first frame is drawn at a size the app can actually lay out.
+  webCore.minViewportW = max(0, w)
+  webCore.minViewportH = max(0, h)
+  when defined(js):
+    let wv = webCore.minViewportW
+    let hv = webCore.minViewportH
+    {.emit: """
+    window.__uirAppMinViewport = { w: `wv`, h: `hv` };
+    if (typeof window.__uirSyncViewportSize === "function") {
+      window.__uirSyncViewportSize();
+    }
+    """.}
+
 proc webSetCursor*(c: CursorKind) =
   webCore.currentCursor = c
 
 proc webSetWindowTitle*(title: string) =
   webCore.windowTitle = title
+  when defined(js):
+    # The HUD label is only part of it: a browser tab that keeps showing the
+    # initial title looks like a frozen app.
+    let titleCs = cstring(title)
+    {.emit: """
+    if (typeof window.__uirSetTitle === "function") {
+      window.__uirSetTitle(`titleCs`);
+    } else if (typeof document !== "undefined") {
+      document.title = `titleCs`;
+    }
+    """.}
 
 proc webGetWindowLayout*(): ScreenLayout =
   webCore.layout
@@ -527,6 +712,13 @@ proc webGetClipboardText*(): string =
 
 proc webPutClipboardText*(text: string) =
   webCore.clipboardText = text
+  when defined(js):
+    # Copy has to leave the page: an app that calls `putClipboardText` on
+    # Ctrl+C expects Ctrl+V in another program to paste it.
+    let textCs = cstring(text)
+    {.emit: """
+    if (typeof window.__uirCopyToSystem === "function") window.__uirCopyToSystem(`textCs`);
+    """.}
 
 # ---------------------------------------------------------------------------
 # Keyboard & Mouse Event Translation + Programmatic Injection
@@ -699,12 +891,28 @@ proc makeTextInputEvent*(utf8Rune: string): Event =
   for i in 0 ..< n:
     result.text[i] = utf8Rune[i]
 
+const webEventQueueLimit* = 4096
+  ## How many events may wait for the app. Past that, something has to give.
+
 proc webInjectEvent*(e: Event) =
   if e.kind == MouseMoveEvent and webCore.eventQueue.len > 0 and
      webCore.eventQueue[^1].kind == MouseMoveEvent:
     webCore.eventQueue[^1] = e
-  elif webCore.eventQueue.len < 4096:
+    return
+  if webCore.eventQueue.len < webEventQueueLimit:
     webCore.eventQueue.add e
+    return
+  # The queue is full, so something has to be dropped. It must not be the
+  # event that arrived: dropping a mouseup leaves the app convinced the button
+  # is still held, and it stays stuck mid-drag for good. Position updates are
+  # the cheapest thing to lose, so displace the oldest of those instead.
+  for i in 0 ..< webCore.eventQueue.len:
+    if webCore.eventQueue[i].kind == MouseMoveEvent:
+      webCore.eventQueue.delete(i)
+      webCore.eventQueue.add e
+      inc webCore.droppedEvents
+      return
+  inc webCore.droppedEvents
 
 proc utf8RuneCount(s: string): int {.inline.} =
   var i = 0
@@ -736,8 +944,13 @@ proc webInjectMouse*(kind: EventKind; x, y: int; button = LeftButton; clicks = 1
   ))
 
 proc webInjectResize*(w, h: int; uiScale = 100) =
-  let clampedW = clamp(w, 120, 4096)
-  let clampedH = clamp(h, 120, 4096)
+  # The application's own floor raises the built-in one: a browser may offer
+  # less room than the app can draw in, but the app still has to be handed a
+  # size it can lay out, or it renders interface nobody can reach.
+  let floorW = max(120, webCore.minViewportW)
+  let floorH = max(120, webCore.minViewportH)
+  let clampedW = clamp(w, floorW, max(floorW, 4096))
+  let clampedH = clamp(h, floorH, max(floorH, 4096))
   let clampedScale = clamp(uiScale, 50, 400)
   webCore.layout.width = clampedW
   webCore.layout.height = clampedH
@@ -864,7 +1077,10 @@ when not defined(js):
         else:
           parseSingleJsonEvent(parsed)
     except CatchableError:
-      discard
+      # Swallowing a malformed body is right -- one bad POST must not kill the
+      # app -- but silently is not: the client has no way to tell "rejected"
+      # from "accepted and had no effect".
+      inc webCore.inputParseErrors
     result = webCore.eventQueue.len - beforeLen
 
 # ---------------------------------------------------------------------------
@@ -954,6 +1170,39 @@ when defined(js):
     webCore.clipboardText = $txt
 
   proc bindJsBrowserListeners() =
+    # Each backend owns a different viewport id, and an HTML page must never
+    # be asked to provide a `<canvas>` it is not allowed to draw into.
+    when defined(canvas):
+      {.emit: """var __uirShellViewportId = "uir-canvas";""".}
+    else:
+      {.emit: """var __uirShellViewportId = "uir-viewport";""".}
+    # The canvas build has to size a backing store; the HTML build is not
+    # allowed to touch a canvas at all, so the two get different helpers.
+    when defined(canvas):
+      {.emit: """
+    var __uirApplyViewportBox = function(vp, w, h) {
+      // Retina: CSS pixels for layout, device pixels for the backing store.
+      var dpr = window.devicePixelRatio || 1;
+      if (!(dpr > 0)) dpr = 1;
+      var bw = Math.max(1, Math.round(w * dpr));
+      var bh = Math.max(1, Math.round(h * dpr));
+      if (vp.width !== bw) vp.width = bw;
+      if (vp.height !== bh) vp.height = bh;
+      vp.style.width = w + "px";
+      vp.style.height = h + "px";
+      window.__uirDpr = dpr;
+      var ctx = null;
+      try { ctx = vp.__uirCtx || (vp.getContext ? vp.getContext("2d") : null); } catch (_) {}
+      if (ctx && typeof ctx.setTransform === "function") ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    """.}
+    else:
+      {.emit: """
+    var __uirApplyViewportBox = function(vp, w, h) {
+      vp.style.width = w + "px";
+      vp.style.height = h + "px";
+    };
+    """.}
     {.emit: """
     window.__uirRunId = (window.__uirRunId || 0) + 1;
     if (window.__uirTimerId) {
@@ -964,29 +1213,80 @@ when defined(js):
       window.__uirStepNow = function() { cb(performance.now()); };
       if (window.__uirTimerId) clearTimeout(window.__uirTimerId);
       window.__uirTimerId = setTimeout(function() {
+        window.__uirTimerId = 0;
         cb(performance.now());
       }, 16);
+    };
+    // At most one step per animation frame. Input arrives in bursts -- a wheel
+    // spinning, a key held down, a fast drag -- and running a whole frame
+    // synchronously per event makes the queue grow faster than it drains.
+    window.__uirRequestStep = function() {
+      if (window.__uirStepPending || !window.__uirStepNow) return;
+      window.__uirStepPending = true;
+      var run = function() {
+        window.__uirStepPending = false;
+        if (window.__uirStepNow) window.__uirStepNow();
+      };
+      if (typeof window.requestAnimationFrame === "function" && !document.hidden) {
+        window.requestAnimationFrame(run);
+      } else {
+        setTimeout(run, 0);
+      }
+    };
+    // `setWindowTitle` must reach the tab, not only the HUD label.
+    window.__uirSetTitle = function(title) {
+      var suffix = (typeof window.__uirTitleSuffix === "string") ? window.__uirTitleSuffix : "";
+      var next = "" + title + suffix;
+      if (typeof document !== "undefined" && document.title !== next) document.title = next;
+    };
+    // `putClipboardText` must reach the system clipboard, not only our state.
+    window.__uirCopyFallback = function(txt) {
+      try {
+        var ta = document.getElementById("uir-clipboard-offscreen");
+        if (!ta) {
+          ta = document.createElement("textarea");
+          ta.id = "uir-clipboard-offscreen";
+          ta.setAttribute("style", "position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;");
+          if (document.body) document.body.appendChild(ta);
+        }
+        ta.value = txt;
+        if (ta.select) ta.select();
+        if (document.execCommand) document.execCommand("copy");
+      } catch (_) {}
+    };
+    window.__uirCopyToSystem = function(txt) {
+      try {
+        var el = document.getElementById("uir-clipboard-input");
+        if (el && document.activeElement !== el) el.value = txt;
+      } catch (_) {}
+      try {
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).then(null, function() { window.__uirCopyFallback(txt); });
+          return;
+        }
+      } catch (_) {}
+      window.__uirCopyFallback(txt);
     };
     window.__uirActive = {
       mouse: function(evType, x, y, button, clicks, shift, ctrl, alt, meta) {
         uirJsMouseEvent(evType, x, y, button, clicks, shift, ctrl, alt, meta);
-        if (evType !== "mousemove" && window.__uirStepNow) window.__uirStepNow();
+        window.__uirRequestStep();
       },
       wheel: function(dx, dy, shift, ctrl, alt, meta) {
         uirJsWheelEvent(dx, dy, shift, ctrl, alt, meta);
-        if (window.__uirStepNow) window.__uirStepNow();
+        window.__uirRequestStep();
       },
       key: function(evType, keyStr, codeStr, shift, ctrl, alt, meta) {
         uirJsKeyEvent(evType, keyStr, codeStr, shift, ctrl, alt, meta);
-        if (window.__uirStepNow) window.__uirStepNow();
+        window.__uirRequestStep();
       },
       resize: function(w, h, uiScale) {
         uirJsResizeEvent(w, h, uiScale);
-        if (window.__uirStepNow) window.__uirStepNow();
+        window.__uirRequestStep();
       },
       clip: function(txt) {
         uirJsClipboardEvent(txt);
-        if (window.__uirStepNow) window.__uirStepNow();
+        window.__uirRequestStep();
       }
     };
     if (!window.__uirBrowserBound) {
@@ -997,6 +1297,39 @@ when defined(js):
       var getStage = function() {
         return document.getElementById("uir-stage") || getVp() || document.body;
       };
+      // The shell contract is a handful of ids. When one is missing the
+      // matching feature silently does nothing, which costs an evening to
+      // find; say so once, on the console, at startup.
+      (function reportShellContract() {
+        // The two backends need different ids. Asking an HTML page for
+        // `#uir-canvas` only ever produced a warning that made no sense --
+        // and nudged embedders into shipping a canvas element the backend is
+        // forbidden to use.
+        // Required: without these a feature is dead, not merely inconvenient.
+        var required = [__uirShellViewportId, "uir-stage", "uir-clipboard-input"];
+        // Optional: a minimal embedder, or the exported app gallery, ships no
+        // toolbar at all and that is perfectly fine.
+        var optional = ["uir-win-title", "uir-btn-clip-sync", "uir-btn-resize-960",
+                        "uir-btn-resize-800", "uir-btn-resize-auto", "uir-btn-close"];
+        var collect = function(ids) {
+          var out = [];
+          for (var i = 0; i < ids.length; i++) {
+            if (!document.getElementById(ids[i])) out.push("#" + ids[i]);
+          }
+          return out;
+        };
+        var missing = collect(required);
+        window.__uirMissingElements = missing;
+        window.__uirMissingOptional = collect(optional);
+        var hasViewport = document.getElementById("uir-viewport") || document.getElementById("uir-canvas");
+        if (typeof console !== "undefined" && console.warn) {
+          if (!hasViewport) {
+            console.warn("[uirelays] no #" + __uirShellViewportId + " in the page: nothing will be drawn.");
+          } else if (missing.length > 0) {
+            console.warn("[uirelays] shell contract incomplete: " + missing.join(", ") + ".");
+          }
+        }
+      })();
       var relPos = function(e, el) {
         if (!el) return { x: 0, y: 0 };
         var r = el.getBoundingClientRect();
@@ -1005,21 +1338,54 @@ when defined(js):
           y: Math.round(e.clientY - r.top)
         };
       };
+      var stagePadding = function(el) {
+        if (!el || typeof window.getComputedStyle !== "function") return { x: 0, y: 0 };
+        try {
+          var cs = window.getComputedStyle(el);
+          return {
+            x: (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0),
+            y: (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0)
+          };
+        } catch (_) { return { x: 0, y: 0 }; }
+      };
+      var viewportMin = function() {
+        var m = window.__uirMinViewport;
+        var a = window.__uirAppMinViewport;
+        var w = (m && m.w > 0) ? m.w : 320;
+        var h = (m && m.h > 0) ? m.h : 240;
+        // The two floors combine by taking the larger of each. An embedder can
+        // give an application more room than it needs; it can never take away
+        // room the application declared it cannot draw without.
+        if (a && a.w > w) w = a.w;
+        if (a && a.h > h) h = a.h;
+        return { w: w, h: h };
+      };
+      var viewportInset = function() {
+        var i = window.__uirViewportInset;
+        return { x: (i && typeof i.x === "number") ? i.x : 0,
+                 y: (i && typeof i.y === "number") ? i.y : 0 };
+      };
       var syncViewportSize = function() {
-        var st = getStage();
         var vp = getVp();
         if (!vp || !window.__uirActive) return;
         if (window.__uirFixedSizeMode) return;
-        var w = st ? (st.clientWidth - 4) : (window.innerWidth - 16);
-        var h = st ? (st.clientHeight - 4) : (window.innerHeight - 60);
-        w = Math.max(360, Math.floor(w));
-        h = Math.max(280, Math.floor(h));
-        vp.style.width = w + "px";
-        vp.style.height = h + "px";
-        if (vp.tagName === "CANVAS") {
-          if (vp.width !== w) vp.width = w;
-          if (vp.height !== h) vp.height = h;
-        }
+        var st = document.getElementById("uir-stage");
+        var box = st || vp;
+        var cw = box.clientWidth;
+        var ch = box.clientHeight;
+        // A hidden stage (background tab, display:none iframe) measures 0x0.
+        // Clamping that to the minimum would hand the app a size it never
+        // asked for, so keep the previous size and wait for the observer.
+        if (!cw || !ch) return;
+        var pad = (box === vp) ? { x: 0, y: 0 } : stagePadding(box);
+        var ins = viewportInset();
+        var min = viewportMin();
+        var w = Math.floor(cw - pad.x - ins.x);
+        var h = Math.floor(ch - pad.y - ins.y);
+        if (w < 1 || h < 1) return;
+        w = Math.max(min.w, w);
+        h = Math.max(min.h, h);
+        __uirApplyViewportBox(vp, w, h);
         window.__uirActive.resize(w, h, 100);
       };
       window.__uirSyncViewportSize = syncViewportSize;
@@ -1106,7 +1472,7 @@ when defined(js):
         btn960.addEventListener("click", function() {
           window.__uirFixedSizeMode = true;
           var vp = getVp();
-          if (vp) { vp.style.width = "960px"; vp.style.height = "640px"; }
+          if (vp) __uirApplyViewportBox(vp, 960, 640);
           if (window.__uirActive) window.__uirActive.resize(960, 640, 100);
         });
       }
@@ -1115,7 +1481,7 @@ when defined(js):
         btn800.addEventListener("click", function() {
           window.__uirFixedSizeMode = true;
           var vp = getVp();
-          if (vp) { vp.style.width = "800px"; vp.style.height = "600px"; }
+          if (vp) __uirApplyViewportBox(vp, 800, 600);
           if (window.__uirActive) window.__uirActive.resize(800, 600, 100);
         });
       }
@@ -1226,7 +1592,19 @@ else:
     var headerEnd = -1
     var contentLength = 0
 
-    for attempt in 0 ..< 40:
+    # Read the whole request. Counting attempts instead of bytes truncates any
+    # body that arrives in more pieces than the budget allows -- a 600 KB batch
+    # of input events, for one -- and then the handler acts on half a JSON
+    # document, drops every event in it, and closes the connection while the
+    # client is still writing. Read until the declared body is complete, a
+    # deadline passes, or the request grows past what we will buffer.
+    const
+      maxRequestBytes = 8 * 1024 * 1024
+      readDeadlineMs = 5000
+    let readDeadline = getMonoTime() + initDuration(milliseconds = readDeadlineMs)
+    var requestComplete = false
+    var requestTooBig = false
+    while true:
       let n = posix.recv(clientFd, addr buf[0], buf.len, 0)
       if n > 0:
         let oldLen = rawReq.len
@@ -1234,7 +1612,8 @@ else:
         for i in 0 ..< n:
           rawReq[oldLen + i] = buf[i]
         if headerEnd < 0:
-          headerEnd = rawReq.find("\r\n\r\n")
+          # Only the tail can complete the terminator, so start looking there.
+          headerEnd = rawReq.find("\r\n\r\n", max(0, oldLen - 3))
           if headerEnd >= 0:
             let hdrPart = rawReq[0 ..< headerEnd]
             for line in hdrPart.splitLines():
@@ -1244,19 +1623,33 @@ else:
                   contentLength = parseInt(strutils.strip(line[15 .. ^1]))
                 except ValueError:
                   contentLength = 0
-        if headerEnd >= 0 and rawReq.len >= headerEnd + 4 + contentLength:
-          break
+        if headerEnd >= 0:
+          if rawReq.len >= headerEnd + 4 + contentLength:
+            requestComplete = true
+            break
+          if rawReq.len > maxRequestBytes:
+            requestTooBig = true
+            break
       elif n == 0:
-        break
+        break # peer closed
       else:
         if errno == EAGAIN or errno == EWOULDBLOCK:
-          if headerEnd >= 0 and rawReq.len >= headerEnd + 4 + contentLength:
+          if getMonoTime() >= readDeadline:
             break
-          sleepNs(200_000)
+          sleepNs(200_000) # 0.2 ms
         else:
           break
 
     if rawReq.len == 0:
+      discard posix.close(cint(clientFd))
+      return
+
+    if not requestComplete:
+      # Half a request is not a request: acting on it would mean acting on
+      # garbage, and the client deserves to hear that instead of a 200.
+      let status = if requestTooBig: "413 Payload Too Large" else: "400 Bad Request"
+      writeHttpResponse(clientFd, status, "application/json; charset=utf-8",
+        """{"error":"incomplete request"}""")
       discard posix.close(cint(clientFd))
       return
 
@@ -1311,7 +1704,10 @@ else:
         "clipboard": webCore.clipboardText,
         "wantTextInput": webCore.wantTextInput,
         "domNodeCount": webCore.domNodeCount,
-        "canvasCommandCount": webCore.canvasCommandCount
+        "canvasCommandCount": webCore.canvasCommandCount,
+        "sseClients": webCore.sseClients.len,
+        "droppedEvents": webCore.droppedEvents,
+        "inputParseErrors": webCore.inputParseErrors
       }
       writeHttpResponse(clientFd, "200 OK", "application/json; charset=utf-8", $healthObj)
       discard posix.close(cint(clientFd))
@@ -1408,9 +1804,33 @@ else:
     webCore.serverPort = boundPort
     webCore.serverEnabled = true
 
+  proc reapSseClients() =
+    ## A browser that closed its tab sends nothing -- the socket just goes
+    ## quiet, and the next frame we push at it may still be accepted by the
+    ## kernel. Without looking for EOF here, every closed tab keeps its file
+    ## descriptor until a send fails, and an app that has gone idle sends
+    ## nothing at all, so they pile up until the process runs out of fds.
+    var i = 0
+    while i < webCore.sseClients.len:
+      let fd = webCore.sseClients[i].fd
+      if fd == osInvalidSocket or cint(fd) < 0:
+        webCore.sseClients.delete(i)
+        continue
+      var probe: array[16, char]
+      let flags = cint(MSG_PEEK) or
+        (when declared(MSG_DONTWAIT): cint(MSG_DONTWAIT) else: 0'i32)
+      let n = posix.recv(fd, addr probe[0], probe.len, flags)
+      if n == 0 or (n < 0 and errno != EAGAIN and errno != EWOULDBLOCK):
+        discard posix.close(cint(fd))
+        webCore.sseClients[i].alive = false
+        webCore.sseClients.delete(i)
+      else:
+        inc i
+
   proc webPumpServer*() =
     if not webCore.serverEnabled or webCore.listenFd == osInvalidSocket:
       return
+    reapSseClients()
     for _ in 0 ..< 16:
       var clientSa: Sockaddr_in
       var clientLen = SockLen(sizeof(clientSa))
@@ -1510,7 +1930,8 @@ proc initWebCore*(kind: WebBackendKind; pageHtml: string) =
       frameId: 0,
       lastPayloadHash: 0'u64,
       lastFrameJson: "",
-      pageHtml: pageHtml
+      pageHtml: pageHtml,
+      droppedEvents: 0
     )
   else:
     webCore = WebCoreState(
@@ -1532,7 +1953,8 @@ proc initWebCore*(kind: WebBackendKind; pageHtml: string) =
       lastFrameJson: "",
       pageHtml: pageHtml,
       listenFd: osInvalidSocket,
-      sseClients: @[]
+      sseClients: @[],
+      droppedEvents: 0
     )
 
 proc webCreateWindowCommon*(layout: var ScreenLayout; icon: pointer; iconLen: int) =

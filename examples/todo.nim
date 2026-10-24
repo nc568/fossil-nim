@@ -291,6 +291,10 @@ proc drawDeleteButton(r: Rect; hovered: bool) =
 
 proc main() {.uirApp.} =
   let win = createWindow(760, 560)
+  # The layout below is drawn for 760x560 and does not reflow below it:
+  # declaring the floor keeps the viewport from shrinking into
+  # territory where the interface is clipped away and unreachable.
+  setMinViewport(760, 560)
   var width = win.width
   var height = win.height
 
@@ -338,8 +342,8 @@ proc main() {.uirApp.} =
       of QuitEvent, WindowCloseEvent:
         running = false
       of WindowResizeEvent, WindowMetricsEvent:
-        width = max(360, e.x)
-        height = max(280, e.y)
+        width = max(760, e.x)
+        height = max(560, e.y)
       of MouseMoveEvent:
         mouseX = e.x
         mouseY = e.y
