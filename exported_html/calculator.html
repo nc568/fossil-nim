@@ -1045,12 +1045,6 @@ function reprEnum(e_p0, typ_p1) {
 
 }
 var ConstSet8 = setConstr(46, 44);
-
-function addChar(x_p0, c_p1) {
-    x_p0.push(c_p1);
-
-  
-}
           var cb64safe_1207959557 = new Uint8Array([65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 45, 95]);
             var cb64_1207959556 = new Uint8Array([65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 43, 47]);
 
@@ -1068,6 +1062,12 @@ var ConstSet11 = setConstr(0);
 var ConstSet12 = setConstr(0);
 var ConstSet13 = setConstr(0);
 var ConstSet14 = setConstr(0, 32, 9, 13, 10, 40, 41, 34, 39);
+
+function addChar(x_p0, c_p1) {
+    x_p0.push(c_p1);
+
+  
+}
 var ConstSet15 = setConstr([48, 57]);
 var ConstSet16 = setConstr([48, 57]);
 var ConstSet17 = setConstr([48, 57]);
@@ -4610,47 +4610,6 @@ function buildFontCssStyle__OOZsrcZuirelaysZdriversZhtml95driver_u520(slot_p0, f
 
 }
 
-function htmlEscape__OOZsrcZuirelaysZdriversZweb95common_u91(s_p0) {
-  var result_1191182429 = [];
-
-    result_1191182429 = nimCopy(null, mnewString(0), NTI33554449);
-    Label1: {
-      var ch_1191182430 = 0;
-      var i_1090519104 = 0;
-      var L_1090519105 = (s_p0).length;
-      Label2: {
-          Label3: while (true) {
-          if (!(i_1090519104 < L_1090519105)) break Label3;
-            ch_1191182430 = s_p0[i_1090519104];
-            switch (ch_1191182430) {
-            case 38:
-              result_1191182429.push.apply(result_1191182429, [38,97,109,112,59]);;
-              break;
-            case 60:
-              result_1191182429.push.apply(result_1191182429, [38,108,116,59]);;
-              break;
-            case 62:
-              result_1191182429.push.apply(result_1191182429, [38,103,116,59]);;
-              break;
-            case 34:
-              result_1191182429.push.apply(result_1191182429, [38,113,117,111,116,59]);;
-              break;
-            case 39:
-              result_1191182429.push.apply(result_1191182429, [38,35,51,57,59]);;
-              break;
-            default: 
-              addChar(result_1191182429, ch_1191182430);;
-              break;
-            }
-            i_1090519104 += 1;
-          }
-      };
-    };
-
-  return result_1191182429;
-
-}
-
 function htmlDrawText__OOZsrcZuirelaysZdriversZhtml95driver_u534(f_p0, x_p1, y_p2, text_p3, fg_p4, bg_p5) {
   var result_1174405661 = ({w: 0, h: 0});
 
@@ -4662,7 +4621,7 @@ function htmlDrawText__OOZsrcZuirelaysZdriversZhtml95driver_u534(f_p0, x_p1, y_p
     
     syncClipDiv__OOZsrcZuirelaysZdriversZhtml95driver_u454();
     var slot_1174405662 = webGetFontSlot__OOZsrcZuirelaysZdriversZweb95common_u640(f_p0);
-    addPrim__OOZsrcZuirelaysZdriversZhtml95driver_u40(5, ([108,101,102,116,58]).concat(HEX24__systemZdollars_u14(x_p1),[112,120,59,116,111,112,58],HEX24__systemZdollars_u14(y_p2),[112,120,59,119,105,100,116,104,58],HEX24__systemZdollars_u14(result_1174405661.w),[112,120,59],buildFontCssStyle__OOZsrcZuirelaysZdriversZhtml95driver_u520(slot_1174405662, fg_p4, bg_p5)), htmlEscape__OOZsrcZuirelaysZdriversZweb95common_u91(text_p3), []);
+    addPrim__OOZsrcZuirelaysZdriversZhtml95driver_u40(5, ([108,101,102,116,58]).concat(HEX24__systemZdollars_u14(x_p1),[112,120,59,116,111,112,58],HEX24__systemZdollars_u14(y_p2),[112,120,59,119,105,100,116,104,58],HEX24__systemZdollars_u14(result_1174405661.w),[112,120,59],buildFontCssStyle__OOZsrcZuirelaysZdriversZhtml95driver_u520(slot_1174405662, fg_p4, bg_p5)), text_p3, []);
   };
 
   return result_1174405661;
@@ -4677,7 +4636,7 @@ function htmlDrawMeasuredText__OOZsrcZuirelaysZdriversZhtml95driver_u543(f_p0, x
     
     syncClipDiv__OOZsrcZuirelaysZdriversZhtml95driver_u454();
     var slot_1174405671 = webGetFontSlot__OOZsrcZuirelaysZdriversZweb95common_u640(f_p0);
-    addPrim__OOZsrcZuirelaysZdriversZhtml95driver_u40(5, ([108,101,102,116,58]).concat(HEX24__systemZdollars_u14(x_p1),[112,120,59,116,111,112,58],HEX24__systemZdollars_u14(y_p2),[112,120,59,119,105,100,116,104,58],HEX24__systemZdollars_u14(size_p6.w),[112,120,59],buildFontCssStyle__OOZsrcZuirelaysZdriversZhtml95driver_u520(slot_1174405671, fg_p4, bg_p5)), htmlEscape__OOZsrcZuirelaysZdriversZweb95common_u91(text_p3), []);
+    addPrim__OOZsrcZuirelaysZdriversZhtml95driver_u40(5, ([108,101,102,116,58]).concat(HEX24__systemZdollars_u14(x_p1),[112,120,59,116,111,112,58],HEX24__systemZdollars_u14(y_p2),[112,120,59,119,105,100,116,104,58],HEX24__systemZdollars_u14(size_p6.w),[112,120,59],buildFontCssStyle__OOZsrcZuirelaysZdriversZhtml95driver_u520(slot_1174405671, fg_p4, bg_p5)), text_p3, []);
   };
 
   
@@ -4769,19 +4728,19 @@ function webLoadImage__OOZsrcZuirelaysZdriversZweb95common_u1060(path_p0) {
     
     Label1: {
       var i_1191183406 = 0;
-      var colontmp__1090519108 = 0;
-      colontmp__1090519108 = (webCore_1191182397[0].images).length;
-      var i_1090519109 = 0;
+      var colontmp__1090519103 = 0;
+      colontmp__1090519103 = (webCore_1191182397[0].images).length;
+      var i_1090519104 = 0;
       Label2: {
           Label3: while (true) {
-          if (!(i_1090519109 < colontmp__1090519108)) break Label3;
-            i_1191183406 = i_1090519109;
+          if (!(i_1090519104 < colontmp__1090519103)) break Label3;
+            i_1191183406 = i_1090519104;
             if ((webCore_1191182397[0].images[i_1191183406].active && (eqStrings(webCore_1191182397[0].images[i_1191183406].path, path_p0) || nsuEndsWith(path_p0, webCore_1191182397[0].images[i_1191183406].path)))) {
             result_1191183398 = (i_1191183406 + 1);
             break BeforeRet;
             }
             
-            i_1090519109 += 1;
+            i_1090519104 += 1;
           }
       };
     };
@@ -4868,9 +4827,9 @@ function webImageSize__OOZsrcZuirelaysZdriversZweb95common_u1077(img_p0) {
   BeforeRet: {
     var idx_1191183418 = (img_p0 - 1);
     if ((((0 <= idx_1191183418) && (idx_1191183418 < (webCore_1191182397[0].images).length)) && webCore_1191182397[0].images[idx_1191183418].active)) {
-    var colontmp__1090519111 = webCore_1191182397[0].images[idx_1191183418].w;
-    var colontmp__1090519112 = webCore_1191182397[0].images[idx_1191183418].h;
-    result_1191183417 = nimCopy(result_1191183417, {Field0: colontmp__1090519111, Field1: colontmp__1090519112}, NTI1191183079);
+    var colontmp__1090519106 = webCore_1191182397[0].images[idx_1191183418].w;
+    var colontmp__1090519107 = webCore_1191182397[0].images[idx_1191183418].h;
+    result_1191183417 = nimCopy(result_1191183417, {Field0: colontmp__1090519106, Field1: colontmp__1090519107}, NTI1191183079);
     break BeforeRet;
     }
     
@@ -5051,15 +5010,15 @@ function encodeRgbaToPngDataUri__OOZsrcZuirelaysZdriversZweb95common_u313(pixels
     var s_1191182661 = mnewString((pngBytes_1191182654).length);
     Label1: {
       var i_1191182669 = 0;
-      var colontmp__1090519114 = 0;
-      colontmp__1090519114 = (pngBytes_1191182654).length;
-      var i_1090519115 = 0;
+      var colontmp__1090519109 = 0;
+      colontmp__1090519109 = (pngBytes_1191182654).length;
+      var i_1090519110 = 0;
       Label2: {
           Label3: while (true) {
-          if (!(i_1090519115 < colontmp__1090519114)) break Label3;
-            i_1191182669 = i_1090519115;
+          if (!(i_1090519110 < colontmp__1090519109)) break Label3;
+            i_1191182669 = i_1090519110;
             s_1191182661[i_1191182669] = pngBytes_1191182654[i_1191182669];
-            i_1090519115 += 1;
+            i_1090519110 += 1;
           }
       };
     };

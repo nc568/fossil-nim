@@ -30,6 +30,11 @@ type
     ## The inline `style` attribute.
     style*: string
     ## `textContent` for `hpText`, inner markup for `hpSvgLine`/`hpImg`/`hpBlit`.
+    ##
+    ## For `hpText` this is the **raw** text, never HTML-escaped: the DOM path
+    ## assigns it with `textContent`, which does no decoding, so a pre-escaped
+    ## `&amp;` reaches the user as the literal six characters `&amp;`. Escaping
+    ## is the serializer's job and happens in `renderPrimsToHtml` only.
     text*: string
     ## The one attribute that is not `style`: `viewBox` / the `data-clip` rect.
     extra*: string
@@ -728,8 +733,10 @@ proc renderPrimsToHtml(prims: seq[HtmlPrim]): string =
       result.add "<div class=\"uir-clip\" data-clip=\"" & p.extra &
         "\" style=\"" & p.style & "\">"
     of hpText:
+      # The primitive carries the raw string (the DOM path assigns it straight
+      # to `textContent`), so the escaping happens here and only here.
       result.add "<span class=\"uir-text\" style=\"" & p.style & "\">" &
-        p.text & "</span>"
+        htmlEscape(p.text) & "</span>"
     of hpSvgLine:
       result.add "<svg class=\"uir-svg-line\" style=\"" & p.style &
         "\" viewBox=\"" & p.extra & "\">" & p.text & "</svg>"
@@ -1003,7 +1010,7 @@ proc htmlDrawText(f: Font; x, y: int; text: string; fg, bg: Color): TextExtent =
   syncClipDiv()
   let slot = webGetFontSlot(f)
   addPrim(hpText, "left:" & $x & "px;top:" & $y & "px;width:" & $result.w &
-    "px;" & buildFontCssStyle(slot, fg, bg), htmlEscape(text))
+    "px;" & buildFontCssStyle(slot, fg, bg), text)
 
 proc htmlDrawMeasuredText(f: Font; x, y: int; text: string; fg, bg: Color;
                           size: TextExtent) =
@@ -1012,7 +1019,7 @@ proc htmlDrawMeasuredText(f: Font; x, y: int; text: string; fg, bg: Color;
   syncClipDiv()
   let slot = webGetFontSlot(f)
   addPrim(hpText, "left:" & $x & "px;top:" & $y & "px;width:" & $size.w &
-    "px;" & buildFontCssStyle(slot, fg, bg), htmlEscape(text))
+    "px;" & buildFontCssStyle(slot, fg, bg), text)
 
 proc htmlDrawImage(img: Image; src, dst: Rect) =
   let slot = webGetImageSlot(img)

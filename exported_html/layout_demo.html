@@ -1036,12 +1036,6 @@ function reprEnum(e_p0, typ_p1) {
 
 }
 var ConstSet8 = setConstr(46, 44);
-
-function addChar(x_p0, c_p1) {
-    x_p0.push(c_p1);
-
-  
-}
           var cb64safe_1124073477 = new Uint8Array([65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 45, 95]);
             var cb64_1124073476 = new Uint8Array([65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 43, 47]);
 
@@ -1057,6 +1051,12 @@ var ConstSet9 = setConstr();
 var ConstSet10 = setConstr(0);
 var ConstSet11 = setConstr();
 var ConstSet12 = setConstr(0, 32, 9, 13, 10, 40, 41, 34, 39);
+
+function addChar(x_p0, c_p1) {
+    x_p0.push(c_p1);
+
+  
+}
 var ConstSet13 = setConstr([48, 57]);
 var ConstSet14 = setConstr([48, 57]);
 var ConstSet15 = setConstr([48, 57]);
@@ -4572,47 +4572,6 @@ function buildFontCssStyle__OOZsrcZuirelaysZdriversZhtml95driver_u520(slot_p0, f
 
 }
 
-function htmlEscape__OOZsrcZuirelaysZdriversZweb95common_u91(s_p0) {
-  var result_822083677 = [];
-
-    result_822083677 = nimCopy(null, mnewString(0), NTI33554449);
-    Label1: {
-      var ch_822083678 = 0;
-      var i_687865921 = 0;
-      var L_687865922 = (s_p0).length;
-      Label2: {
-          Label3: while (true) {
-          if (!(i_687865921 < L_687865922)) break Label3;
-            ch_822083678 = s_p0[i_687865921];
-            switch (ch_822083678) {
-            case 38:
-              result_822083677.push.apply(result_822083677, [38,97,109,112,59]);;
-              break;
-            case 60:
-              result_822083677.push.apply(result_822083677, [38,108,116,59]);;
-              break;
-            case 62:
-              result_822083677.push.apply(result_822083677, [38,103,116,59]);;
-              break;
-            case 34:
-              result_822083677.push.apply(result_822083677, [38,113,117,111,116,59]);;
-              break;
-            case 39:
-              result_822083677.push.apply(result_822083677, [38,35,51,57,59]);;
-              break;
-            default: 
-              addChar(result_822083677, ch_822083678);;
-              break;
-            }
-            i_687865921 += 1;
-          }
-      };
-    };
-
-  return result_822083677;
-
-}
-
 function htmlDrawText__OOZsrcZuirelaysZdriversZhtml95driver_u534(f_p0, x_p1, y_p2, text_p3, fg_p4, bg_p5) {
   var result_805306909 = ({w: 0, h: 0});
 
@@ -4624,7 +4583,7 @@ function htmlDrawText__OOZsrcZuirelaysZdriversZhtml95driver_u534(f_p0, x_p1, y_p
     
     syncClipDiv__OOZsrcZuirelaysZdriversZhtml95driver_u454();
     var slot_805306910 = webGetFontSlot__OOZsrcZuirelaysZdriversZweb95common_u640(f_p0);
-    addPrim__OOZsrcZuirelaysZdriversZhtml95driver_u40(5, ([108,101,102,116,58]).concat(HEX24__systemZdollars_u14(x_p1),[112,120,59,116,111,112,58],HEX24__systemZdollars_u14(y_p2),[112,120,59,119,105,100,116,104,58],HEX24__systemZdollars_u14(result_805306909.w),[112,120,59],buildFontCssStyle__OOZsrcZuirelaysZdriversZhtml95driver_u520(slot_805306910, fg_p4, bg_p5)), htmlEscape__OOZsrcZuirelaysZdriversZweb95common_u91(text_p3), []);
+    addPrim__OOZsrcZuirelaysZdriversZhtml95driver_u40(5, ([108,101,102,116,58]).concat(HEX24__systemZdollars_u14(x_p1),[112,120,59,116,111,112,58],HEX24__systemZdollars_u14(y_p2),[112,120,59,119,105,100,116,104,58],HEX24__systemZdollars_u14(result_805306909.w),[112,120,59],buildFontCssStyle__OOZsrcZuirelaysZdriversZhtml95driver_u520(slot_805306910, fg_p4, bg_p5)), text_p3, []);
   };
 
   return result_805306909;
@@ -4639,7 +4598,7 @@ function htmlDrawMeasuredText__OOZsrcZuirelaysZdriversZhtml95driver_u543(f_p0, x
     
     syncClipDiv__OOZsrcZuirelaysZdriversZhtml95driver_u454();
     var slot_805306919 = webGetFontSlot__OOZsrcZuirelaysZdriversZweb95common_u640(f_p0);
-    addPrim__OOZsrcZuirelaysZdriversZhtml95driver_u40(5, ([108,101,102,116,58]).concat(HEX24__systemZdollars_u14(x_p1),[112,120,59,116,111,112,58],HEX24__systemZdollars_u14(y_p2),[112,120,59,119,105,100,116,104,58],HEX24__systemZdollars_u14(size_p6.w),[112,120,59],buildFontCssStyle__OOZsrcZuirelaysZdriversZhtml95driver_u520(slot_805306919, fg_p4, bg_p5)), htmlEscape__OOZsrcZuirelaysZdriversZweb95common_u91(text_p3), []);
+    addPrim__OOZsrcZuirelaysZdriversZhtml95driver_u40(5, ([108,101,102,116,58]).concat(HEX24__systemZdollars_u14(x_p1),[112,120,59,116,111,112,58],HEX24__systemZdollars_u14(y_p2),[112,120,59,119,105,100,116,104,58],HEX24__systemZdollars_u14(size_p6.w),[112,120,59],buildFontCssStyle__OOZsrcZuirelaysZdriversZhtml95driver_u520(slot_805306919, fg_p4, bg_p5)), text_p3, []);
   };
 
   
@@ -4731,19 +4690,19 @@ function webLoadImage__OOZsrcZuirelaysZdriversZweb95common_u1069(path_p0) {
     
     Label1: {
       var i_822084663 = 0;
-      var colontmp__687865925 = 0;
-      colontmp__687865925 = (webCore_822083645[0].images).length;
-      var i_687865926 = 0;
+      var colontmp__687865920 = 0;
+      colontmp__687865920 = (webCore_822083645[0].images).length;
+      var i_687865921 = 0;
       Label2: {
           Label3: while (true) {
-          if (!(i_687865926 < colontmp__687865925)) break Label3;
-            i_822084663 = i_687865926;
+          if (!(i_687865921 < colontmp__687865920)) break Label3;
+            i_822084663 = i_687865921;
             if ((webCore_822083645[0].images[i_822084663].active && (eqStrings(webCore_822083645[0].images[i_822084663].path, path_p0) || nsuEndsWith(path_p0, webCore_822083645[0].images[i_822084663].path)))) {
             result_822084655 = (i_822084663 + 1);
             break BeforeRet;
             }
             
-            i_687865926 += 1;
+            i_687865921 += 1;
           }
       };
     };
@@ -4830,9 +4789,9 @@ function webImageSize__OOZsrcZuirelaysZdriversZweb95common_u1086(img_p0) {
   BeforeRet: {
     var idx_822084675 = (img_p0 - 1);
     if ((((0 <= idx_822084675) && (idx_822084675 < (webCore_822083645[0].images).length)) && webCore_822083645[0].images[idx_822084675].active)) {
-    var colontmp__687865928 = webCore_822083645[0].images[idx_822084675].w;
-    var colontmp__687865929 = webCore_822083645[0].images[idx_822084675].h;
-    result_822084674 = nimCopy(result_822084674, {Field0: colontmp__687865928, Field1: colontmp__687865929}, NTI822084333);
+    var colontmp__687865923 = webCore_822083645[0].images[idx_822084675].w;
+    var colontmp__687865924 = webCore_822083645[0].images[idx_822084675].h;
+    result_822084674 = nimCopy(result_822084674, {Field0: colontmp__687865923, Field1: colontmp__687865924}, NTI822084333);
     break BeforeRet;
     }
     
@@ -5013,15 +4972,15 @@ function encodeRgbaToPngDataUri__OOZsrcZuirelaysZdriversZweb95common_u313(pixels
     var s_822083909 = mnewString((pngBytes_822083902).length);
     Label1: {
       var i_822083917 = 0;
-      var colontmp__687865931 = 0;
-      colontmp__687865931 = (pngBytes_822083902).length;
-      var i_687865932 = 0;
+      var colontmp__687865926 = 0;
+      colontmp__687865926 = (pngBytes_822083902).length;
+      var i_687865927 = 0;
       Label2: {
           Label3: while (true) {
-          if (!(i_687865932 < colontmp__687865931)) break Label3;
-            i_822083917 = i_687865932;
+          if (!(i_687865927 < colontmp__687865926)) break Label3;
+            i_822083917 = i_687865927;
             s_822083909[i_822083917] = pngBytes_822083902[i_822083917];
-            i_687865932 += 1;
+            i_687865927 += 1;
           }
       };
     };

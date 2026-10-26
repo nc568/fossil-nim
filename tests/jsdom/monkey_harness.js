@@ -813,6 +813,16 @@ function firePaste(window, vp, text) {
   vp.dispatchEvent(ev);
 }
 
+// N10: text carrying `&`, `<` or `>` has to reach the DOM verbatim. The DOM
+// path assigns a primitive's text with `textContent`, which decodes nothing, so
+// a string escaped for the markup serializer reaches the user as the literal
+// characters "&amp;". Real headless Chrome caught this on web_showcase's
+// "Graphics, Clip & Blit" tab label; these probes catch it with nothing but
+// jsdom, which is why they are here rather than only in the browser test.
+const TEXT_PROBES = {
+  web_showcase: ["Graphics, Clip & Blit"]
+};
+
 async function monkeyOneApp(window, appId, opts, report) {
   const rnd = makeRandom(opts.seed + appId.length * 7919);
   const doc = window.document;
@@ -948,6 +958,30 @@ async function monkeyOneApp(window, appId, opts, report) {
     }
     if (probe.observer) probe.observer.disconnect();
     window.__uirReconcileProbe = null;
+  }
+
+  const probes = TEXT_PROBES[appId];
+  if (probes && vp) {
+    for (const want of probes) {
+      const nodes = vp.querySelectorAll(".uir-text");
+      let found = false;
+      let near = "";
+      const firstWord = want.split(" ")[0];
+      for (let i = 0; i < nodes.length; i++) {
+        const t = nodes[i].textContent || "";
+        if (t === want) { found = true; break; }
+        // Remember the closest thing there: "not found" on its own cannot tell a
+        // missing label from a double-encoded one, and the difference is the
+        // whole diagnosis.
+        if (!near && t.indexOf(firstWord) !== -1) near = t;
+      }
+      if (!found) {
+        report.errors.push(appId + ": expected a text node reading exactly " +
+          JSON.stringify(want) + ", " +
+          (near ? "but the closest one reads " + JSON.stringify(near)
+                : "and nothing similar was rendered at all"));
+      }
+    }
   }
   return true;
 }

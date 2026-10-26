@@ -134,7 +134,7 @@ when defined(html):
          else: "len=" & $model.len))
   check("D3 a diagonal line carries its own viewBox",
         model[1].extra == "0 0 42 42", model[1].extra)
-  check("D3 a text primitive carries escaped markup",
+  check("D3 a text primitive carries its text verbatim",
         model[4].text == "prim model", model[4].text)
   let modelHtml = htmlRenderPrims(model)
   check("D3 serialising the primitives produces real elements",
@@ -457,6 +457,35 @@ check("D4 {.uirApp.} still compiles a normal main loop",
       compileJsExpect(InitLoopBeforeMainLoop, true, ""))
 check("D4 {.uirApp.} fails loudly when there is no loop at all",
       compileJsExpect(NoLoopAtAll, false, "uirApp"))
+
+
+# ---------------------------------------------------------------------------
+# N10 -- text carrying `&`, `<` or `>` must not be double-encoded
+# ---------------------------------------------------------------------------
+
+when defined(html):
+  refresh()
+  const RawText = "A & B < C > D"
+  discard drawText(fMono, 0, 0, RawText, color(255, 255, 255), color(0, 0, 0, 0))
+  # No refresh() here: publishing a frame clears the primitive list, so the
+  # snapshot has to be taken while the frame is still being built.
+  let encodedModel = htmlPrimsSnapshot()
+  var primText = ""
+  for p in encodedModel:
+    if p.kind == hpText: primText = p.text
+  # The DOM path assigns a primitive's text with `textContent`, which decodes
+  # nothing, so whatever is stored here is literally what the user reads. Real
+  # headless Chrome is what exposed this: web_showcase's sidebar tab said
+  # "Graphics, Clip &amp; Blit" on screen because the primitive carried the
+  # markup-escaped form.
+  check("N10 the primitive carries the raw text the DOM path assigns verbatim",
+        primText == RawText, primText)
+  # The serializer is the other consumer and it writes into markup, so escaping
+  # is its job and only its job -- a raw `<` there would open a tag.
+  let encodedHtml = htmlRenderPrims(encodedModel)
+  check("N10 the serialized markup escapes it exactly once",
+        "A &amp; B &lt; C &gt; D" in encodedHtml and "&amp;amp;" notin encodedHtml,
+        encodedHtml[0 ..< min(400, encodedHtml.len)])
 
 
 # ---------------------------------------------------------------------------
