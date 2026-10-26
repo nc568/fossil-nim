@@ -4,11 +4,18 @@ name: CI
 # no Nim and no browser installed by hand. That is the point: D12 was the
 # complaint that these tests could not be reproduced outside one machine, so the
 # CI job is written to need nothing but `git`, `gcc`, `node` and `npm`.
+#
+# Every command goes through tools/ci_run.sh, which republishes the tail of a
+# failing command's output as an error annotation. Job logs live on blob storage
+# that is not reachable from everywhere; annotations are served by the ordinary
+# API. Without this a red build says only "exit code 1".
 
 on:
+  # Pushes to a branch that has an open pull request already trigger the
+  # pull_request event below, so listing the branch here as well would just run
+  # the same thing twice.
   push:
     branches:
-      - arena/0aaaa1ae-fossil-nim
       - uirelays-web-backends
       - main
       - master
@@ -46,7 +53,7 @@ jobs:
 
       # On a cache miss this compiles Nim 2.2.4 from source via csources_v2 +
       # `koch boot`, exactly as the README tells a new contributor to do.
-      - name: Bootstrap Nim from source (D12)
+      - name: Bootstrap Nim from source (D12, N8)
         shell: bash
         run: |
           set -euo pipefail
@@ -88,19 +95,20 @@ jobs:
           set -euo pipefail
           out="$RUNNER_TEMP/uirelays_js"
           mkdir -p "$out"
-          nim js --mm:arc --path:src --outdir:"$out" -d:canvas examples/todo.nim
-          nim js --mm:arc --path:src --outdir:"$out" -d:html   examples/todo.nim
-          nim js --mm:arc --path:src --outdir:"$out" -d:html --jsbigint64:off -d:nimStringHash2 examples/todo.nim
-          echo "emitted:"; ls -la "$out"
+          sh tools/ci_run.sh "nim js -d:canvas" \
+            nim js --mm:arc --path:src --outdir:"$out" -d:canvas examples/todo.nim
+          sh tools/ci_run.sh "nim js -d:html (int64 -> BigInt)" \
+            nim js --mm:arc --path:src --outdir:"$out" -d:html examples/todo.nim
+          sh tools/ci_run.sh "nim js -d:html --jsbigint64:off" \
+            nim js --mm:arc --path:src --outdir:"$out" -d:html --jsbigint64:off -d:nimStringHash2 examples/todo.nim
+          ls -la "$out"
 
       - name: Full suite (tester.nim)
         shell: bash
         run: |
           set -uo pipefail
-          nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/tester.nim 2>&1 | tee /tmp/suite.log
-          status="${PIPESTATUS[0]}"
-          echo "tester.nim exit status: $status"
-          exit "$status"
+          CI_RUN_LOG=/tmp/suite.log sh tools/ci_run.sh "tester.nim (whole suite)" \
+            nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/tester.nim
 
       # A skip is only honest when the tool really is missing. On this image it
       # is not, so "no browser installed" here means the test stopped finding
@@ -139,7 +147,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          nim c --mm:arc --outdir:/tmp/uirelays_bins -r tools/export_interactive_html.nim
+          sh tools/ci_run.sh "regenerate exported_html" \
+            nim c --mm:arc --outdir:/tmp/uirelays_bins -r tools/export_interactive_html.nim
           git add -A -f exported_html
           if ! git diff --cached --quiet -- exported_html; then
             echo "::error::exported_html/ is stale -- an example or the exporter changed without regenerating the bundle"
@@ -200,16 +209,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          nim c --mm:arc --outdir:"$RUNNER_TEMP/bins" -r tools/export_interactive_html.nim
+          sh tools/ci_run.sh "build exported_html" \
+            nim c --mm:arc --outdir:"$RUNNER_TEMP/bins" -r tools/export_interactive_html.nim
           ls -la exported_html | head
 
       - name: Run the monkey harness
         shell: bash
         run: |
           set -uo pipefail
-          node tests/jsdom/monkey_harness.js exported_html/uirelays_all_apps.html \
-            --steps=${{ matrix.steps }} --seed=${{ matrix.seed }} --json --quiet \
-            > "$RUNNER_TEMP/raw.log" 2>&1
+          # CI_RUN_LOG keeps the harness output for the parser below without
+          # redirecting ci_run.sh itself -- redirecting it would swallow the
+          # error annotation, which is the whole reason the wrapper exists.
+          CI_RUN_LOG="$RUNNER_TEMP/raw.log" \
+            sh tools/ci_run.sh "monkey harness seed=${{ matrix.seed }} steps=${{ matrix.steps }}" \
+              node tests/jsdom/monkey_harness.js exported_html/uirelays_all_apps.html \
+                --steps=${{ matrix.steps }} --seed=${{ matrix.seed }} --json --quiet
           code=$?
           # The harness prints its JSON report last; anything before the first
           # brace is progress output and must not break the parse.
@@ -239,27 +253,26 @@ jobs:
           r = json.load(open(sys.argv[1], encoding='utf-8'))
           t = r.get('reconcileTotals', {}) or {}
           print("## Monkey fuzz -- seed %s, %s steps/app\n" % (r.get('seed'), r.get('stepsPerApp')))
-          print("| метрика | значение |")
+          print("| metric | value |")
           print("|---|---|")
           print("| ok | **%s** |" % r.get('ok'))
-          print("| приложений | %s |" % len(r.get('apps', [])))
-          print("| ошибок JS | %s |" % len(r.get('errors', [])))
-          print("| битых стилей (NaN) | %s |" % r.get('badStyles'))
-          print("| присваиваний innerHTML | %s |" % t.get('innerHtmlWrites'))
-          print("| нарушений идентичности узлов | %s |" % t.get('identityBreaks'))
-          print("| расхождений счёта узлов | %s из %s |" % (
+          print("| apps | %s |" % len(r.get('apps', [])))
+          print("| JS errors | %s |" % len(r.get('errors', [])))
+          print("| bad styles (NaN) | %s |" % r.get('badStyles'))
+          print("| innerHTML writes | %s |" % t.get('innerHtmlWrites'))
+          print("| identity breaks | %s |" % t.get('identityBreaks'))
+          print("| node count mismatches | %s of %s |" % (
               t.get('nodeCountMismatches'), t.get('nodeCountSamples')))
-          print("| худший churn против перезаписи | %s |" % t.get('worstChurnVsRewrite'))
+          print("| worst churn vs rewrite | %s |" % t.get('worstChurnVsRewrite'))
           print("| maxTextOverflowPx | %s |" % r.get('maxTextOverflowPx'))
-          print("| кликов по тексту | %s |" % r.get('textClicks'))
-          print("| обращений к буферу обмена | %s |" % r.get('clipboardWrites'))
+          print("| text clicks | %s |" % r.get('textClicks'))
+          print("| clipboard writes | %s |" % r.get('clipboardWrites'))
           errs = r.get('errors', [])
           if errs:
-              print("\nПервые ошибки:\n")
+              print("\nFirst errors:\n")
               for e in errs[:10]:
                   print("- `%s`" % e)
           PY
-          cat "$RUNNER_TEMP/report.json" | head -5
 
       - name: Upload the fuzz report
         if: always()
@@ -294,39 +307,62 @@ jobs:
         with:
           nim-version: '2.2.4'
 
-      - name: Nim version
+      - name: Environment
         shell: bash
-        run: nim --version | head -1
+        run: |
+          set -uo pipefail
+          echo "os           ${{ matrix.os }}"
+          echo "nim          $(nim --version | head -1)"
+          echo "RUNNER_TEMP  $RUNNER_TEMP"
+          echo "bash         $BASH_VERSION"
+          uname -a || true
 
       - name: Driver-free tests
         shell: bash
         run: |
           set -euo pipefail
           for t in tinyniftest layouttest inputtest; do
-            nim c --mm:arc --outdir:"$RUNNER_TEMP/bins" -r "tests/$t.nim"
+            sh tools/ci_run.sh "tests/$t.nim" \
+              nim c --mm:arc --outdir:"$RUNNER_TEMP/bins" -r "tests/$t.nim"
           done
 
-      - name: Web backend tests
+      # Split per backend and per defect set: "the web tests fail on Windows"
+      # is not a diagnosis, "web_html_test -d:html fails on Windows" is.
+      - name: Web backend tests (-d:html)
         shell: bash
         run: |
           set -euo pipefail
-          nim c --mm:arc -d:html   --outdir:"$RUNNER_TEMP/bins" -r tests/web_html_test.nim
-          nim c --mm:arc -d:canvas --outdir:"$RUNNER_TEMP/bins" -r tests/web_canvas_test.nim
+          sh tools/ci_run.sh "web_html_test -d:html" \
+            nim c --mm:arc -d:html --outdir:"$RUNNER_TEMP/bins" -r tests/web_html_test.nim
 
-      - name: One check per fixed defect
+      - name: Web backend tests (-d:canvas)
         shell: bash
         run: |
           set -euo pipefail
-          nim c --mm:arc -d:html   --outdir:"$RUNNER_TEMP/bins" -r tests/web_backend_regression_test.nim
-          nim c --mm:arc -d:canvas --outdir:"$RUNNER_TEMP/bins" -r tests/web_backend_regression_test.nim
+          sh tools/ci_run.sh "web_canvas_test -d:canvas" \
+            nim c --mm:arc -d:canvas --outdir:"$RUNNER_TEMP/bins" -r tests/web_canvas_test.nim
+
+      - name: One check per fixed defect (-d:html)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tools/ci_run.sh "web_backend_regression_test -d:html" \
+            nim c --mm:arc -d:html --outdir:"$RUNNER_TEMP/bins" -r tests/web_backend_regression_test.nim
+
+      - name: One check per fixed defect (-d:canvas)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tools/ci_run.sh "web_backend_regression_test -d:canvas" \
+            nim c --mm:arc -d:canvas --outdir:"$RUNNER_TEMP/bins" -r tests/web_backend_regression_test.nim
 
       - name: Every example compiles for this OS's native backend
         shell: bash
         run: |
           set -euo pipefail
           for f in examples/*.nim; do
-            echo "--- $f"
-            nim c --mm:arc --outdir:"$RUNNER_TEMP/bins" "$f"
+            sh tools/ci_run.sh "native compile $f" \
+              nim c --mm:arc --outdir:"$RUNNER_TEMP/bins" "$f"
           done
 
       - name: And for both web backends
@@ -334,7 +370,8 @@ jobs:
         run: |
           set -euo pipefail
           for f in examples/*.nim; do
-            echo "--- $f"
-            nim c --mm:arc -d:html   --outdir:"$RUNNER_TEMP/bins" "$f"
-            nim c --mm:arc -d:canvas --outdir:"$RUNNER_TEMP/bins" "$f"
+            sh tools/ci_run.sh "-d:html compile $f" \
+              nim c --mm:arc -d:html --outdir:"$RUNNER_TEMP/bins" "$f"
+            sh tools/ci_run.sh "-d:canvas compile $f" \
+              nim c --mm:arc -d:canvas --outdir:"$RUNNER_TEMP/bins" "$f"
           done
