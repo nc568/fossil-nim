@@ -6,7 +6,16 @@
 
 import std/[strutils, base64]
 when not defined(js):
-  import std/[json, monotimes, times, os, nativesockets, posix]
+  import std/[json, monotimes, times, os, nativesockets]
+  # posix and winlean both define SocketHandle, so importing posix on Windows
+  # makes every socket symbol ambiguous and the web backends do not compile
+  # there at all. Each platform imports its own; the remaining differences
+  # (names, argument types, error reporting, byte order) are collected in the
+  # shim below instead of being scattered through the server as `when`s.
+  when defined(windows):
+    import std/winlean
+  else:
+    import std/posix
 import ../coords, ../input, ../screen
 
 type
@@ -1517,18 +1526,102 @@ when defined(js):
   proc webServerPort*(): int {.inline.} = 0
 
 else:
+  # -- platform shim: the whole of the platform dependence lives here -----
+
   proc sleepNs(ns: int) {.inline.} =
-    var req = Timespec(
-      tv_sec: posix.Time(ns div 1_000_000_000),
-      tv_nsec: clong(ns mod 1_000_000_000)
-    )
-    var rem = Timespec(tv_sec: posix.Time(0), tv_nsec: clong(0))
-    discard nanosleep(req, rem)
+    when defined(windows):
+      # Winsock has no nanosleep. The only caller is a retry backoff on a
+      # non-blocking socket, where a millisecond is close enough to 0.2 ms.
+      os.sleep(max(1, ns div 1_000_000))
+    else:
+      var req = Timespec(
+        tv_sec: posix.Time(ns div 1_000_000_000),
+        tv_nsec: clong(ns mod 1_000_000_000)
+      )
+      var rem = Timespec(tv_sec: posix.Time(0), tv_nsec: clong(0))
+      discard nanosleep(req, rem)
 
   proc setFdNonBlocking(fd: SocketHandle) =
-    let flags = fcntl(cint(fd), F_GETFL, 0)
-    if flags >= 0:
-      discard fcntl(cint(fd), F_SETFL, flags or O_NONBLOCK)
+    when defined(windows):
+      # nativesockets.setBlocking is ioctlsocket(FIONBIO) here and the very
+      # same fcntl dance as below elsewhere; it raises instead of returning.
+      try:
+        setBlocking(fd, false)
+      except CatchableError:
+        discard
+    else:
+      let flags = fcntl(cint(fd), F_GETFL, 0)
+      if flags >= 0:
+        discard fcntl(cint(fd), F_SETFL, flags or O_NONBLOCK)
+
+  proc sockClose(fd: SocketHandle): cint {.inline.} =
+    when defined(windows): winlean.closesocket(fd)
+    else: posix.close(cint(fd))
+
+  proc sockRecv(fd: SocketHandle; buf: pointer; len: int; flags: cint): int {.inline.} =
+    # winlean counts bytes in cint and returns cint, posix uses int for both.
+    when defined(windows): int(winlean.recv(fd, buf, cint(len), flags))
+    else: posix.recv(fd, buf, len, flags)
+
+  proc sockSend(fd: SocketHandle; buf: pointer; len: int; flags: cint): int {.inline.} =
+    when defined(windows): int(winlean.send(fd, buf, cint(len), flags))
+    else: posix.send(fd, buf, len, flags)
+
+  proc sockListen(fd: SocketHandle): cint {.inline.} =
+    when defined(windows): winlean.listen(fd, cint(SOMAXCONN))
+    else: posix.listen(fd, cint(SOMAXCONN))
+
+  proc sockAccept(fd: SocketHandle): SocketHandle =
+    var clientSa: Sockaddr_in
+    var clientLen = SockLen(sizeof(clientSa))
+    when defined(windows):
+      winlean.accept(fd, cast[ptr SockAddr](addr clientSa), addr clientLen)
+    else:
+      posix.accept(fd, cast[ptr SockAddr](addr clientSa), addr clientLen)
+
+  proc sockWouldBlock(): bool {.inline.} =
+    ## Did the last socket call fail only because it would have blocked?
+    ## Must be asked immediately after that call: both `errno` and
+    ## GetLastError are overwritten by the next one.
+    let e = int32(osLastError())
+    when defined(windows):
+      e == int32(WSAEWOULDBLOCK)
+    else:
+      e == int32(EAGAIN) or e == int32(EWOULDBLOCK)
+
+  proc sockSetReuseAddr(fd: SocketHandle) =
+    when defined(windows):
+      try:
+        setSockOptInt(fd, int(SOL_SOCKET), int(SO_REUSEADDR), 1)
+      except CatchableError:
+        discard
+    else:
+      var optVal: cint = 1
+      discard posix.setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, addr optVal,
+                               SockLen(sizeof(optVal)))
+
+  proc sockBindAny(fd: SocketHandle; port: int): bool =
+    ## Bind to the wildcard address on `port`. False when the port is taken.
+    when defined(windows):
+      # winlean ships neither htons nor htonl, so filling a Sockaddr_in by
+      # hand is not available here; getaddrinfo does the byte-order work
+      # portably and without assuming anything about the host endianness.
+      try:
+        let ai = getAddrInfo("0.0.0.0", Port(port))
+        try:
+          result = bindSocket(fd, ai.ai_addr, SockLen(ai.ai_addrlen)) == 0'i32
+        finally:
+          freeAddrInfo(ai)
+      except CatchableError:
+        result = false
+    else:
+      var sa: Sockaddr_in
+      zeroMem(addr sa, sizeof(sa))
+      sa.sin_family = typeof(sa.sin_family)(AF_INET)
+      sa.sin_port = posix.htons(uint16(port))
+      sa.sin_addr.s_addr = posix.htonl(INADDR_ANY)
+      result = bindSocket(fd, cast[ptr SockAddr](addr sa),
+                          SockLen(sizeof(sa))) == 0'i32
 
   proc sendAllNonBlocking(fd: SocketHandle; data: string): bool =
     if data.len == 0:
@@ -1536,12 +1629,12 @@ else:
     var sent = 0
     var retries = 0
     while sent < data.len:
-      let n = posix.send(fd, unsafeAddr data[sent], data.len - sent,
+      let n = sockSend(fd, unsafeAddr data[sent], data.len - sent,
         when declared(MSG_NOSIGNAL): cint(MSG_NOSIGNAL) else: 0'i32)
       if n > 0:
         sent += n
         retries = 0
-      elif n < 0 and (errno == EAGAIN or errno == EWOULDBLOCK):
+      elif n < 0 and sockWouldBlock():
         inc retries
         if retries > 200:
           return false
@@ -1572,7 +1665,7 @@ else:
     var i = 0
     while i < webCore.sseClients.len:
       if not webCore.sseClients[i].alive:
-        discard posix.close(cint(webCore.sseClients[i].fd))
+        discard sockClose(webCore.sseClients[i].fd)
         webCore.sseClients.delete(i)
         continue
       if webCore.sseClients[i].lastSentFrame != webCore.frameId:
@@ -1580,7 +1673,7 @@ else:
           webCore.sseClients[i].lastSentFrame = webCore.frameId
           inc i
         else:
-          discard posix.close(cint(webCore.sseClients[i].fd))
+          discard sockClose(webCore.sseClients[i].fd)
           webCore.sseClients.delete(i)
       else:
         inc i
@@ -1605,7 +1698,7 @@ else:
     var requestComplete = false
     var requestTooBig = false
     while true:
-      let n = posix.recv(clientFd, addr buf[0], buf.len, 0)
+      let n = sockRecv(clientFd, addr buf[0], buf.len, 0)
       if n > 0:
         let oldLen = rawReq.len
         rawReq.setLen(oldLen + n)
@@ -1633,7 +1726,7 @@ else:
       elif n == 0:
         break # peer closed
       else:
-        if errno == EAGAIN or errno == EWOULDBLOCK:
+        if sockWouldBlock():
           if getMonoTime() >= readDeadline:
             break
           sleepNs(200_000) # 0.2 ms
@@ -1641,7 +1734,7 @@ else:
           break
 
     if rawReq.len == 0:
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
       return
 
     if not requestComplete:
@@ -1650,14 +1743,14 @@ else:
       let status = if requestTooBig: "413 Payload Too Large" else: "400 Bad Request"
       writeHttpResponse(clientFd, status, "application/json; charset=utf-8",
         """{"error":"incomplete request"}""")
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
       return
 
     let firstLineEnd = rawReq.find("\r\n")
     let firstLine = if firstLineEnd >= 0: rawReq[0 ..< firstLineEnd] else: rawReq
     let parts = strutils.splitWhitespace(firstLine)
     if parts.len < 2:
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
       return
 
     let httpMethod = parts[0].toUpperAscii()
@@ -1671,13 +1764,13 @@ else:
 
     if httpMethod == "OPTIONS":
       writeHttpResponse(clientFd, "204 No Content", "text/plain", "")
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
       return
 
     case pathOnly
     of "/", "/index.html":
       writeHttpResponse(clientFd, "200 OK", "text/html; charset=utf-8", webCore.pageHtml)
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
     of "/state", "/frame":
       let payload = if webCore.lastFrameJson.len > 0:
@@ -1685,7 +1778,7 @@ else:
                     else:
                       """{"frameId":0,"backend":"""" & $webCore.backendKind & """"}"""
       writeHttpResponse(clientFd, "200 OK", "application/json; charset=utf-8", payload)
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
     of "/health":
       let healthObj = %*{
@@ -1710,7 +1803,7 @@ else:
         "inputParseErrors": webCore.inputParseErrors
       }
       writeHttpResponse(clientFd, "200 OK", "application/json; charset=utf-8", $healthObj)
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
     of "/input":
       if httpMethod == "POST":
@@ -1719,7 +1812,7 @@ else:
         writeHttpResponse(clientFd, "200 OK", "application/json; charset=utf-8", resp)
       else:
         writeHttpResponse(clientFd, "405 Method Not Allowed", "application/json", """{"error":"Use POST"}""")
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
     of "/monkey-report":
       if httpMethod == "POST":
@@ -1728,7 +1821,7 @@ else:
       else:
         let rep = if webCore.monkeyReportJson.len > 0: webCore.monkeyReportJson else: """{"ready":false}"""
         writeHttpResponse(clientFd, "200 OK", "application/json; charset=utf-8", rep)
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
     of "/events":
       let sseHdr = "HTTP/1.1 200 OK\r\n" &
@@ -1747,12 +1840,12 @@ else:
           alive: true
         )
       else:
-        discard posix.close(cint(clientFd))
+        discard sockClose(clientFd)
 
     else:
       writeHttpResponse(clientFd, "404 Not Found", "application/json; charset=utf-8",
         """{"error":"Not found","path":"""" & htmlEscape(pathOnly) & """"}""")
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
   proc startWebServer*(preferredPort = 0) =
     if webCore.listenFd != osInvalidSocket and cint(webCore.listenFd) > 0:
@@ -1778,25 +1871,18 @@ else:
       webCore.serverEnabled = false
       return
 
-    var optVal: cint = 1
-    discard posix.setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, addr optVal, SockLen(sizeof(optVal)))
+    sockSetReuseAddr(sock)
     setFdNonBlocking(sock)
 
     var boundPort = 0
     for offset in 0 ..< 30:
       let candidate = basePort + offset
-      var sa: Sockaddr_in
-      zeroMem(addr sa, sizeof(sa))
-      sa.sin_family = typeof(sa.sin_family)(AF_INET)
-      sa.sin_port = posix.htons(uint16(candidate))
-      sa.sin_addr.s_addr = posix.htonl(INADDR_ANY)
-      if bindSocket(sock, cast[ptr SockAddr](addr sa), SockLen(sizeof(sa))) == 0'i32:
-        if posix.listen(sock, SOMAXCONN) == 0'i32:
-          boundPort = candidate
-          break
+      if sockBindAny(sock, candidate) and sockListen(sock) == 0'i32:
+        boundPort = candidate
+        break
 
     if boundPort == 0:
-      discard posix.close(cint(sock))
+      discard sockClose(sock)
       webCore.serverEnabled = false
       return
 
@@ -1819,9 +1905,9 @@ else:
       var probe: array[16, char]
       let flags = cint(MSG_PEEK) or
         (when declared(MSG_DONTWAIT): cint(MSG_DONTWAIT) else: 0'i32)
-      let n = posix.recv(fd, addr probe[0], probe.len, flags)
-      if n == 0 or (n < 0 and errno != EAGAIN and errno != EWOULDBLOCK):
-        discard posix.close(cint(fd))
+      let n = sockRecv(fd, addr probe[0], probe.len, flags)
+      if n == 0 or (n < 0 and not sockWouldBlock()):
+        discard sockClose(fd)
         webCore.sseClients[i].alive = false
         webCore.sseClients.delete(i)
       else:
@@ -1832,9 +1918,7 @@ else:
       return
     reapSseClients()
     for _ in 0 ..< 16:
-      var clientSa: Sockaddr_in
-      var clientLen = SockLen(sizeof(clientSa))
-      let clientFd = posix.accept(webCore.listenFd, cast[ptr SockAddr](addr clientSa), addr clientLen)
+      let clientFd = sockAccept(webCore.listenFd)
       if clientFd == osInvalidSocket or cint(clientFd) < 0:
         break
       handleHttpClient(clientFd)
@@ -1842,10 +1926,10 @@ else:
   proc stopWebServer*() =
     for c in webCore.sseClients:
       if c.alive and c.fd != osInvalidSocket:
-        discard posix.close(cint(c.fd))
+        discard sockClose(c.fd)
     webCore.sseClients.setLen(0)
     if webCore.listenFd != osInvalidSocket and cint(webCore.listenFd) > 0:
-      discard posix.close(cint(webCore.listenFd))
+      discard sockClose(webCore.listenFd)
       webCore.listenFd = osInvalidSocket
     webCore.serverEnabled = false
 

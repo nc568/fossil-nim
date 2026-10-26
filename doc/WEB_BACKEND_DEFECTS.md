@@ -27,6 +27,7 @@
 | N6 | reconcile протаскивал детей переиспользованного узла | DONE |
 | N7 | приложение не могло объявить свой минимальный размер | DONE |
 | N8 | `bootstrap_nim.sh` не собирал Nim на чистом клоне | DONE |
+| N9 | веб-бекенды не компилировались под Windows | DONE |
 
 ---
 
@@ -411,6 +412,60 @@ stdout; после успешного `koch boot` из дерева удаляю
 
 ---
 
+### N9 — веб-бекенды не компилировались под Windows
+
+**Симптом.** На Windows не собиралось ничего из веб-бекендов — ни `-d:html`,
+ни `-d:canvas`, ни нативная сборка, которая их тянет:
+
+```
+src\uirelays\drivers\web_common.nim(42, 11) Error: ambiguous identifier:
+  'SocketHandle' -- use one of the following:
+  winlean.SocketHandle: SocketHandle
+  posix.SocketHandle: SocketHandle
+```
+
+**Причина.** Сервер импортировал `std/posix` безусловно. `std/nativesockets`
+под Windows сам подключает `std/winlean`, а `SocketHandle` определён в обоих
+модулях — это два *разных* символа с одним именем, поэтому неоднозначным
+становился каждый сокетный вызов. На Linux и macOS конфликта нет, так что
+дефект был принципиально невидимым: до появления CI ни одна проверка не
+компилировала веб-бекенды под Windows.
+
+**Исправление.** Каждая платформа импортирует только своё
+(`when defined(windows): import std/winlean else: import std/posix`), а
+различия собраны в один шим из девяти процедур вместо того, чтобы расползаться
+по серверу отдельными `when`:
+
+| Операция | POSIX | Winsock |
+|---|---|---|
+| закрыть | `close(cint)` | `closesocket(SocketHandle)` |
+| читать / писать | длина `int`, возврат `int` | длина `cint`, возврат `cint` |
+| « вызов заблокировался бы» | `errno == EAGAIN/EWOULDBLOCK` | `GetLastError == WSAEWOULDBLOCK` |
+| неблокирующий режим | `fcntl(F_GETFL/F_SETFL, O_NONBLOCK)` | `ioctlsocket(FIONBIO)` |
+| слушать / принимать | `listen(fd, SOMAXCONN)`, `accept` | то же, но backlog — `cint` |
+| порядок байт адреса | `htons` / `htonl` | **их в `winlean` нет вовсе** |
+| короткий сон | `nanosleep` | `os.sleep` |
+
+Отсутствие `htons`/`htonl` — причина, по которой ручное заполнение `Sockaddr_in`
+не переносится: под Windows адрес собирается через
+`getAddrInfo("0.0.0.0", Port(p))` + `bindSocket`, что делает ту же работу без
+всяких предположений о порядке байт хоста. `os.sleep` вместо `nanosleep`
+меняет шаг backoff'а с 0.2 мс на 1 мс; единственный вызывающий — повтор
+неблокирующей отправки, где это несущественно.
+
+**Проверка.** Две новые проверки в `tests/web_backend_regression_test.nim`
+прогоняют `nim check --os:windows` для обоих веб-бекендов. `nim check`
+выполняет полный семантический анализ, не вызывая C-компилятор, поэтому чужую
+платформу можно проверить на любой машине примерно за секунду — Windows-раннер
+для этого не нужен, хотя CI теперь гоняет и его.
+
+Откалибровано мутацией: возврат безусловного `import std/posix` роняет обе
+проверки ровно с исходной ошибкой про `SocketHandle` (52 пройдено / 2 упало
+вместо 54 / 0). Поведение на POSIX не изменилось: полный набор после шима даёт
+побайтово те же результаты, что и до него (57 / 25 / 52→54 / 29→31 / 56 / 14).
+
+---
+
 ## Что делает CI
 
 `.github/workflows/ci.yml`, три задачи. Ни одна не предполагает, что Nim или
@@ -439,7 +494,8 @@ stdout; после успешного `koch boot` из дерева удаляю
 |---|---|
 | Примитивы DOM, UTF-8, PNG, события, HTTP/SSE | `tests/web_html_test.nim` (57) |
 | Команды канваса, дедупликация FNV-1a, `blitRGBA` | `tests/web_canvas_test.nim` (25) |
-| По одной проверке на каждый дефект | `tests/web_backend_regression_test.nim` (52 / 29) |
+| По одной проверке на каждый дефект | `tests/web_backend_regression_test.nim` (54 / 31) |
+| Семантический анализ веб-бекендов под `--os:windows` | `tests/web_backend_regression_test.nim` (N9) |
 | Живой нативный сервер: HTTP, SSE, флуд, завершение | `tests/server_monkey_test.nim` (56) |
 | Бандл под `node` + `jsdom`: 9 приложений, reconcile, штормы ресайзов и пола, контракт моста | `tests/jsdom_monkey_test.nim` (14) |
 | Автономный `.html` в Headless Chromium | `tests/standalone_html_monkey_test.nim` (9 приложений) |

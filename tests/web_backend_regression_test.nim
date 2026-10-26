@@ -458,6 +458,42 @@ check("D4 {.uirApp.} still compiles a normal main loop",
 check("D4 {.uirApp.} fails loudly when there is no loop at all",
       compileJsExpect(NoLoopAtAll, false, "uirApp"))
 
+
+# ---------------------------------------------------------------------------
+# N9 -- both web backends must still compile for Windows
+# ---------------------------------------------------------------------------
+
+proc checkTargetSemantics(osName, backendFlag: string): (bool, string) =
+  ## `nim check` runs the full semantic analysis without invoking a C compiler,
+  ## so it can verify a target this machine cannot build for. The server used to
+  ## import std/posix unconditionally; on Windows that collides with the
+  ## std/winlean that nativesockets already pulls in, both define SocketHandle,
+  ## and every socket symbol turns ambiguous -- neither web backend compiled at
+  ## all. A windows-latest runner caught it. This catches it anywhere, in about
+  ## a second, and without one.
+  let root = repoRoot()
+  let nimBin = block:
+    let e = getEnv("NIM", "")
+    if e.len > 0: e else: "nim"
+  let cmd = nimBin & " check --os:" & osName & " --mm:arc " & backendFlag &
+            " --path:" & quoteShell(root / "src") & " " &
+            quoteShell(root / "examples" / "todo.nim")
+  let (outp, code) = execCmdEx(cmd)
+  if code != 0:
+    # The last line of `nim check` output is its progress dots; the first line
+    # carrying "Error:" is the thing a reader actually needs.
+    for ln in outp.splitLines():
+      if "Error:" in ln:
+        return (false, ln.strip())
+    let ls = outp.strip().splitLines()
+    return (false, if ls.len > 0: ls[^1].strip() else: "exit code " & $code)
+  (true, "")
+
+for (targetOs, flag) in [("windows", "-d:html"), ("windows", "-d:canvas")]:
+  let (ok, why) = checkTargetSemantics(targetOs, flag)
+  check("N9 the " & flag & " backend passes semantic analysis for --os:" &
+        targetOs, ok, why)
+
 echo "-------------------------------------------------------------------"
 echo "Passed: ", passes, " | Failed: ", failures
 if failures == 0:

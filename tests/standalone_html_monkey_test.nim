@@ -94,6 +94,20 @@ function findElementWithText(txt) {
   return null;
 }
 
+function countTextNodes(sub) {
+  // How many rendered text nodes contain `sub` at all. A click helper that
+  // returns false cannot say whether the label was missing from the DOM or
+  // merely unmatched; this can, and the difference decides where the bug is.
+  var vp = document.getElementById("uir-viewport");
+  if (!vp) return -1;
+  var nodes = vp.querySelectorAll(".uir-text");
+  var n = 0;
+  for (var i = 0; i < nodes.length; i++) {
+    if (nodes[i].textContent.indexOf(sub) !== -1) n++;
+  }
+  return n;
+}
+
 function testResizeTo(w, h) {
   window.__uirFixedSizeMode = true;
   var vp = document.getElementById("uir-viewport");
@@ -235,7 +249,7 @@ async function runAllInteractiveChecks() {
   testResizeTo(1160, 720);
   await sleepMs(80);
   var focimResized = vp.style.width === "1160px";
-  results.push("focim:theme=" + themeClicked + ":split=" + splitClicked + ":tab=" + (tabClicked && hasCalcCode) + ":edit=" + (hasEditedCode && hasDirtyStar && scratchClicked && hasScratchEdited && hasSelReplaced) + ":align=" + exactCellAlign + ":resize=" + focimResized);
+  results.push("focim:theme=" + themeClicked + ":split=" + splitClicked + ":tabClick=" + tabClicked + ":tabCode=" + hasCalcCode + ":edit=" + (hasEditedCode && hasDirtyStar && scratchClicked && hasScratchEdited && hasSelReplaced) + ":align=" + exactCellAlign + ":resize=" + focimResized);
 
   // 5. Web Showcase: click +1 on Widgets tab, then switch to 2. Graphics & Clip + resize
   switchUirApp("web_showcase");
@@ -249,7 +263,7 @@ async function runAllInteractiveChecks() {
   testResizeTo(1020, 680);
   await sleepMs(60);
   var showcaseResized = vp.style.width === "1020px";
-  results.push("web_showcase:inc=" + (incClicked && count1) + ":tab=" + (gfxTab && hasBlit) + ":resize=" + showcaseResized);
+  results.push("web_showcase:inc=" + (incClicked && count1) + ":tabClick=" + gfxTab + ":tabBlit=" + hasBlit + ":tabNodes=" + countTextNodes("Graphics") + ":blitNodes=" + countTextNodes("Procedural") + ":resize=" + showcaseResized);
 
   // 6. Todo: type text, move cursor left into middle with ArrowLeft, insert text,
   //    select with Shift+ArrowLeft, replace selection, click + Add + resize
