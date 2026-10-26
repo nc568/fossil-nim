@@ -21,7 +21,10 @@ VERSION=2.2.4
 dest="${1:-$HOME/.local/nim-$VERSION}"
 
 have_nim() {
-  # $1 = candidate nim binary. Echoes "ok" when it is new enough.
+  # $1 = candidate nim binary. Returns 0 when it is a Nim $WANT_MAJOR.$WANT_MINOR+
+  # compiler. Must not write to stdout: this script's stdout is a contract --
+  # it prints the path to a usable nim and nothing else, so callers can do
+  # `nim=$(sh tools/bootstrap_nim.sh)`.
   [ -x "$1" ] || return 1
   v=$("$1" --version 2>/dev/null | head -1 | sed -e 's/.*Version //' -e 's/ .*//')
   # Anything that is not a Nim compiler prints something that is not a version
@@ -33,8 +36,8 @@ have_nim() {
   major=$(echo "$v" | cut -d. -f1)
   minor=$(echo "$v" | cut -d. -f2)
   [ -n "$major" ] && [ -n "$minor" ] || return 1
-  [ "$major" -gt "$WANT_MAJOR" ] 2>/dev/null && { echo "ok"; return 0; }
-  [ "$major" -eq "$WANT_MAJOR" ] 2>/dev/null && [ "$minor" -ge "$WANT_MINOR" ] 2>/dev/null && { echo "ok"; return 0; }
+  [ "$major" -gt "$WANT_MAJOR" ] 2>/dev/null && return 0
+  [ "$major" -eq "$WANT_MAJOR" ] 2>/dev/null && [ "$minor" -ge "$WANT_MINOR" ] 2>/dev/null && return 0
   return 1
 }
 
@@ -77,23 +80,44 @@ if [ ! -d Nim/.git ]; then
 fi
 cd Nim
 
-if [ ! -d csources_v2 ]; then
-  git clone --depth 1 https://github.com/nim-lang/csources_v2 csources_v2
+# The bootstrap compiler: a C snapshot of an older Nim. ~2 minutes, no network
+# after the clone. Both the clone and the build are skipped when bin/nim is
+# already there, so re-running this script is cheap -- and so is re-running it
+# after the csources_v2 pruning below has removed that 1.8 GB again.
+if [ ! -x bin/nim ]; then
+  if [ ! -d csources_v2 ]; then
+    git clone --depth 1 https://github.com/nim-lang/csources_v2 csources_v2
+  fi
+  (cd csources_v2 && sh build.sh >/dev/null)
 fi
 
-# The bootstrap compiler. ~2 minutes, no network after the clones.
-(cd csources_v2 && sh build.sh >/dev/null)
+# csources builds `bin/nim` and nothing else. `koch` is not a shell script in
+# 2.2.x -- it is a Nim program that has to be compiled before it can be run,
+# and forgetting this step fails with a bare "./koch: not found". These are the
+# flags Nim's own build_all.sh uses.
+if [ ! -x ./koch ]; then
+  ./bin/nim c --noNimblePath --skipUserCfg --skipParentCfg --hints:off koch >/dev/null
+fi
 
 # `koch boot` builds the real compiler from Nim sources and verifies it is
 # reproducible ("executables are equal: SUCCESS!"). Note: `--skipCleanup` is
 # not a valid option in 2.2.x and makes koch fail.
-PATH="$src/Nim/bin:$PATH" ./koch boot -d:release >/dev/null
+PATH="$src/Nim/bin:$PATH" ./koch boot -d:release --skipUserCfg --skipParentCfg --hints:off >/dev/null
+
+# csources_v2 is 1.8 GB of generated C that only existed to produce the
+# bootstrap compiler, and nimcache is another 58 MB of build scratch. Neither
+# is needed to run Nim, and keeping them makes any cache of this directory
+# (which is what CI does) twenty times bigger than the toolchain itself.
+# Removing them is safe: once bin/nim exists this script never rebuilds.
+rm -rf csources_v2 nimcache
 
 mkdir -p "$(dirname "$dest")"
 if [ "$src/Nim" != "$dest" ]; then
   rm -rf "$dest"
   cp -a "$src/Nim" "$dest"
 fi
+# The upstream git metadata is of no use to an installed toolchain either.
+rm -rf "$dest/.git"
 
 if have_nim "$dest/bin/nim"; then
   echo "$dest/bin/nim"
