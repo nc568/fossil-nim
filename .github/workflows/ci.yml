@@ -197,8 +197,11 @@ jobs:
         run: |
           set -euo pipefail
           nim_bin=$(sh tools/bootstrap_nim.sh | tail -n 1)
+          echo "bootstrap_nim.sh reported: $nim_bin"
           dirname "$nim_bin" >> "$GITHUB_PATH"
-          nim --version | head -1
+          # $GITHUB_PATH takes effect from the *next* step on, so this one has
+          # to use the full path; calling bare `nim` here exits 127.
+          "$nim_bin" --version | head -1
 
       - name: Install jsdom
         shell: bash
