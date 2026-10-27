@@ -44,7 +44,8 @@ Native Nim UI library based on the idea of **"relays"** — dependency injection
 | **7. Paint** | [`examples/paint.nim`](examples/paint.nim) | [`exported_html/paint.html`](exported_html/paint.html) | Графический редактор с палитрой цветов, размером кисти (`Brush -`, `Brush +`, `Clear`) и рисованием мышью |
 | **8. Layout Demo** | [`examples/layout_demo.nim`](examples/layout_demo.nim) | [`exported_html/layout_demo.html`](exported_html/layout_demo.html) | Интерактивный редактор разметки NIF с перетаскиванием разделителей и кнопками `[+ Split Right]`, `[+ Split Down]`, `[- Remove Pane]`, `[Reset Layout]` |
 | **9. Hello** | [`examples/hello.nim`](examples/hello.nim) | [`exported_html/hello.html`](exported_html/hello.html) | Анимированная сцена с переключением цветовых тем и интерактивным прицелом |
-| **Все 9 в одном файле** | [`tools/export_interactive_html.nim`](tools/export_interactive_html.nim) | [`exported_html/uirelays_all_apps.html`](exported_html/uirelays_all_apps.html) | Единая интерактивная галерея всех 9 приложений с мгновенным переключением вкладок |
+| **10. Hammerhead Reef** | [`examples/sharks.nim`](examples/sharks.nim) | [`exported_html/sharks.html`](exported_html/sharks.html) | Молотоголовые акулы на с дизерингом по матрице Байера 10 240 клеток: испечённое один раз морское дно идёт через `blitRGBA`, биолюминесценция, HUD и панель управления. Служит ещё и измерительным прибором — см. [идентичность между бекендами](#идентичность-между-операционными-системами-и-бекендами) |
+| **Все 10 в одном файле** | [`tools/export_interactive_html.nim`](tools/export_interactive_html.nim) | [`exported_html/uirelays_all_apps.html`](exported_html/uirelays_all_apps.html) | Единая интерактивная галерея всех 10 приложений с мгновенным переключением вкладок |
 
 ### Тестирование и «обезьяньи тесты» (Monkey Testing)
 
@@ -53,11 +54,64 @@ Native Nim UI library based on the idea of **"relays"** — dependency injection
 - `tests/web_canvas_test.nim` — **25 / 25 PASS** (проверка команд `<canvas>` 2D, дедупликации кадров FNV-1a, `blitRGBA`, событий и HTTP/SSE).
 - `tests/web_backend_regression_test.nim` — **56 / 56 PASS** (`-d:html`), **31 / 31 PASS** (`-d:canvas`): по одной проверке на каждый исправленный дефект, чтобы он не вернулся незамеченным (пропорциональные метрики, полноэкранная заливка, политика переполнения очереди, битый JSON, клампинг ресайза, диагностика `{.uirApp.}`, инкрементальный reconcile, семантический анализ под `--os:windows`).
 - `tests/server_monkey_test.nim` — **56 / 56 PASS** (обезьяньи тесты живого нативного HTTP/SSE-сервера: неизвестные пути, `405`/`204`, `/health`, битый JSON, флуд событиями, 24 SSE-клиента, чистое завершение). Браузер не нужен.
-- `tests/jsdom_monkey_test.nim` — **14 / 14 PASS** (обезьяньи тесты экспортированного бандла под `node` + `jsdom`: 9 приложений, 120 случайных шагов на каждое, шторм ресайзов, контракт моста). Браузер не нужен, сеть не нужна.
+- `tests/jsdom_monkey_test.nim` — **14 / 14 PASS** (обезьяньи тесты экспортированного бандла под `node` + `jsdom`: 10 приложений, 120 случайных шагов на каждое, шторм ресайзов, контракт моста). Браузер не нужен, сеть не нужна.
 - `tests/standalone_html_monkey_test.nim` — **9 / 9 APPS PASS** (запуск автономного `.html` бандла в Headless Chromium через `file://` без сети, проверка нажатий кнопок, анимаций, ввода/редактирования текста в `Focim IDE` и `Todo`, точности выравнивания глифов `8.000px` и динамического ресайза окна).
+- `tests/portability_math_test.nim` — **29 / 29 PASS** на C-бэкенде и **29 / 29 PASS** на JS-бэкенде, причём вывод совпадает побайтно: 32-битное умножение, uint32-арифметика, `floor`-квантование, `sin`/`cos`/`atan2`/`sqrt`/`exp`/`ln`/`pow` против дайджестов, побайтовый PNG-кодировщик `blitRGBA` на обоих бэкендах (включая буфер со смещением 2 — это проверка ABI пары указателя на JS) и политика кэша блитов.
 - `tests/monkey_browser_test.nim` — **56 / 56 PASS** (стресс-тестирование живых серверов в Headless Chromium; проверки, которым нужен браузер, корректно пропускаются, если он не установлен).
 - Отчет и комментарии по работе `fossil-nim` сохранены в [`FOSSIL_NIM_COMMENTS_RU.md`](FOSSIL_NIM_COMMENTS_RU.md).
 - Разбор найденных и исправленных дефектов: [`doc/WEB_BACKEND_DEFECTS.md`](doc/WEB_BACKEND_DEFECTS.md).
+
+### Идентичность между операционными системами и бекендами
+
+«Выглядит одинаково везде» — утверждение, которое нельзя проверить на глаз,
+поэтому оно проверяется арифметикой. `examples/sharks.nim` рисует одну
+детерминированную сцену (120 кадров 1024×640, движение по счётчику кадра —
+никогда по часам и никогда по ГСЧ) и печатает дайджест каждого аргумента
+примитива, отданного бекенду, каждого пикселя испечённого дна и каждой позиции
+сустава. Эталон — [`tests/sharks_digest_golden.txt`](tests/sharks_digest_golden.txt).
+
+```sh
+# Один бекенд -> <каталог>/<backend>.digest
+sh tools/sharks_run.sh native /tmp/digests 120   # X11 / Cocoa / WinAPI, что выберет система
+sh tools/sharks_run.sh gtk4   /tmp/digests 120   # универсальный, Linux и macOS
+sh tools/sharks_run.sh html   /tmp/digests 120   # веб-бекенд, чистый HTML/CSS
+sh tools/sharks_run.sh canvas /tmp/digests 120   # веб-бекенд, <canvas> 2D
+sh tools/sharks_run.sh jsdom  /tmp/digests 120   # та же страница nim js в настоящем DOM
+sh tools/sharks_run.sh chrome /tmp/digests 120   # та же страница в headless Chrome/Edge
+
+# Судья: таблица, аннотации ::error:: при расхождении, код возврата 1
+nim c --mm:arc --path:src -r tools/sharks_crosscheck.nim \
+  --dir=/tmp/digests --golden=tests/sharks_digest_golden.txt \
+  --require=native,html,canvas,jsdom,chrome
+```
+
+```
+  backend   frames rects   geom      bake      sc        txt       pos        verdict
+  html      120    203621  41ecda66  60495a65  3974762f  96a23cb2  a9559246   MATCH
+  canvas    120    203621  41ecda66  60495a65  3974762f  96a23cb2  a9559246   MATCH
+  jsdom     120    203621  41ecda66  60495a65  3974762f  96a23cb2  a9559246   MATCH
+```
+
+Проверяются `geom` (аргументы примитивов), `bake` (все 655 360 пикселей дна),
+`txt` (текст), `sc` (трансцендентные функции — `libm` против V8) и счётчики
+дошедших примитивов. `pos` **сообщается, но не проверяется**: вместе с
+библиотекой шрифт не поставляется, поэтому `measureText` законно даёт разные
+числа на разных платформах, и гнать его в эталон значило бы сделать проверку
+хрупкой, не найдя ни одного бага.
+
+Из дайджеста `chrome` видно, как достаётся результат настоящего браузера:
+хук, поставленный до скрипта приложения, поднимает строку `SHARKS_DIGEST` в
+атрибут на `<html>`, а `--dump-dom` её оттуда вычитывает — консоль headless-
+браузера наружу не отдаётся.
+
+Сцена написана так, а не иначе, из-за конкретной ловушки: референсная демка,
+с которой переносились акулы, считает хэш как `int32 * int32`, и на JS-бэкенде
+это теряет биты выше 2^53 — `374761393 * 12345` даёт 4262848038 нативно и
+2293536820 в браузере. **В браузере она рисует другой риф**, и заметить это
+можно только побайтным сравнением. Переносимый примитив `mul32`, uint32 с
+логическими сдвигами, квантование через `int(floor(x * SCALE))` и
+`jsRound(x) = int(floor(x + 0.5))` вместо Nim-овского `round` — всё это
+зафиксировано `tests/portability_math_test.nim`.
 
 ### Воспроизводимость на чистом клоне
 
@@ -104,6 +158,20 @@ export PATH="$(dirname "$(sh tools/bootstrap_nim.sh)"):$PATH"
   приложение. Фикс, выживающий только на seed `20261019`, не проходит.
 - **`portability`** (`macos-latest`, `windows-latest`) — нативные драйверы
   Cocoa и WinAPI, которые на Linux не компилируются вовсе, плюс все веб-тесты.
+- **`sharks`** (`ubuntu-latest`, `macos-latest`, `windows-latest`) — одна и та
+  же сцена через каждый бекенд, который на этой системе вообще есть: нативный
+  (X11 / Cocoa / WinAPI), GTK 4 (Linux и macOS; для MSVC/mingw на Windows
+  пакета разработки GTK 4 нет), оба веб-бекенда в серверном режиме, сборка
+  `nim js` в настоящем DOM и та же сборка в headless-браузере системы. Каждый
+  бекенд — отдельный шаг с отдельной аннотацией, и падение одного не
+  останавливает остальные: один прогон CI сообщает все сломанные бекенды, а не
+  только первый. В конце `tools/sharks_crosscheck.nim` сравнивает все
+  полученные дайджесты с эталоном и падает в том числе если обязательный
+  бекенд не дал дайджеста вовсе. Здесь же на каждой системе прогоняется
+  `tests/portability_math_test.nim` на обоих бэкендах — против `libm` именно
+  этой операционной системы. На ubuntu и macOS Nim собирается из исходников
+  тем же `bootstrap_nim.sh`, то есть «скомпилируется само на той системе, на
+  которой работает» — не предположение, а шаг пайплайна.
 
 Отдельный гейт следит, чтобы `exported_html/` не отставал от примеров: бандл
 перегенерируется и сравнивается с HEAD. Экспорт детерминирован, поэтому любое

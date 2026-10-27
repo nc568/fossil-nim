@@ -896,8 +896,18 @@ proc winDrawText(f: screen.Font; x, y: int; text: string;
   let hf = getFontHandle(f)
   if hf == nil or text.len == 0: return
   let oldFont = SelectObject(gBackDC, cast[HGDIOBJ](hf))
-  discard SetBkMode(gBackDC, OPAQUE)
-  discard SetBkColor(gBackDC, rgb(bg))
+  # `bg.a == 0` means "no background": every other backend honours it (the
+  # html driver only emits `background-color` when `bg.a > 0`, SDL3 skips the
+  # fill, Cocoa and GTK4 fill with alpha 0, X11 goes through XRender). GDI
+  # here was told `OPAQUE` unconditionally, and `rgb()` throws the alpha
+  # away, so a transparent background became a solid black box behind every
+  # single label -- the one difference a reader sees immediately when the
+  # same app is put side by side on Windows and anywhere else.
+  if bg.a == 0'u8:
+    discard SetBkMode(gBackDC, TRANSPARENT)
+  else:
+    discard SetBkMode(gBackDC, OPAQUE)
+    discard SetBkColor(gBackDC, rgb(bg))
   discard SetTextColor(gBackDC, rgb(fg))
   let wtext = newWideCString(text)
   let wlen = wtext.len.int32

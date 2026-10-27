@@ -1181,7 +1181,13 @@ async function main() {
   process.exit(report.ok ? 0 : 1);
 }
 
-main().catch((e) => {
-  console.error("harness crashed:", e && e.stack ? e.stack : e);
-  process.exit(3);
-});
+// `digest_runner.js` reuses the layout shim below, so the harness has to be
+// requireable without also starting a monkey run.
+module.exports = { installLayout: installLayout, parseArgs: parseArgs };
+
+if (require.main === module) {
+  main().catch((e) => {
+    console.error("harness crashed:", e && e.stack ? e.stack : e);
+    process.exit(3);
+  });
+}

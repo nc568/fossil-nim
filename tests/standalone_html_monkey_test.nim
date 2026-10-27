@@ -1,7 +1,7 @@
 ## standalone_html_monkey_test.nim -- Pure Nim (--mm:arc) Headless Chromium test
 ## that opens the exported standalone `.html` files directly via `file://`
 ## (no server, zero network) and monkey-tests interactive buttons, animations,
-## keyboard input, and dynamic window resizing in all 9 applications.
+## keyboard input, and dynamic window resizing in all 10 applications.
 
 import std/[os, osproc, strutils]
 

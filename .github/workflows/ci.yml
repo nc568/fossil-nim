@@ -378,3 +378,193 @@ jobs:
             sh tools/ci_run.sh "-d:canvas compile $f" \
               nim c --mm:arc -d:canvas --outdir:"$RUNNER_TEMP/bins" "$f"
           done
+
+  # --------------------------------------------------------------------------
+  # The hammerhead reef: ONE deterministic drawing, run through every backend
+  # this operating system has, and every one of them has to produce the very
+  # same digest. examples/sharks.nim renders 120 frames of a fixed 1024x640
+  # scene driven by a frame counter -- never by the wall clock, never by a RNG
+  # -- and prints a mix of every primitive argument it handed to the backend,
+  # of every pixel of the seabed it baked for `blitRGBA`, and of the sharks'
+  # joint positions. tests/sharks_digest_golden.txt is the reference.
+  #
+  # What that catches, and has caught:
+  #   * `blitOk=false` -- defect N11, the PNG encoder returned an empty seq
+  #     under `defined(js)`, so every standalone page silently drew no seabed.
+  #   * a `bake` digest that differs between the browser and native -- the
+  #     32-bit multiply trap: `nim js` computes uint32 products in a double and
+  #     loses every bit above 2^53, so the reference demo's own hash produces a
+  #     different reef in the browser than on the desktop.
+  #   * an `sc` digest that differs -- libm and V8 disagreeing on sin/cos/
+  #     atan2/sqrt, which would move a shark by a fraction of a cell and flip
+  #     the dithered colour of a whole mosaic tile.
+  #   * a `geom` digest that differs -- a backend that clips, rounds, dedups or
+  #     drops primitives differently from the others.
+  #
+  # The toolchain itself is built on the runner: ubuntu and macOS compile Nim
+  # 2.2.4 from source with tools/bootstrap_nim.sh, which is the same thing the
+  # README tells a new contributor to do, so "it compiles itself on the machine
+  # it runs on" is not an assumption here. Windows uses the setup action
+  # instead -- from-source on Windows needs a toolchain the runner image does
+  # not guarantee -- and D12/N8 stay proven by the `suite` job on ubuntu.
+  # --------------------------------------------------------------------------
+  sharks:
+    name: Sharks on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            toolchain: bootstrap
+            libs: apt
+            backends: native gtk4 html canvas jsdom chrome
+            require: native,gtk4,html,canvas,jsdom,chrome
+          - os: macos-latest
+            toolchain: bootstrap
+            libs: brew
+            backends: native gtk4 html canvas jsdom chrome
+            require: native,gtk4,html,canvas,jsdom,chrome
+          - os: windows-latest
+            toolchain: setup-action
+            libs: none
+            # No GTK 4 development package exists for the MSVC/mingw toolchain
+            # this runner builds Nim with, so the universal backend here is the
+            # pair of web backends plus real Chrome/Edge. WinAPI is native.
+            backends: native html canvas jsdom chrome
+            require: native,html,canvas,jsdom,chrome
+
+    steps:
+      - name: Check out the branch
+        uses: actions/checkout@v4
+
+      - name: Restore a previously built Nim
+        if: matrix.toolchain == 'bootstrap'
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/nim-2.2.4
+          key: nim-2.2.4-${{ runner.os }}-${{ hashFiles('tools/bootstrap_nim.sh') }}
+          restore-keys: nim-2.2.4-${{ runner.os }}-
+
+      - name: Compile Nim from source on this machine (D12, N8)
+        if: matrix.toolchain == 'bootstrap'
+        shell: bash
+        run: |
+          set -euo pipefail
+          nim_bin=$(sh tools/bootstrap_nim.sh | tail -n 1)
+          echo "bootstrap_nim.sh reported: $nim_bin"
+          dirname "$nim_bin" >> "$GITHUB_PATH"
+          # Not bare `nim`: $GITHUB_PATH only takes effect from the NEXT step.
+          "$nim_bin" --version | head -1
+
+      - name: Install Nim (from-source is not reproducible on this image)
+        if: matrix.toolchain == 'setup-action'
+        uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: '2.2.4'
+
+      - name: System libraries the native and GTK4 backends need
+        if: matrix.libs == 'apt'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          # xvfb: the X11 backend really opens a window and really draws into
+          # it, so it needs a real X server rather than a stub.
+          sudo apt-get install -y -qq --no-install-recommends \
+            xvfb pkg-config libx11-dev libxext-dev libxrender-dev \
+            libxft-dev libfontconfig1-dev libgtk-4-dev libpango1.0-dev
+          pkg-config --modversion gtk4
+
+      - name: System libraries the native and GTK4 backends need
+        if: matrix.libs == 'brew'
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install --quiet gtk4 pkg-config
+          pkg-config --modversion gtk4
+
+      - name: Install jsdom exactly as the lock pins it
+        shell: bash
+        working-directory: tests/jsdom
+        run: npm ci --no-audit --no-fund
+
+      - name: Environment
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo "os           ${{ matrix.os }}"
+          echo "nim          $(nim --version | head -1)"
+          echo "node         $(node --version)"
+          echo "backends     ${{ matrix.backends }}"
+          uname -a || true
+
+      # The arithmetic contract the whole comparison rests on: one 32-bit
+      # multiply that is bit-identical on the C and the JS backend, and libm
+      # agreeing with V8 to inside 2.4e-9. Run on this OS, against this OS's
+      # libm, on both backends.
+      - name: Portability of the arithmetic, C backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tools/ci_run.sh "portability_math_test (nim c)" \
+            nim c --mm:arc --path:src --outdir:"$RUNNER_TEMP/bins" -r \
+            tests/portability_math_test.nim
+
+      - name: Portability of the arithmetic, JavaScript backend
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh tools/ci_run.sh "portability_math_test (nim js)" \
+            nim js --jsbigint64:off -d:nimStringHash2 -d:html --path:src \
+            --outdir:"$RUNNER_TEMP/bins" tests/portability_math_test.nim
+          sh tools/ci_run.sh "portability_math_test under node" \
+            node "$RUNNER_TEMP/bins/portability_math_test.js"
+
+      - name: Build and run the scene on every backend this OS has
+        shell: bash
+        run: |
+          set -uo pipefail
+          digests="$RUNNER_TEMP/sharks-digests"
+          mkdir -p "$digests"
+          echo "$digests" >> "$GITHUB_STEP_SUMMARY"
+          failed=""
+          for b in ${{ matrix.backends }}; do
+            # Every backend gets its own annotated attempt, and a failure does
+            # not stop the loop: one run of CI should report every backend that
+            # is broken, not just the first one.
+            if ! sh tools/ci_run.sh "sharks on $b" \
+                 sh tools/sharks_run.sh "$b" "$digests" 120; then
+              failed="$failed $b"
+            fi
+          done
+          ls -la "$digests"
+          if [ -n "$failed" ]; then
+            echo "::error title=sharks backends that did not produce a digest::$failed"
+            exit 1
+          fi
+
+      # Runs even when a backend above failed, so the table says which backends
+      # agreed and which one is missing instead of leaving that to guesswork.
+      - name: Every backend drew the same scene
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          sh tools/ci_run.sh "sharks crosscheck" \
+            nim c --mm:arc --path:src --outdir:"$RUNNER_TEMP/bins" -r \
+            tools/sharks_crosscheck.nim \
+            --dir="$RUNNER_TEMP/sharks-digests" \
+            --golden=tests/sharks_digest_golden.txt \
+            --require=${{ matrix.require }}
+
+      - name: Upload the digests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sharks-digests-${{ matrix.os }}
+          path: |
+            ${{ runner.temp }}/sharks-digests/*.digest
+          if-no-files-found: warn
+          retention-days: 14

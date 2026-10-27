@@ -118,7 +118,7 @@ proc main() =
   putEnv("UIRELAYS_BUNDLE_OUT", bundle)
   putEnv("UIRELAYS_TMPDIR", getTempDir() / "uirelays_jsdom_js")
   let (buildOut, buildCode) = execCmdEx(buildCmd)
-  check("all 9 apps compile to standalone HTML", buildCode == 0 and fileExists(bundle),
+  check("all 10 apps compile to standalone HTML", buildCode == 0 and fileExists(bundle),
         (if buildCode != 0: buildOut.strip().splitLines()[^1 .. ^1][0] else: bundle & " missing"))
   if buildCode != 0 or not fileExists(bundle):
     echo "-------------------------------------------------------------------"

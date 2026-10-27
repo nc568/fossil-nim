@@ -42,10 +42,37 @@ exec "nim c --mm:arc -d:canvas --outdir:/tmp/uirelays_bins -r tests/web_backend_
 exec "nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/server_monkey_test.nim"
 execIfPresent("node",
   "nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/jsdom_monkey_test.nim")
-# Standalone offline HTML interactive & dynamic resize monkey test across all 9 apps:
+# Standalone offline HTML interactive & dynamic resize monkey test across all 10 apps:
 # needs a headless browser; it says so and skips when there is none.
 exec "nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/standalone_html_monkey_test.nim"
 exec "nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/monkey_browser_test.nim"
+
+# The arithmetic every cross-backend comparison rests on: a 32-bit multiply
+# that is bit-identical on the C and the JS backend, and libm agreeing with V8.
+# The JavaScript half of this file runs in the `sharks` CI job on all three
+# operating systems; here it is the C half, on this machine's libm.
+exec "nim c --mm:arc --outdir:/tmp/uirelays_bins -r tests/portability_math_test.nim"
+
+# examples/sharks.nim renders a fixed 120-frame scene and prints a digest of
+# every primitive argument, of every baked seabed pixel and of every joint
+# position. tools/sharks_run.sh runs one backend, tools/sharks_crosscheck.nim
+# judges them all against tests/sharks_digest_golden.txt. The web backends and
+# the standalone `nim js` page must land on exactly the same numbers: that is
+# the "it looks the same everywhere" claim, measured rather than asserted.
+const SharksDigests = "/tmp/uirelays_sharks_digests"
+removeDir(SharksDigests)
+createDir(SharksDigests)
+exec "sh tools/sharks_run.sh html " & SharksDigests & " 120"
+exec "sh tools/sharks_run.sh canvas " & SharksDigests & " 120"
+var sharksRequire = "html,canvas"
+if findExe("node").len > 0:
+  exec "sh tools/sharks_run.sh jsdom " & SharksDigests & " 120"
+  sharksRequire.add ",jsdom"
+else:
+  echo "SKIP  sh tools/sharks_run.sh jsdom  (node is not installed)"
+exec "nim c --mm:arc --outdir:/tmp/uirelays_bins -r tools/sharks_crosscheck.nim " &
+     "--dir=" & SharksDigests & " --golden=tests/sharks_digest_golden.txt " &
+     "--require=" & sharksRequire
 
 # Everything else is a window, and a window is what the examples are: each
 # backend gets to compile all of them.

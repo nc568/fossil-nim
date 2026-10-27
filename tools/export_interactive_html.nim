@@ -1,4 +1,4 @@
-## export_interactive_html.nim -- Pure Nim (--mm:arc) builder that compiles all 9
+## export_interactive_html.nim -- Pure Nim (--mm:arc) builder that compiles all 10
 ## UIRelays applications with `nim js --mm:arc -d:danger --opt:size -d:html` and
 ## packages them into standalone, self-contained, responsive interactive HTML files
 ## (Zero <canvas>, Zero WASM, Zero external network dependencies).
@@ -76,6 +76,13 @@ const Apps = [
     title: "Hello UIRelays + Live Animation",
     desc: "Click anywhere to place the crosshair, click [Accent], [Pink], [Green], or [Anim: ON/OFF] to control the animated diagonal ray wave, and resize the window.",
     srcPath: "examples/hello.nim"
+  ),
+  AppEntry(
+    id: "sharks",
+    tabLabel: "10. Hammerhead Reef",
+    title: "Hammerhead Reef (blitRGBA seabed + mosaic sharks)",
+    desc: "Four hammerhead sharks over a seabed that is baked once and republished with a single blitRGBA per frame. Click [UI panel: ON/OFF] and [Follow mouse: ON/OFF], move the mouse, type into the panel and press Enter, or press U / F / ESC.",
+    srcPath: "examples/sharks.nim"
   )
 ]
 
@@ -398,8 +405,17 @@ proc main() =
       let found = findExe("nim")
       if found.len > 0: found else: "nim"
 
+  # `UIRELAYS_ONLY_SELFTEST=1` builds just the selftest page below and skips
+  # the ten application pages and the bundle: CI runs the digest check on three
+  # operating systems and does not need to re-export the whole gallery there.
+  let onlySelftest = getEnv("UIRELAYS_ONLY_SELFTEST", "") == "1"
+
+  var appList: seq[AppEntry] = @[]
+  if not onlySelftest:
+    for a in Apps: appList.add a
+
   var compiled: seq[tuple[app: AppEntry, js: string]] = @[]
-  for app in Apps:
+  for app in appList:
     let srcPath = root / app.srcPath
     if not fileExists(srcPath):
       echo "  SKIP  ", app.id, " (", app.srcPath, " not in this checkout)"
@@ -426,6 +442,44 @@ proc main() =
     let standalonePath = outDir / app.id & ".html"
     writeFile(standalonePath, standaloneHtml)
     echo "  -> Wrote ", standalonePath, " (", standaloneHtml.len div 1024, " KB)"
+
+  # A page whose app is compiled with `-d:sharksSelftest`: it renders a fixed
+  # number of frames of a fixed-size scene and prints one `SHARKS_DIGEST` line
+  # through `console.log`. That line is what lets CI compare the *browser*
+  # rendering against the native one bit for bit, so it is built outside
+  # `exported_html/` and never shipped: the pages users get must keep
+  # animating.
+  let selftestOut = getEnv("UIRELAYS_SELFTEST_OUT", "")
+  if selftestOut.len > 0:
+    let selftestSrc = root / getEnv("UIRELAYS_SELFTEST_SRC", "examples/sharks.nim")
+    let frames = getEnv("UIRELAYS_SELFTEST_FRAMES", "120")
+    let outJs = workDir / "selftest_sharks.js"
+    let cmd = nimBin & " js --mm:arc -d:danger --opt:size -d:html " &
+              "--jsbigint64:off -d:nimStringHash2 " &
+              "-d:sharksSelftest -d:sharksFrames=" & frames & " " &
+              "--path:" & quoteShell(root / "src") & " " &
+              "-o:" & quoteShell(outJs) & " " & quoteShell(selftestSrc)
+    echo "Compiling JS selftest page ..."
+    if execShellCmd(cmd) != 0:
+      quit "Failed compiling the selftest page (command: " & cmd & ")", 1
+    let jsContent = readFile(outJs)
+    let violation = checkZeroCanvasPolicy(jsContent)
+    doAssert violation.len == 0,
+      "Zero <canvas>/WASM policy violated in the selftest page: " & violation
+    let entry = AppEntry(
+      id: "sharks_selftest",
+      tabLabel: "Hammerhead Reef selftest",
+      title: "Hammerhead Reef selftest (" & frames & " frames)",
+      desc: "Renders a deterministic scene and logs SHARKS_DIGEST for CI to compare against the native backends.",
+      srcPath: "examples/sharks.nim")
+    createDir(parentDir(selftestOut))
+    writeFile(selftestOut, buildStandaloneHtml(entry, jsContent))
+    echo "  -> Wrote ", selftestOut
+
+  if onlySelftest:
+    if not fileExists(getEnv("UIRELAYS_SELFTEST_OUT", "")):
+      quit "UIRELAYS_ONLY_SELFTEST=1 but no selftest page was written", 1
+    return
 
   if compiled.len == 0:
     quit "No application sources found under " & root, 1

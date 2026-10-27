@@ -1,0 +1,60 @@
+# Golden digest for examples/sharks.nim.
+#
+# Produced by
+#
+#   nim c --mm:arc -d:sharksSelftest -r examples/sharks.nim      # 1024x640, 120 frames
+#
+# on Linux with the `-d:html` and the `-d:canvas` web backends, and confirmed
+# byte for byte by the standalone `nim js` build of the same source running
+# inside jsdom (tests/jsdom/digest_runner.js). Every value below is computed by
+# the application itself, out of integers and IEEE-754 doubles, before anything
+# reaches a backend -- so a backend, an OS or a compiler that changes what is
+# drawn changes one of these numbers.
+#
+# GATED: `tools/sharks_crosscheck.nim` fails the build if any of these differs.
+#
+#   rects lines texts blits cells bakeRects
+#       how many primitives of each kind 120 frames asked for, and how many
+#       mosaic cells the sharks covered.
+#   geom  mix over every fillRect / drawLine / blitRGBA argument: kind, all
+#         coordinates, all sizes, all colours, in call order. This is the
+#         "it looks the same" statement for everything that is not text.
+#   bake  mix over all 655,360 pixels of the seabed that gets baked once and
+#         republished by a single blitRGBA per frame.
+#   txt   mix over every drawText string and colour.
+#   sc    mix over the sharks' joint positions quantised to 1/1024 px. This is
+#         the field that would move if sin/cos/atan2/sqrt disagreed between
+#         libm and V8, or if a 32-bit multiply lost bits the way `nim js`
+#         loses them above 2^53.
+#   blitOk
+#         that blitRGBA accepted the buffer. `false` here is defect N11: the
+#         PNG encoder used to `return @[]` under `defined(js)`, so every
+#         standalone page silently drew no seabed at all.
+#
+# REPORTED, NOT GATED:
+#
+#   pos   drawText coordinates. uirelays ships no font of its own, so the
+#         `measureText` that centres the title lands on different pixels under
+#         Xft, CoreText, GDI, Pango, SDL_ttf and the browser's CSS font stack.
+#         Two backends on the same machine that disagree here have a real
+#         problem; two machines that disagree here do not.
+#
+# Regenerate only with a reason, never to make a failure go away:
+#
+#   nim c --mm:arc -d:sharksSelftest -r examples/sharks.nim
+
+frames=120
+w=1024
+h=640
+rects=203621
+lines=2640
+texts=1680
+blits=120
+cells=90312
+bakeRects=2463
+blitOk=true
+geom=41ecda66
+bake=60495a65
+txt=96a23cb2
+sc=3974762f
+pos=a9559246

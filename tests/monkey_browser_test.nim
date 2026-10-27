@@ -1,6 +1,6 @@
 ## Real Headless Chromium Browser Monkey Test Suite + Pure HTML Exporter (Nim --mm:arc).
 ##
-## Tests all 9 UIRelays applications across both `-d:html` (Pure DOM) and
+## Tests all 10 UIRelays applications across both `-d:html` (Pure DOM) and
 ## `-d:canvas` (HTML5 Canvas 2D), and exports the resulting Pure HTML5 + CSS3
 ## DOM markup (zero JS, zero <canvas>, zero WASM) for each application into
 ## `exported_html/<app>.html` and `/home/user/uirelays_all_apps.html`.
