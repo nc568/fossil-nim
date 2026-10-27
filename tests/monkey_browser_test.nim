@@ -507,7 +507,7 @@ proc runMonkeyTarget(appName, srcPath, extraCompileArgs, runArg, backendFlag: st
   os.sleep(80)
 
 echo "==================================================================="
-echo "UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)"
+echo "UIRelays Chromium Browser Monkey Test Suite (10 Apps x 2 Backends)"
 echo "==================================================================="
 
 let root = repoRoot()
@@ -528,7 +528,12 @@ let targets = [
   ("todo",         "examples/todo.nim",         "--path:" & root / "src", ""),
   ("paint",        "examples/paint.nim",        "--path:" & root / "src", ""),
   ("layout_demo",  "examples/layout_demo.nim",  "--path:" & root / "src", ""),
-  ("hello",        "examples/hello.nim",        "--path:" & root / "src", "")
+  ("hello",        "examples/hello.nim",        "--path:" & root / "src", ""),
+  # The densest app here by an order of magnitude: ~1700 rectangles a frame,
+  # a baked 1024x640 buffer blitted through blitRGBA every frame, and a clip
+  # stack. If a backend is going to drop primitives, mis-serialise a large
+  # frame or choke on SSE at that volume, it is this one.
+  ("sharks",       "examples/sharks.nim",       "--path:" & root / "src", "")
 ]
 
 var basePort = 18310
@@ -540,7 +545,7 @@ for (appName, srcPath, extraArgs, runArg) in targets:
 
 let exportCode = execShellCmd("nim c --mm:arc --outdir:/tmp/uirelays_bins -r " &
   quoteShell(root / "tools" / "export_interactive_html.nim"))
-check("Exported 9 standalone interactive HTML apps (nim js --mm:arc -d:html)", exportCode == 0)
+check("Exported 10 standalone interactive HTML apps (nim js --mm:arc -d:html)", exportCode == 0)
 
 let standaloneMonkeyCode = execShellCmd("nim c --mm:arc --outdir:/tmp/uirelays_bins -r " &
   quoteShell(root / "tests" / "standalone_html_monkey_test.nim"))

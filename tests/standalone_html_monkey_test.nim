@@ -341,6 +341,47 @@ async function runAllInteractiveChecks() {
   var helloResized = vp.style.width === "900px";
   results.push("hello:pinkBtn=" + pinkClicked + ":anim=" + (hf1 !== hf2) + ":resize=" + helloResized);
 
+  // 10. Sharks: the densest app here, and the only one that blits. Type into
+  // its input, delete a character, toggle the overlay, and above all assert
+  // that the baked seabed reached the DOM as a real PNG image -- which is
+  // defect N11 checked in an actual browser engine rather than in jsdom.
+  switchUirApp("sharks");
+  await sleepMs(120);
+  var sharksPlaceholder = vp.textContent.indexOf("Ask hai anything...") !== -1;
+  var sharksWord = "reef";
+  for (var si = 0; si < sharksWord.length; si++) {
+    window.__uirActive.key("keydown", sharksWord.charAt(si), "KeyR", false, false, false, false);
+  }
+  await sleepMs(80);
+  var sharksTyped = vp.textContent.indexOf("reef") !== -1;
+  window.__uirActive.key("keydown", "Backspace", "Backspace", false, false, false, false);
+  await sleepMs(80);
+  var sharksDeleted = vp.textContent.indexOf("reef") === -1 &&
+                      vp.textContent.indexOf("ree") !== -1;
+  // blitRGBA paints through an <img> whose src is a data URI PNG. Zero of them
+  // means the encoder returned nothing, which is exactly what it used to do on
+  // the JS backend. The count is taken over the viewport, not the document,
+  // because that is where the driver puts primitives.
+  var sharksImgs = vp.querySelectorAll("img");
+  var sharksPngs = 0;
+  for (var pi = 0; pi < sharksImgs.length; pi++) {
+    var psrc = sharksImgs[pi].getAttribute("src") || "";
+    if (psrc.indexOf("data:image/png") === 0) sharksPngs++;
+  }
+  var sharksBlit = sharksPngs > 0;
+  // 'u' toggles the overlay panel: the title has to disappear with it.
+  var sf1 = document.getElementById("uir-stat-frame").textContent;
+  window.__uirActive.key("keydown", "u", "KeyU", false, false, false, false);
+  await sleepMs(150);
+  var sf2 = document.getElementById("uir-stat-frame").textContent;
+  var sharksToggled = vp.textContent.indexOf("what's on your mind?") === -1;
+  testResizeTo(1100, 700);
+  await sleepMs(80);
+  var sharksResized = vp.style.width === "1100px";
+  results.push("sharks:placeholder=" + sharksPlaceholder + ":typed=" + sharksTyped +
+    ":backspace=" + sharksDeleted + ":blitPng=" + sharksBlit + "(" + sharksPngs + ")" +
+    ":toggleU=" + sharksToggled + ":anim=" + (sf1 !== sf2) + ":resize=" + sharksResized);
+
   // Stop active rAF loop once all checks complete so headless --virtual-time-budget exits immediately
   window.__uirRunId = (window.__uirRunId || 0) + 1;
 
@@ -375,7 +416,13 @@ window.addEventListener("load", function() {
   let cmd = quoteShell(browserBin) &
             " --headless --no-sandbox --disable-gpu --user-data-dir=" &
             quoteShell(getTempDir() / "uir-chromium-profile") & " " &
-            "--window-size=1280,820 --virtual-time-budget=15000 --dump-dom file://" &
+            # 30 s of virtual time, not the 15 s this used to be: there are
+            # ten apps now, and the tenth redraws ~1700 primitives a frame
+            # while it is on screen, so its checks alone advance the virtual
+            # clock further than the other nine put together. Running out of
+            # budget here shows up as "summary not found in DOM output", which
+            # reads like a rendering failure and is a timeout.
+            "--window-size=1280,820 --virtual-time-budget=30000 --dump-dom file://" &
             testHtmlPath & " 2>/dev/null"
   let (domOut, exitCode) = execCmdEx(cmd)
   doAssert exitCode == 0, "Chromium failed with exit code " & $exitCode
@@ -394,7 +441,7 @@ window.addEventListener("load", function() {
     if ":" in line:
       doAssert "false" notin line, "Interactive check failed on line: " & line
   echo "======================================================================"
-  echo " ALL 9 STANDALONE OFFLINE HTML APPS PASSED INTERACTIVE & RESIZE TESTS!"
+  echo " ALL 10 STANDALONE OFFLINE HTML APPS PASSED INTERACTIVE & RESIZE TESTS!"
   echo "======================================================================"
 
 main()
