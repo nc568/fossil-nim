@@ -38,10 +38,20 @@ const gtkFallbackCflags =
   "-I/usr/include/gdk-pixbuf-2.0 -I/usr/include/webp -I/usr/include/graphene-1.0 " &
   "-I/usr/include/fontconfig -pthread"
 
-const gtkFallbackLibs =
+const gtkFallbackLibsBase =
   "-lgtk-4 -lgdk-4 -lpangocairo-1.0 -lpangoft2-1.0 -lpango-1.0 -lgobject-2.0 " &
   "-lglib-2.0 -lgio-2.0 -lgmodule-2.0 -lfontconfig -lfreetype -lcairo -lharfbuzz " &
-  "-lgraphene-1.0 -lfribidi -lgdk_pixbuf-2.0 -lXi -lX11 -ldl -lm"
+  "-lgraphene-1.0 -lfribidi -lgdk_pixbuf-2.0"
+
+# N14: libXi and libX11 are what GDK's *X11* backend links against. On macOS
+# GDK is built on Quartz and neither library exists, so naming them here made
+# the fallback link line unresolvable on anything but Linux. pkg-config is
+# present wherever GTK 4 is installed, so this path is a safety net -- but a
+# safety net that only works on one OS is not one.
+when defined(linux):
+  const gtkFallbackLibs = gtkFallbackLibsBase & " -lXi -lX11 -ldl -lm"
+else:
+  const gtkFallbackLibs = gtkFallbackLibsBase & " -lm"
 
 when gtkCflags.len > 0:
   {.passC: gtkCflags.}
@@ -154,7 +164,17 @@ proc gtk_im_context_focus_in(im: pointer) {.importc, nodecl, cdecl.}
 proc gdk_event_get_modifier_state(ev: pointer): guint {.importc, nodecl, cdecl.}
 proc gdk_keyval_to_lower(k: guint): guint {.importc, nodecl, cdecl.}
 proc gdk_cursor_new_from_name(name: cstring; fallback: pointer): pointer {.importc, nodecl, cdecl.}
-proc gdk_x11_display_set_program_class(disp: pointer; name: cstring) {.importc, nodecl, cdecl.}
+when defined(linux):
+  # N14: `gdk_x11_display_set_program_class` lives in gdk/x11/gdkx11.h, which
+  # `gtk/gtk.h` does not pull in, and it exists only in GDK's X11 backend. An
+  # `importc, nodecl` declaration emits a bare call, so the C compiler had to
+  # accept an implicit function declaration: gcc 12 warns, clang on macOS
+  # rejects it, and gcc 14 rejects it too. Which made the GTK 4 backend a
+  # Linux-only backend in practice while claiming to be portable. Declare the
+  # prototype outright instead of including the header, so no X11 headers have
+  # to be reachable, and say nothing at all where GDK is not on X11.
+  {.emit: """extern void gdk_x11_display_set_program_class(void* display, const char* program_class);""".}
+  proc gdk_x11_display_set_program_class(disp: pointer; name: cstring) {.importc, nodecl, cdecl.}
 proc gdk_display_get_default(): pointer {.importc, nodecl, cdecl.}
 proc gdk_display_get_clipboard(disp: pointer): pointer {.importc, nodecl, cdecl.}
 proc gdk_clipboard_set_text(clip: pointer; text: cstring) {.importc, nodecl, cdecl.}
@@ -522,10 +542,11 @@ proc gtkCreateWindow(layout: var ScreenLayout; icon: pointer; iconLen: int) =
   # property -- there the app id is the prgname above. The type check keeps
   # this off a Wayland display, where the cast inside GTK would be a critical;
   # an unregistered type name yields 0, which matches nothing.
-  let disp = gdk_display_get_default()
-  if disp != nil and
-      g_type_check_instance_is_a(disp, g_type_from_name("GdkX11Display")) == G_TRUE:
-    gdk_x11_display_set_program_class(disp, className.cstring)
+  when defined(linux):
+    let disp = gdk_display_get_default()
+    if disp != nil and
+        g_type_check_instance_is_a(disp, g_type_from_name("GdkX11Display")) == G_TRUE:
+      gdk_x11_display_set_program_class(disp, className.cstring)
   gtk_window_set_title(win, instName.cstring)
   # GTK takes the icon from the icon theme, by this name -- `icon` holds X11
   # cardinals, which it has no use for. An installed `.desktop` entry and its

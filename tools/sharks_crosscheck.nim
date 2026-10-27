@@ -62,11 +62,12 @@ proc parseDigestLine(line, source: string): Digest =
 
 proc expectedSelfReport(stem: string): seq[string] =
   ## What the app's own `backend=` field must say for a digest file with this
-  ## name. `native` is whatever the OS picks by itself, and `jsdom` is the
-  ## html backend compiled to JavaScript, so neither maps to its own name.
+  ## name. `native` is whatever the OS picks by itself, and both `jsdom` and
+  ## `chrome` load the html backend compiled to JavaScript, so none of the
+  ## three maps to its own name.
   case stem
   of "native": @["x11", "cocoa", "winapi"]
-  of "jsdom": @["html"]
+  of "jsdom", "chrome": @["html"]
   else: @[stem]
 
 proc loadGolden(path: string): Table[string, string] =
