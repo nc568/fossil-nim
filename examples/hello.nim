@@ -17,6 +17,10 @@ proc drawBorder(r: Rect; c: Color) =
 
 proc main() {.uirApp.} =
   let layout = createWindow(640, 480)
+  # The layout below is drawn for 640x480 and does not reflow below it:
+  # declaring the floor keeps the viewport from shrinking into
+  # territory where the interface is clipped away and unreachable.
+  setMinViewport(640, 480)
   var width = layout.width
   var height = layout.height
 
@@ -64,8 +68,8 @@ proc main() {.uirApp.} =
       of QuitEvent, WindowCloseEvent:
         running = false
       of WindowResizeEvent, WindowMetricsEvent:
-        width = max(360, e.x)
-        height = max(280, e.y)
+        width = max(640, e.x)
+        height = max(480, e.y)
       of MouseMoveEvent:
         hoverX = e.x
         hoverY = e.y

@@ -6,7 +6,16 @@
 
 import std/[strutils, base64]
 when not defined(js):
-  import std/[json, monotimes, times, os, nativesockets, posix]
+  import std/[json, monotimes, times, os, nativesockets]
+  # posix and winlean both define SocketHandle, so importing posix on Windows
+  # makes every socket symbol ambiguous and the web backends do not compile
+  # there at all. Each platform imports its own; the remaining differences
+  # (names, argument types, error reporting, byte order) are collected in the
+  # shim below instead of being scattered through the server as `when`s.
+  when defined(windows):
+    import std/winlean
+  else:
+    import std/posix
 import ../coords, ../input, ../screen
 
 type
@@ -22,10 +31,12 @@ type
     active*: bool
     path*: string
     family*: string
+    cssFont*: string
     size*: int
     style*: FontStyles
     metrics*: FontMetrics
     charWidth*: int
+    isMonospace*: bool
 
   WebImageSlot* = object
     active*: bool
@@ -59,6 +70,8 @@ type
     fonts*: seq[WebFontSlot]
     images*: seq[WebImageSlot]
     eventQueue*: seq[Event]
+    minViewportW*: int          ## floor the application asked for (0 = none)
+    minViewportH*: int
     frameId*: int
     lastPayloadHash*: uint64
     lastFrameJson*: string
@@ -69,6 +82,8 @@ type
     domNodeCount*: int
     canvasCommandCount*: int
     monkeyReportJson*: string
+    droppedEvents*: int
+    inputParseErrors*: int
     # Embedded non-blocking HTTP/SSE server
     serverEnabled*: bool
     serverPort*: int
@@ -91,6 +106,20 @@ proc fnv1a64*(s: string): uint64 {.inline.} =
     result = uint64(h)
   else:
     result = 14695981039346656037'u64
+    for i in 0 ..< s.len:
+      result = (result xor uint64(ord(s[i]))) * 1099511628211'u64
+
+proc fnv1a64Step*(h: uint64; s: string): uint64 {.inline.} =
+  ## Folds `s` into a running FNV-1a hash. Lets a caller hash a structured
+  ## frame without concatenating it into one throwaway string first.
+  when defined(js):
+    var g = uint32(h and 0xFFFFFFFF'u64)
+    for i in 0 ..< s.len:
+      g = g xor uint32(ord(s[i]))
+      g = uint32((uint64(g) * 16777619'u64) and 0xFFFFFFFF'u64)
+    result = uint64(g)
+  else:
+    result = h
     for i in 0 ..< s.len:
       result = (result xor uint64(ord(s[i]))) * 1099511628211'u64
 
@@ -168,85 +197,226 @@ proc addPngChunk(png: var seq[uint8]; chunkType: string; payload: openArray[uint
     png.add b
   png.addBe32(crc32Compute(crcBuf))
 
+# ---------------------------------------------------------------------------
+# blitRGBA: PNG payload, and the two reasons it is not written the obvious way
+# ---------------------------------------------------------------------------
+#
+# 1. The JS backend cannot index a `ptr UncheckedArray[T]` at all: it is an
+#    internal compiler error, `expr(nkBracketExpr, tyUncheckedArray)`. That is
+#    why this encoder used to start with `when defined(js): return @[]`, which
+#    made `blitRGBA` a silent no-op in every standalone (`nim js`) page: the
+#    relay reported `false` and drew nothing, so an app that bakes a
+#    background once and blits it per frame had no background at all in the
+#    browser while working natively. On the JS backend a pointer *parameter*
+#    is split into two ABI slots -- the base array and the element offset --
+#    and `arguments` is the only place where both are visible, so
+#    `jsPixelWords` reads them from there and hands the encoder a plain
+#    `seq[uint32]`. The encoder itself is generic over the pixel accessor, so
+#    the C path still indexes the pointer with zero copy.
+#    `tests/portability_math_test.nim` pins the produced PNG bytes to one
+#    golden digest on both backends: a Nim upgrade that moves this ABI fails a
+#    test instead of quietly blitting garbage.
+#
+# 2. "Bake it once, blit it every frame" is the only sane way to draw a rich
+#    static background with `blitRGBA`, and it used to cost a full PNG +
+#    base64 encode *per call*: 90 ms and a 3,496,486 character string for a
+#    1024x640 buffer, measured, every frame, forever -- and in server mode
+#    that string was additionally JSON escaped and pushed over SSE to every
+#    client on every frame. The bytes cannot have changed unless the pixels
+#    changed, so the payload is keyed by a fingerprint of the content and
+#    reused. Fingerprinting costs under a millisecond, ~100x less.
+
+proc mul32(a, b: uint32): uint32 {.inline.} =
+  ## The low 32 bits of `a * b`, computed so that no intermediate exceeds
+  ## 2^53. A bare `a * b` is exact on the C backend and *lossy* on the JS one,
+  ## because there a uint32 lives in a double: measured, the same expression
+  ## yields 4262848038 natively and 2293536820 in the browser. Every hash in
+  ## this file goes through here for that reason.
+  let lo = (a and 0xFFFF'u32) * b
+  let hi = ((a shr 16) * b) and 0xFFFF'u32
+  (lo and 0xFFFFFFFF'u32) + (hi shl 16)
+
+when defined(js):
+  proc jsPixelWords(p: pointer; n: int): seq[uint32] =
+    ## Materialises the `n` pixels a JS pointer pair refers to. `arguments[0]`
+    ## is the base array, `arguments[1]` the element offset and
+    ## `arguments[2]` the next Nim parameter (`n`), because the JS backend
+    ## passes a pointer as two slots.
+    result = newSeq[uint32](n)
+    {.emit: """
+      var base = arguments[0];
+      var off  = arguments[1];
+      var cnt  = arguments[2];
+      if (base && typeof off === "number") {
+        for (var i = 0; i < cnt; ++i) { `result`[i] = base[off + i]; }
+      }
+    """.}
+
+type BlitFp = tuple[a, b: uint32; w, h: int]
+
+proc blitFingerprintCore[P](px: P; w, h: int): BlitFp =
+  ## Two independent 32-bit hashes over the buffer. One would not do: a
+  ## collision means silently publishing a stale picture, and 2^-32 per blit
+  ## is far too likely to ignore. Together they are 2^-64.
+  var a = 2166136261'u32
+  var b = 2166136261'u32 xor 0x9E3779B9'u32
+  let n = w * h
+  for i in 0 ..< n:
+    let word = px[i]
+    a = mul32(a xor word, 16777619'u32)
+    a = a xor (a shr 13)
+    b = mul32(b xor ((word shr 16) or ((word and 0xFFFF'u32) shl 16)),
+              1099511629'u32)
+    b = b xor (b shr 17)
+  result = (a, b, w, h)
+
+type BlitCacheEntry = object
+  fp: BlitFp
+  uri: string
+  live: bool
+
+# Two slots: one covers the ordinary "single baked background" app, the second
+# covers an app alternating between two buffers. Anything past that thrashes
+# and simply re-encodes, which is exactly the old behaviour -- never worse.
+var
+  blitCache: array[2, BlitCacheEntry]
+  blitCacheNext = 0
+  blitCacheHitsTotal = 0
+  blitCacheMissTotal = 0
+
+proc encodePngCore[P](px: P; w, h: int): seq[uint8] =
+  ## `w x h` 32-bit pixels (`0xAARRGGBB`, or `0x00RRGGBB` which is treated as
+  ## opaque) into an uncompressed PNG byte stream, in pure Nim.
+  if w <= 0 or h <= 0:
+    return @[]
+  # Raw scanlines: each row starts with filter byte 0 (None) + 4 bytes/pixel (RGBA)
+  let rowStride = 1 + w * 4
+  let rawLen = h * rowStride
+  var raw = newSeq[uint8](rawLen)
+  var pos = 0
+  for y in 0 ..< h:
+    raw[pos] = 0'u8 # Filter type 0 (None)
+    inc pos
+    let rowOffset = y * w
+    for x in 0 ..< w:
+      let word = px[rowOffset + x]
+      let a = uint8((word shr 24) and 0xFF'u32)
+      let r = uint8((word shr 16) and 0xFF'u32)
+      let g = uint8((word shr 8) and 0xFF'u32)
+      let b = uint8(word and 0xFF'u32)
+      raw[pos] = r
+      raw[pos + 1] = g
+      raw[pos + 2] = b
+      raw[pos + 3] = if a == 0'u8 and word != 0'u32: 255'u8 else: (if word == 0'u32: 255'u8 else: a)
+      pos += 4
+
+  # Wrap raw scanlines in zlib stored deflate blocks (max 65535 bytes per block)
+  var zlibData = newSeqOfCap[uint8](rawLen + (rawLen div 65535 + 2) * 5 + 6)
+  zlibData.add 0x78'u8 # CMF (Deflate, 32K window)
+  zlibData.add 0x01'u8 # FLG (No dict, check bits)
+
+  var offset = 0
+  while offset < rawLen:
+    let chunkLen = min(65535, rawLen - offset)
+    let isLast = (offset + chunkLen) >= rawLen
+    zlibData.add(if isLast: 0x01'u8 else: 0x00'u8) # BFINAL + BTYPE=00 (stored)
+    let len16 = uint16(chunkLen)
+    let nlen16 = not len16
+    zlibData.add uint8(len16 and 0xFF'u16)
+    zlibData.add uint8((len16 shr 8) and 0xFF'u16)
+    zlibData.add uint8(nlen16 and 0xFF'u16)
+    zlibData.add uint8((nlen16 shr 8) and 0xFF'u16)
+    for i in 0 ..< chunkLen:
+      zlibData.add raw[offset + i]
+    offset += chunkLen
+
+  zlibData.addBe32(adler32Compute(raw))
+
+  # Assemble PNG file
+  result = newSeqOfCap[uint8](zlibData.len + 64)
+  for sigByte in [137'u8, 80'u8, 78'u8, 71'u8, 13'u8, 10'u8, 26'u8, 10'u8]:
+    result.add sigByte
+
+  var ihdr = newSeqOfCap[uint8](13)
+  ihdr.addBe32(uint32(w))
+  ihdr.addBe32(uint32(h))
+  ihdr.add 8'u8 # Bit depth 8
+  ihdr.add 6'u8 # Color type 6 (RGBA)
+  ihdr.add 0'u8 # Compression
+  ihdr.add 0'u8 # Filter
+  ihdr.add 0'u8 # Interlace
+  result.addPngChunk("IHDR", ihdr)
+  result.addPngChunk("IDAT", zlibData)
+  let empty: seq[uint8] = @[]
+  result.addPngChunk("IEND", empty)
+
+# ---------------------------------------------------------------------------
+# blitRGBA payload cache
+# ---------------------------------------------------------------------------
+#
+# "Bake it once, blit it every frame" is the only sane way to draw a rich
+# static background with `blitRGBA`, and it used to cost a full PNG + base64
+# encode *per call*: 90 ms and a 3,496,486 character string for a 1024x640
+# buffer, measured, every single frame, forever. In server mode that string
+# was additionally JSON-escaped and pushed over SSE to every client per frame.
+# The bytes cannot have changed unless the pixels changed, so the payload is
+# keyed by a fingerprint of the content and reused. Fingerprinting the same
+# buffer costs under a millisecond, ~100x less than encoding it.
+#
+# The fingerprint deliberately never uses a bare 32-bit `*`. `nim js` computes
+# uint32 multiplies in a double, so every bit above 2^53 is lost and a plain
+# FNV would fingerprint the very same buffer differently in the browser and
+# natively -- measured: 4262848038 vs 2293536820. `mul32` splits the multiply
+# into 16-bit halves and is bit-identical on the C and the JS backend.
+
 proc encodeRgbaToPngBytes*(pixels: ptr UncheckedArray[uint32]; w, h: int): seq[uint8] =
   ## Encodes a `w x h` buffer of 32-bit pixels (`0xAARRGGBB` or `0x00RRGGBB`
-  ## as passed to `blitRGBA` in uirelays) into a valid PNG byte stream in pure Nim.
-  when defined(js):
-    discard pixels; discard w; discard h
+  ## as passed to `blitRGBA` in uirelays) into a valid PNG byte stream in pure
+  ## Nim. Works on the C and on the JS backend.
+  when not defined(js):
+    if pixels == nil: return @[]
+  if w <= 0 or h <= 0:
     return @[]
+  when defined(js):
+    encodePngCore(jsPixelWords(cast[pointer](pixels), w * h), w, h)
   else:
-    if pixels == nil or w <= 0 or h <= 0:
-      return @[]
+    encodePngCore(pixels, w, h)
 
-    # Raw scanlines: each row starts with filter byte 0 (None) + 4 bytes/pixel (RGBA)
-    let rowStride = 1 + w * 4
-    let rawLen = h * rowStride
-    var raw = newSeq[uint8](rawLen)
-    var pos = 0
-    for y in 0 ..< h:
-      raw[pos] = 0'u8 # Filter type 0 (None)
-      inc pos
-      let rowOffset = y * w
-      for x in 0 ..< w:
-        let word = pixels[rowOffset + x]
-        let a = uint8((word shr 24) and 0xFF'u32)
-        let r = uint8((word shr 16) and 0xFF'u32)
-        let g = uint8((word shr 8) and 0xFF'u32)
-        let b = uint8(word and 0xFF'u32)
-        raw[pos] = r
-        raw[pos + 1] = g
-        raw[pos + 2] = b
-        raw[pos + 3] = if a == 0'u8 and word != 0'u32: 255'u8 else: (if word == 0'u32: 255'u8 else: a)
-        pos += 4
-
-    # Wrap raw scanlines in zlib stored deflate blocks (max 65535 bytes per block)
-    var zlibData = newSeqOfCap[uint8](rawLen + (rawLen div 65535 + 2) * 5 + 6)
-    zlibData.add 0x78'u8 # CMF (Deflate, 32K window)
-    zlibData.add 0x01'u8 # FLG (No dict, check bits)
-
-    var offset = 0
-    while offset < rawLen:
-      let chunkLen = min(65535, rawLen - offset)
-      let isLast = (offset + chunkLen) >= rawLen
-      zlibData.add(if isLast: 0x01'u8 else: 0x00'u8) # BFINAL + BTYPE=00 (stored)
-      let len16 = uint16(chunkLen)
-      let nlen16 = not len16
-      zlibData.add uint8(len16 and 0xFF'u16)
-      zlibData.add uint8((len16 shr 8) and 0xFF'u16)
-      zlibData.add uint8(nlen16 and 0xFF'u16)
-      zlibData.add uint8((nlen16 shr 8) and 0xFF'u16)
-      for i in 0 ..< chunkLen:
-        zlibData.add raw[offset + i]
-      offset += chunkLen
-
-    zlibData.addBe32(adler32Compute(raw))
-
-    # Assemble PNG file
-    result = newSeqOfCap[uint8](zlibData.len + 64)
-    for sigByte in [137'u8, 80'u8, 78'u8, 71'u8, 13'u8, 10'u8, 26'u8, 10'u8]:
-      result.add sigByte
-
-    var ihdr = newSeqOfCap[uint8](13)
-    ihdr.addBe32(uint32(w))
-    ihdr.addBe32(uint32(h))
-    ihdr.add 8'u8 # Bit depth 8
-    ihdr.add 6'u8 # Color type 6 (RGBA)
-    ihdr.add 0'u8 # Compression
-    ihdr.add 0'u8 # Filter
-    ihdr.add 0'u8 # Interlace
-    result.addPngChunk("IHDR", ihdr)
-    result.addPngChunk("IDAT", zlibData)
-    let empty: seq[uint8] = @[]
-    result.addPngChunk("IEND", empty)
-
-proc encodeRgbaToPngDataUri*(pixels: ptr UncheckedArray[uint32]; w, h: int): string =
-  let pngBytes = encodeRgbaToPngBytes(pixels, w, h)
+proc dataUriCore[P](px: P; w, h: int): string =
+  let fp = blitFingerprintCore(px, w, h)
+  for i in 0 ..< blitCache.len:
+    if blitCache[i].live and blitCache[i].fp == fp:
+      inc blitCacheHitsTotal
+      return blitCache[i].uri
+  inc blitCacheMissTotal
+  let pngBytes = encodePngCore(px, w, h)
   if pngBytes.len == 0:
     return ""
   var s = newString(pngBytes.len)
   for i in 0 ..< pngBytes.len:
     s[i] = char(pngBytes[i])
   result = "data:image/png;base64," & base64.encode(s)
+  blitCache[blitCacheNext] = BlitCacheEntry(fp: fp, uri: result, live: true)
+  blitCacheNext = (blitCacheNext + 1) mod blitCache.len
+
+proc encodeRgbaToPngDataUri*(pixels: ptr UncheckedArray[uint32]; w, h: int): string =
+  when not defined(js):
+    if pixels == nil: return ""
+  if w <= 0 or h <= 0:
+    return ""
+  when defined(js):
+    dataUriCore(jsPixelWords(cast[pointer](pixels), w * h), w, h)
+  else:
+    dataUriCore(pixels, w, h)
+
+proc blitCacheStats*(): tuple[hits, misses, live: int] =
+  ## Test hook: proves the cache actually absorbs a repeated blit instead of
+  ## re-encoding it, and that it never grows past its two slots.
+  var live = 0
+  for e in blitCache:
+    if e.live: inc live
+  (blitCacheHitsTotal, blitCacheMissTotal, live)
+
 
 # ---------------------------------------------------------------------------
 # Pure-Nim Image Dimension & MIME Parser (PNG, BMP, GIF, JPEG, SVG)
@@ -322,6 +492,24 @@ proc parseImageDimensions*(data: string; path: string): tuple[w, h: int, mime: s
 # Font Management (Deterministic Monospace Metrics + Unicode Rune Width)
 # ---------------------------------------------------------------------------
 
+proc isMonospaceFontPath*(path: string): bool =
+  if path.len == 0:
+    return true
+  let lp = path.toLowerAscii()
+  if "mono" in lp or "consolas" in lp or "courier" in lp or
+     "fira code" in lp or "jetbrains" in lp or "menlo" in lp or
+     "iosevka" in lp or "hack" in lp or "source code" in lp or
+     "fixed" in lp or "term" in lp:
+    return true
+  if "sans" in lp or "serif" in lp or "arial" in lp or "inter" in lp or
+     "helvetica" in lp or "roboto" in lp or "segoe" in lp or "system-ui" in lp or
+     "ubuntu" in lp or "noto" in lp or "cantarell" in lp or "georgia" in lp or
+     "times" in lp or "verdana" in lp or "tahoma" in lp or "trebuchet" in lp:
+    return false
+  if '/' in path or '\\' in path or lp.endsWith(".ttf") or lp.endsWith(".otf"):
+    return true
+  return false
+
 proc webOpenFont*(path: string; size: int; style: FontStyles;
                   metrics: var FontMetrics): Font =
   let pxSize = max(6, size)
@@ -337,22 +525,39 @@ proc webOpenFont*(path: string; size: int; style: FontStyles;
     lineHeight: lineHeight
   )
 
+  let isMono = isMonospaceFontPath(path)
+  let lp = path.toLowerAscii()
   let family =
-    if path.len == 0:
-      "'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace"
-    elif '/' in path or '\\' in path or path.toLowerAscii().endsWith(".ttf") or path.toLowerAscii().endsWith(".otf"):
-      "'DejaVu Sans Mono', 'Liberation Mono', Consolas, monospace"
+    if isMono:
+      if path.len == 0 or '/' in path or '\\' in path or lp.endsWith(".ttf") or lp.endsWith(".otf"):
+        "'DejaVu Sans Mono', 'JetBrains Mono', 'Fira Code', 'Liberation Mono', Consolas, monospace"
+      else:
+        path & ", 'DejaVu Sans Mono', Consolas, monospace"
     else:
-      path & ", monospace"
+      if "serif" in lp and "sans" notin lp:
+        path & ", 'DejaVu Serif', Georgia, serif"
+      elif '/' in path or '\\' in path or lp.endsWith(".ttf") or lp.endsWith(".otf"):
+        "'DejaVu Sans', 'Liberation Sans', Inter, system-ui, sans-serif"
+      else:
+        path & ", 'DejaVu Sans', 'Liberation Sans', Inter, system-ui, sans-serif"
+
+  var cssFont = ""
+  if FontStyle.italics in style:
+    cssFont.add "italic "
+  if FontStyle.bold in style:
+    cssFont.add "700 "
+  cssFont.add $pxSize & "px " & family
 
   webCore.fonts.add WebFontSlot(
     active: true,
     path: path,
     family: family,
+    cssFont: cssFont,
     size: pxSize,
     style: style,
     metrics: metrics,
-    charWidth: charW
+    charWidth: charW,
+    isMonospace: isMono
   )
   result = Font(webCore.fonts.len)
 
@@ -368,9 +573,11 @@ proc webGetFontSlot*(f: Font): WebFontSlot {.inline.} =
   result = WebFontSlot(
     active: true,
     family: "'DejaVu Sans Mono', Consolas, monospace",
+    cssFont: "15px 'DejaVu Sans Mono', Consolas, monospace",
     size: 15,
     metrics: FontMetrics(ascent: 12, descent: 4, lineHeight: 18),
-    charWidth: 9
+    charWidth: 9,
+    isMonospace: true
   )
 
 proc webGetFontMetrics*(f: Font): FontMetrics =
@@ -410,11 +617,113 @@ proc isWideCode(code: int): bool {.inline.} =
   (code >= 0xFF00 and code <= 0xFF60) or
   (code >= 0x1F300 and code <= 0x1FAFF)
 
+proc proportionalCodePermille(code: int): int {.inline.} =
+  ## Calibrated glyph advance in thousandths of em (1000 = 1.0 * pxSize)
+  ## for proportional sans/serif fonts (DejaVu Sans / Liberation Sans / Inter).
+  case code
+  of ord(' '), ord('\t'): 318
+  of ord('i'), ord('l'), ord('I'), ord('|'), ord('!'), ord('.'), ord(','),
+     ord(':'), ord(';'), ord('\''), ord('`'): 295
+  of ord('j'), ord('f'), ord('t'), ord('r'), ord('('), ord(')'),
+     ord('['), ord(']'), ord('{'), ord('}'), ord('"'), ord('-'), ord('/'), ord('\\'): 375
+  of ord('c'), ord('s'), ord('v'), ord('x'), ord('z'), ord('J'), ord('1'): 510
+  of ord('m'), ord('w'): 920
+  of ord('M'), ord('W'), ord('@'), ord('%'): 940
+  of ord('G'), ord('O'), ord('Q'), ord('D'), ord('H'), ord('N'), ord('U'), ord('&'), ord('#'): 735
+  of ord('A')..ord('C'), ord('E')..ord('F'), ord('K')..ord('L'), ord('P'),
+     ord('R')..ord('T'), ord('V'), ord('X')..ord('Z'): 665
+  else:
+    if isWideCode(code): 1000
+    elif code >= 0x0410 and code <= 0x042F:
+      # Cyrillic uppercase (Ж, Ш, Щ, Ю, М, Ф are wider)
+      if code in [0x0416, 0x041C, 0x0424, 0x0428, 0x0429, 0x042B, 0x042E]: 880
+      else: 685
+    elif code >= 0x0430 and code <= 0x044F:
+      # Cyrillic lowercase (ж, ш, щ, ю, м, ф, ы are wider)
+      if code in [0x0436, 0x043C, 0x0444, 0x0448, 0x0449, 0x044B, 0x044E]: 780
+      else: 575
+    else:
+      570
+
+proc measureProportionalFallback(text: string; pxSize: int; isBold: bool): int =
+  var totalPermille = 0
+  var i = 0
+  while i < text.len:
+    let (code, step) = utf8CodeAt(text, i)
+    totalPermille += proportionalCodePermille(code)
+    i += step
+  if isBold:
+    totalPermille = (totalPermille * 106) div 100
+  result = (totalPermille * pxSize + 999) div 1000
+
+when defined(js):
+  proc jsMeasureProportionalText(fontCs, textCs: cstring): int =
+    ## Real advance width of `text` in `font`, measured the way the browser is
+    ## about to draw it: a hidden span, positioned off-screen, in the same
+    ## font, measured with `getBoundingClientRect`. No <canvas> -- the HTML
+    ## backend is not allowed one -- and no WebAssembly.
+    ##
+    ## Results are cached by (font, text): a layout pass measures thousands of
+    ## strings per frame, and each cache miss costs a style recalculation.
+    {.emit: """
+    if (!window.__uirMeasureCache) {
+      window.__uirMeasureCache = (typeof Map === "function") ? new Map() : null;
+      window.__uirMeasureObj = {};
+      window.__uirMeasureCount = 0;
+    }
+    var key = `fontCs` + "\x1f" + `textCs`;
+    if (window.__uirMeasureCache) {
+      var cached = window.__uirMeasureCache.get(key);
+      if (cached !== undefined) { `result` = cached; return `result`; }
+    } else if (window.__uirMeasureObj[key] !== undefined) {
+      `result` = window.__uirMeasureObj[key];
+      return `result`;
+    }
+    `result` = 0;
+    try {
+      var span = document.getElementById("uir-measure-span");
+      if (!span) {
+        span = document.createElement("span");
+        span.id = "uir-measure-span";
+        // off-screen, but laid out: visibility:hidden still measures,
+        // display:none would not.
+        span.setAttribute("style",
+          "position:absolute;left:-9999px;top:0;visibility:hidden;" +
+          "white-space:pre;font-variant-ligatures:none;letter-spacing:normal;" +
+          "padding:0;margin:0;border:0;");
+        if (document.body) document.body.appendChild(span);
+      }
+      span.style.font = `fontCs`;
+      span.textContent = `textCs`;
+      var rect = span.getBoundingClientRect();
+      if (rect && rect.width > 0) `result` = Math.ceil(rect.width);
+    } catch (_) { `result` = 0; }
+    if (`result` > 0) {
+      if (window.__uirMeasureCache) {
+        if (window.__uirMeasureCache.size > 16384) window.__uirMeasureCache.clear();
+        window.__uirMeasureCache.set(key, `result`);
+      } else {
+        if (window.__uirMeasureCount > 16384) { window.__uirMeasureObj = {}; window.__uirMeasureCount = 0; }
+        window.__uirMeasureObj[key] = `result`;
+        window.__uirMeasureCount++;
+      }
+    }
+    """.}
+
 proc webMeasureText*(f: Font; text: string): TextExtent =
   let idx = int(f) - 1
   if idx < 0 or idx >= webCore.fonts.len or not webCore.fonts[idx].active or text.len == 0:
     return TextExtent(w: 0, h: 0)
   let slot = webCore.fonts[idx]
+  if not slot.isMonospace:
+    when defined(js):
+      let w = jsMeasureProportionalText(cstring(slot.cssFont), cstring(text))
+      if w > 0:
+        return TextExtent(w: w, h: slot.metrics.lineHeight)
+    return TextExtent(
+      w: measureProportionalFallback(text, slot.size, FontStyle.bold in slot.style),
+      h: slot.metrics.lineHeight
+    )
   var cols = 0
   var i = 0
   while i < text.len:
@@ -513,11 +822,37 @@ proc webRestoreState*() =
 proc webSetClipRect*(r: Rect) =
   webCore.currentClip = WebClipState(enabled: true, rect: r)
 
+proc webSetMinViewport*(w, h: int) =
+  ## Publishes the application's floor and re-measures at once, so the very
+  ## first frame is drawn at a size the app can actually lay out.
+  webCore.minViewportW = max(0, w)
+  webCore.minViewportH = max(0, h)
+  when defined(js):
+    let wv = webCore.minViewportW
+    let hv = webCore.minViewportH
+    {.emit: """
+    window.__uirAppMinViewport = { w: `wv`, h: `hv` };
+    if (typeof window.__uirSyncViewportSize === "function") {
+      window.__uirSyncViewportSize();
+    }
+    """.}
+
 proc webSetCursor*(c: CursorKind) =
   webCore.currentCursor = c
 
 proc webSetWindowTitle*(title: string) =
   webCore.windowTitle = title
+  when defined(js):
+    # The HUD label is only part of it: a browser tab that keeps showing the
+    # initial title looks like a frozen app.
+    let titleCs = cstring(title)
+    {.emit: """
+    if (typeof window.__uirSetTitle === "function") {
+      window.__uirSetTitle(`titleCs`);
+    } else if (typeof document !== "undefined") {
+      document.title = `titleCs`;
+    }
+    """.}
 
 proc webGetWindowLayout*(): ScreenLayout =
   webCore.layout
@@ -527,6 +862,13 @@ proc webGetClipboardText*(): string =
 
 proc webPutClipboardText*(text: string) =
   webCore.clipboardText = text
+  when defined(js):
+    # Copy has to leave the page: an app that calls `putClipboardText` on
+    # Ctrl+C expects Ctrl+V in another program to paste it.
+    let textCs = cstring(text)
+    {.emit: """
+    if (typeof window.__uirCopyToSystem === "function") window.__uirCopyToSystem(`textCs`);
+    """.}
 
 # ---------------------------------------------------------------------------
 # Keyboard & Mouse Event Translation + Programmatic Injection
@@ -699,12 +1041,28 @@ proc makeTextInputEvent*(utf8Rune: string): Event =
   for i in 0 ..< n:
     result.text[i] = utf8Rune[i]
 
+const webEventQueueLimit* = 4096
+  ## How many events may wait for the app. Past that, something has to give.
+
 proc webInjectEvent*(e: Event) =
   if e.kind == MouseMoveEvent and webCore.eventQueue.len > 0 and
      webCore.eventQueue[^1].kind == MouseMoveEvent:
     webCore.eventQueue[^1] = e
-  elif webCore.eventQueue.len < 4096:
+    return
+  if webCore.eventQueue.len < webEventQueueLimit:
     webCore.eventQueue.add e
+    return
+  # The queue is full, so something has to be dropped. It must not be the
+  # event that arrived: dropping a mouseup leaves the app convinced the button
+  # is still held, and it stays stuck mid-drag for good. Position updates are
+  # the cheapest thing to lose, so displace the oldest of those instead.
+  for i in 0 ..< webCore.eventQueue.len:
+    if webCore.eventQueue[i].kind == MouseMoveEvent:
+      webCore.eventQueue.delete(i)
+      webCore.eventQueue.add e
+      inc webCore.droppedEvents
+      return
+  inc webCore.droppedEvents
 
 proc utf8RuneCount(s: string): int {.inline.} =
   var i = 0
@@ -736,8 +1094,13 @@ proc webInjectMouse*(kind: EventKind; x, y: int; button = LeftButton; clicks = 1
   ))
 
 proc webInjectResize*(w, h: int; uiScale = 100) =
-  let clampedW = clamp(w, 120, 4096)
-  let clampedH = clamp(h, 120, 4096)
+  # The application's own floor raises the built-in one: a browser may offer
+  # less room than the app can draw in, but the app still has to be handed a
+  # size it can lay out, or it renders interface nobody can reach.
+  let floorW = max(120, webCore.minViewportW)
+  let floorH = max(120, webCore.minViewportH)
+  let clampedW = clamp(w, floorW, max(floorW, 4096))
+  let clampedH = clamp(h, floorH, max(floorH, 4096))
   let clampedScale = clamp(uiScale, 50, 400)
   webCore.layout.width = clampedW
   webCore.layout.height = clampedH
@@ -864,7 +1227,10 @@ when not defined(js):
         else:
           parseSingleJsonEvent(parsed)
     except CatchableError:
-      discard
+      # Swallowing a malformed body is right -- one bad POST must not kill the
+      # app -- but silently is not: the client has no way to tell "rejected"
+      # from "accepted and had no effect".
+      inc webCore.inputParseErrors
     result = webCore.eventQueue.len - beforeLen
 
 # ---------------------------------------------------------------------------
@@ -954,6 +1320,39 @@ when defined(js):
     webCore.clipboardText = $txt
 
   proc bindJsBrowserListeners() =
+    # Each backend owns a different viewport id, and an HTML page must never
+    # be asked to provide a `<canvas>` it is not allowed to draw into.
+    when defined(canvas):
+      {.emit: """var __uirShellViewportId = "uir-canvas";""".}
+    else:
+      {.emit: """var __uirShellViewportId = "uir-viewport";""".}
+    # The canvas build has to size a backing store; the HTML build is not
+    # allowed to touch a canvas at all, so the two get different helpers.
+    when defined(canvas):
+      {.emit: """
+    var __uirApplyViewportBox = function(vp, w, h) {
+      // Retina: CSS pixels for layout, device pixels for the backing store.
+      var dpr = window.devicePixelRatio || 1;
+      if (!(dpr > 0)) dpr = 1;
+      var bw = Math.max(1, Math.round(w * dpr));
+      var bh = Math.max(1, Math.round(h * dpr));
+      if (vp.width !== bw) vp.width = bw;
+      if (vp.height !== bh) vp.height = bh;
+      vp.style.width = w + "px";
+      vp.style.height = h + "px";
+      window.__uirDpr = dpr;
+      var ctx = null;
+      try { ctx = vp.__uirCtx || (vp.getContext ? vp.getContext("2d") : null); } catch (_) {}
+      if (ctx && typeof ctx.setTransform === "function") ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    """.}
+    else:
+      {.emit: """
+    var __uirApplyViewportBox = function(vp, w, h) {
+      vp.style.width = w + "px";
+      vp.style.height = h + "px";
+    };
+    """.}
     {.emit: """
     window.__uirRunId = (window.__uirRunId || 0) + 1;
     if (window.__uirTimerId) {
@@ -964,29 +1363,80 @@ when defined(js):
       window.__uirStepNow = function() { cb(performance.now()); };
       if (window.__uirTimerId) clearTimeout(window.__uirTimerId);
       window.__uirTimerId = setTimeout(function() {
+        window.__uirTimerId = 0;
         cb(performance.now());
       }, 16);
+    };
+    // At most one step per animation frame. Input arrives in bursts -- a wheel
+    // spinning, a key held down, a fast drag -- and running a whole frame
+    // synchronously per event makes the queue grow faster than it drains.
+    window.__uirRequestStep = function() {
+      if (window.__uirStepPending || !window.__uirStepNow) return;
+      window.__uirStepPending = true;
+      var run = function() {
+        window.__uirStepPending = false;
+        if (window.__uirStepNow) window.__uirStepNow();
+      };
+      if (typeof window.requestAnimationFrame === "function" && !document.hidden) {
+        window.requestAnimationFrame(run);
+      } else {
+        setTimeout(run, 0);
+      }
+    };
+    // `setWindowTitle` must reach the tab, not only the HUD label.
+    window.__uirSetTitle = function(title) {
+      var suffix = (typeof window.__uirTitleSuffix === "string") ? window.__uirTitleSuffix : "";
+      var next = "" + title + suffix;
+      if (typeof document !== "undefined" && document.title !== next) document.title = next;
+    };
+    // `putClipboardText` must reach the system clipboard, not only our state.
+    window.__uirCopyFallback = function(txt) {
+      try {
+        var ta = document.getElementById("uir-clipboard-offscreen");
+        if (!ta) {
+          ta = document.createElement("textarea");
+          ta.id = "uir-clipboard-offscreen";
+          ta.setAttribute("style", "position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;");
+          if (document.body) document.body.appendChild(ta);
+        }
+        ta.value = txt;
+        if (ta.select) ta.select();
+        if (document.execCommand) document.execCommand("copy");
+      } catch (_) {}
+    };
+    window.__uirCopyToSystem = function(txt) {
+      try {
+        var el = document.getElementById("uir-clipboard-input");
+        if (el && document.activeElement !== el) el.value = txt;
+      } catch (_) {}
+      try {
+        if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).then(null, function() { window.__uirCopyFallback(txt); });
+          return;
+        }
+      } catch (_) {}
+      window.__uirCopyFallback(txt);
     };
     window.__uirActive = {
       mouse: function(evType, x, y, button, clicks, shift, ctrl, alt, meta) {
         uirJsMouseEvent(evType, x, y, button, clicks, shift, ctrl, alt, meta);
-        if (evType !== "mousemove" && window.__uirStepNow) window.__uirStepNow();
+        window.__uirRequestStep();
       },
       wheel: function(dx, dy, shift, ctrl, alt, meta) {
         uirJsWheelEvent(dx, dy, shift, ctrl, alt, meta);
-        if (window.__uirStepNow) window.__uirStepNow();
+        window.__uirRequestStep();
       },
       key: function(evType, keyStr, codeStr, shift, ctrl, alt, meta) {
         uirJsKeyEvent(evType, keyStr, codeStr, shift, ctrl, alt, meta);
-        if (window.__uirStepNow) window.__uirStepNow();
+        window.__uirRequestStep();
       },
       resize: function(w, h, uiScale) {
         uirJsResizeEvent(w, h, uiScale);
-        if (window.__uirStepNow) window.__uirStepNow();
+        window.__uirRequestStep();
       },
       clip: function(txt) {
         uirJsClipboardEvent(txt);
-        if (window.__uirStepNow) window.__uirStepNow();
+        window.__uirRequestStep();
       }
     };
     if (!window.__uirBrowserBound) {
@@ -997,6 +1447,39 @@ when defined(js):
       var getStage = function() {
         return document.getElementById("uir-stage") || getVp() || document.body;
       };
+      // The shell contract is a handful of ids. When one is missing the
+      // matching feature silently does nothing, which costs an evening to
+      // find; say so once, on the console, at startup.
+      (function reportShellContract() {
+        // The two backends need different ids. Asking an HTML page for
+        // `#uir-canvas` only ever produced a warning that made no sense --
+        // and nudged embedders into shipping a canvas element the backend is
+        // forbidden to use.
+        // Required: without these a feature is dead, not merely inconvenient.
+        var required = [__uirShellViewportId, "uir-stage", "uir-clipboard-input"];
+        // Optional: a minimal embedder, or the exported app gallery, ships no
+        // toolbar at all and that is perfectly fine.
+        var optional = ["uir-win-title", "uir-btn-clip-sync", "uir-btn-resize-960",
+                        "uir-btn-resize-800", "uir-btn-resize-auto", "uir-btn-close"];
+        var collect = function(ids) {
+          var out = [];
+          for (var i = 0; i < ids.length; i++) {
+            if (!document.getElementById(ids[i])) out.push("#" + ids[i]);
+          }
+          return out;
+        };
+        var missing = collect(required);
+        window.__uirMissingElements = missing;
+        window.__uirMissingOptional = collect(optional);
+        var hasViewport = document.getElementById("uir-viewport") || document.getElementById("uir-canvas");
+        if (typeof console !== "undefined" && console.warn) {
+          if (!hasViewport) {
+            console.warn("[uirelays] no #" + __uirShellViewportId + " in the page: nothing will be drawn.");
+          } else if (missing.length > 0) {
+            console.warn("[uirelays] shell contract incomplete: " + missing.join(", ") + ".");
+          }
+        }
+      })();
       var relPos = function(e, el) {
         if (!el) return { x: 0, y: 0 };
         var r = el.getBoundingClientRect();
@@ -1005,21 +1488,54 @@ when defined(js):
           y: Math.round(e.clientY - r.top)
         };
       };
+      var stagePadding = function(el) {
+        if (!el || typeof window.getComputedStyle !== "function") return { x: 0, y: 0 };
+        try {
+          var cs = window.getComputedStyle(el);
+          return {
+            x: (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0),
+            y: (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0)
+          };
+        } catch (_) { return { x: 0, y: 0 }; }
+      };
+      var viewportMin = function() {
+        var m = window.__uirMinViewport;
+        var a = window.__uirAppMinViewport;
+        var w = (m && m.w > 0) ? m.w : 320;
+        var h = (m && m.h > 0) ? m.h : 240;
+        // The two floors combine by taking the larger of each. An embedder can
+        // give an application more room than it needs; it can never take away
+        // room the application declared it cannot draw without.
+        if (a && a.w > w) w = a.w;
+        if (a && a.h > h) h = a.h;
+        return { w: w, h: h };
+      };
+      var viewportInset = function() {
+        var i = window.__uirViewportInset;
+        return { x: (i && typeof i.x === "number") ? i.x : 0,
+                 y: (i && typeof i.y === "number") ? i.y : 0 };
+      };
       var syncViewportSize = function() {
-        var st = getStage();
         var vp = getVp();
         if (!vp || !window.__uirActive) return;
         if (window.__uirFixedSizeMode) return;
-        var w = st ? (st.clientWidth - 4) : (window.innerWidth - 16);
-        var h = st ? (st.clientHeight - 4) : (window.innerHeight - 60);
-        w = Math.max(360, Math.floor(w));
-        h = Math.max(280, Math.floor(h));
-        vp.style.width = w + "px";
-        vp.style.height = h + "px";
-        if (vp.tagName === "CANVAS") {
-          if (vp.width !== w) vp.width = w;
-          if (vp.height !== h) vp.height = h;
-        }
+        var st = document.getElementById("uir-stage");
+        var box = st || vp;
+        var cw = box.clientWidth;
+        var ch = box.clientHeight;
+        // A hidden stage (background tab, display:none iframe) measures 0x0.
+        // Clamping that to the minimum would hand the app a size it never
+        // asked for, so keep the previous size and wait for the observer.
+        if (!cw || !ch) return;
+        var pad = (box === vp) ? { x: 0, y: 0 } : stagePadding(box);
+        var ins = viewportInset();
+        var min = viewportMin();
+        var w = Math.floor(cw - pad.x - ins.x);
+        var h = Math.floor(ch - pad.y - ins.y);
+        if (w < 1 || h < 1) return;
+        w = Math.max(min.w, w);
+        h = Math.max(min.h, h);
+        __uirApplyViewportBox(vp, w, h);
         window.__uirActive.resize(w, h, 100);
       };
       window.__uirSyncViewportSize = syncViewportSize;
@@ -1106,7 +1622,7 @@ when defined(js):
         btn960.addEventListener("click", function() {
           window.__uirFixedSizeMode = true;
           var vp = getVp();
-          if (vp) { vp.style.width = "960px"; vp.style.height = "640px"; }
+          if (vp) __uirApplyViewportBox(vp, 960, 640);
           if (window.__uirActive) window.__uirActive.resize(960, 640, 100);
         });
       }
@@ -1115,7 +1631,7 @@ when defined(js):
         btn800.addEventListener("click", function() {
           window.__uirFixedSizeMode = true;
           var vp = getVp();
-          if (vp) { vp.style.width = "800px"; vp.style.height = "600px"; }
+          if (vp) __uirApplyViewportBox(vp, 800, 600);
           if (window.__uirActive) window.__uirActive.resize(800, 600, 100);
         });
       }
@@ -1151,18 +1667,102 @@ when defined(js):
   proc webServerPort*(): int {.inline.} = 0
 
 else:
+  # -- platform shim: the whole of the platform dependence lives here -----
+
   proc sleepNs(ns: int) {.inline.} =
-    var req = Timespec(
-      tv_sec: posix.Time(ns div 1_000_000_000),
-      tv_nsec: clong(ns mod 1_000_000_000)
-    )
-    var rem = Timespec(tv_sec: posix.Time(0), tv_nsec: clong(0))
-    discard nanosleep(req, rem)
+    when defined(windows):
+      # Winsock has no nanosleep. The only caller is a retry backoff on a
+      # non-blocking socket, where a millisecond is close enough to 0.2 ms.
+      os.sleep(max(1, ns div 1_000_000))
+    else:
+      var req = Timespec(
+        tv_sec: posix.Time(ns div 1_000_000_000),
+        tv_nsec: clong(ns mod 1_000_000_000)
+      )
+      var rem = Timespec(tv_sec: posix.Time(0), tv_nsec: clong(0))
+      discard nanosleep(req, rem)
 
   proc setFdNonBlocking(fd: SocketHandle) =
-    let flags = fcntl(cint(fd), F_GETFL, 0)
-    if flags >= 0:
-      discard fcntl(cint(fd), F_SETFL, flags or O_NONBLOCK)
+    when defined(windows):
+      # nativesockets.setBlocking is ioctlsocket(FIONBIO) here and the very
+      # same fcntl dance as below elsewhere; it raises instead of returning.
+      try:
+        setBlocking(fd, false)
+      except CatchableError:
+        discard
+    else:
+      let flags = fcntl(cint(fd), F_GETFL, 0)
+      if flags >= 0:
+        discard fcntl(cint(fd), F_SETFL, flags or O_NONBLOCK)
+
+  proc sockClose(fd: SocketHandle): cint {.inline.} =
+    when defined(windows): winlean.closesocket(fd)
+    else: posix.close(cint(fd))
+
+  proc sockRecv(fd: SocketHandle; buf: pointer; len: int; flags: cint): int {.inline.} =
+    # winlean counts bytes in cint and returns cint, posix uses int for both.
+    when defined(windows): int(winlean.recv(fd, buf, cint(len), flags))
+    else: posix.recv(fd, buf, len, flags)
+
+  proc sockSend(fd: SocketHandle; buf: pointer; len: int; flags: cint): int {.inline.} =
+    when defined(windows): int(winlean.send(fd, buf, cint(len), flags))
+    else: posix.send(fd, buf, len, flags)
+
+  proc sockListen(fd: SocketHandle): cint {.inline.} =
+    when defined(windows): winlean.listen(fd, cint(SOMAXCONN))
+    else: posix.listen(fd, cint(SOMAXCONN))
+
+  proc sockAccept(fd: SocketHandle): SocketHandle =
+    var clientSa: Sockaddr_in
+    var clientLen = SockLen(sizeof(clientSa))
+    when defined(windows):
+      winlean.accept(fd, cast[ptr SockAddr](addr clientSa), addr clientLen)
+    else:
+      posix.accept(fd, cast[ptr SockAddr](addr clientSa), addr clientLen)
+
+  proc sockWouldBlock(): bool {.inline.} =
+    ## Did the last socket call fail only because it would have blocked?
+    ## Must be asked immediately after that call: both `errno` and
+    ## GetLastError are overwritten by the next one.
+    let e = int32(osLastError())
+    when defined(windows):
+      e == int32(WSAEWOULDBLOCK)
+    else:
+      e == int32(EAGAIN) or e == int32(EWOULDBLOCK)
+
+  proc sockSetReuseAddr(fd: SocketHandle) =
+    when defined(windows):
+      try:
+        setSockOptInt(fd, int(SOL_SOCKET), int(SO_REUSEADDR), 1)
+      except CatchableError:
+        discard
+    else:
+      var optVal: cint = 1
+      discard posix.setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, addr optVal,
+                               SockLen(sizeof(optVal)))
+
+  proc sockBindAny(fd: SocketHandle; port: int): bool =
+    ## Bind to the wildcard address on `port`. False when the port is taken.
+    when defined(windows):
+      # winlean ships neither htons nor htonl, so filling a Sockaddr_in by
+      # hand is not available here; getaddrinfo does the byte-order work
+      # portably and without assuming anything about the host endianness.
+      try:
+        let ai = getAddrInfo("0.0.0.0", Port(port))
+        try:
+          result = bindSocket(fd, ai.ai_addr, SockLen(ai.ai_addrlen)) == 0'i32
+        finally:
+          freeAddrInfo(ai)
+      except CatchableError:
+        result = false
+    else:
+      var sa: Sockaddr_in
+      zeroMem(addr sa, sizeof(sa))
+      sa.sin_family = typeof(sa.sin_family)(AF_INET)
+      sa.sin_port = posix.htons(uint16(port))
+      sa.sin_addr.s_addr = posix.htonl(INADDR_ANY)
+      result = bindSocket(fd, cast[ptr SockAddr](addr sa),
+                          SockLen(sizeof(sa))) == 0'i32
 
   proc sendAllNonBlocking(fd: SocketHandle; data: string): bool =
     if data.len == 0:
@@ -1170,12 +1770,12 @@ else:
     var sent = 0
     var retries = 0
     while sent < data.len:
-      let n = posix.send(fd, unsafeAddr data[sent], data.len - sent,
+      let n = sockSend(fd, unsafeAddr data[sent], data.len - sent,
         when declared(MSG_NOSIGNAL): cint(MSG_NOSIGNAL) else: 0'i32)
       if n > 0:
         sent += n
         retries = 0
-      elif n < 0 and (errno == EAGAIN or errno == EWOULDBLOCK):
+      elif n < 0 and sockWouldBlock():
         inc retries
         if retries > 200:
           return false
@@ -1206,7 +1806,7 @@ else:
     var i = 0
     while i < webCore.sseClients.len:
       if not webCore.sseClients[i].alive:
-        discard posix.close(cint(webCore.sseClients[i].fd))
+        discard sockClose(webCore.sseClients[i].fd)
         webCore.sseClients.delete(i)
         continue
       if webCore.sseClients[i].lastSentFrame != webCore.frameId:
@@ -1214,7 +1814,7 @@ else:
           webCore.sseClients[i].lastSentFrame = webCore.frameId
           inc i
         else:
-          discard posix.close(cint(webCore.sseClients[i].fd))
+          discard sockClose(webCore.sseClients[i].fd)
           webCore.sseClients.delete(i)
       else:
         inc i
@@ -1226,15 +1826,28 @@ else:
     var headerEnd = -1
     var contentLength = 0
 
-    for attempt in 0 ..< 40:
-      let n = posix.recv(clientFd, addr buf[0], buf.len, 0)
+    # Read the whole request. Counting attempts instead of bytes truncates any
+    # body that arrives in more pieces than the budget allows -- a 600 KB batch
+    # of input events, for one -- and then the handler acts on half a JSON
+    # document, drops every event in it, and closes the connection while the
+    # client is still writing. Read until the declared body is complete, a
+    # deadline passes, or the request grows past what we will buffer.
+    const
+      maxRequestBytes = 8 * 1024 * 1024
+      readDeadlineMs = 5000
+    let readDeadline = getMonoTime() + initDuration(milliseconds = readDeadlineMs)
+    var requestComplete = false
+    var requestTooBig = false
+    while true:
+      let n = sockRecv(clientFd, addr buf[0], buf.len, 0)
       if n > 0:
         let oldLen = rawReq.len
         rawReq.setLen(oldLen + n)
         for i in 0 ..< n:
           rawReq[oldLen + i] = buf[i]
         if headerEnd < 0:
-          headerEnd = rawReq.find("\r\n\r\n")
+          # Only the tail can complete the terminator, so start looking there.
+          headerEnd = rawReq.find("\r\n\r\n", max(0, oldLen - 3))
           if headerEnd >= 0:
             let hdrPart = rawReq[0 ..< headerEnd]
             for line in hdrPart.splitLines():
@@ -1244,27 +1857,41 @@ else:
                   contentLength = parseInt(strutils.strip(line[15 .. ^1]))
                 except ValueError:
                   contentLength = 0
-        if headerEnd >= 0 and rawReq.len >= headerEnd + 4 + contentLength:
-          break
-      elif n == 0:
-        break
-      else:
-        if errno == EAGAIN or errno == EWOULDBLOCK:
-          if headerEnd >= 0 and rawReq.len >= headerEnd + 4 + contentLength:
+        if headerEnd >= 0:
+          if rawReq.len >= headerEnd + 4 + contentLength:
+            requestComplete = true
             break
-          sleepNs(200_000)
+          if rawReq.len > maxRequestBytes:
+            requestTooBig = true
+            break
+      elif n == 0:
+        break # peer closed
+      else:
+        if sockWouldBlock():
+          if getMonoTime() >= readDeadline:
+            break
+          sleepNs(200_000) # 0.2 ms
         else:
           break
 
     if rawReq.len == 0:
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
+      return
+
+    if not requestComplete:
+      # Half a request is not a request: acting on it would mean acting on
+      # garbage, and the client deserves to hear that instead of a 200.
+      let status = if requestTooBig: "413 Payload Too Large" else: "400 Bad Request"
+      writeHttpResponse(clientFd, status, "application/json; charset=utf-8",
+        """{"error":"incomplete request"}""")
+      discard sockClose(clientFd)
       return
 
     let firstLineEnd = rawReq.find("\r\n")
     let firstLine = if firstLineEnd >= 0: rawReq[0 ..< firstLineEnd] else: rawReq
     let parts = strutils.splitWhitespace(firstLine)
     if parts.len < 2:
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
       return
 
     let httpMethod = parts[0].toUpperAscii()
@@ -1278,13 +1905,13 @@ else:
 
     if httpMethod == "OPTIONS":
       writeHttpResponse(clientFd, "204 No Content", "text/plain", "")
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
       return
 
     case pathOnly
     of "/", "/index.html":
       writeHttpResponse(clientFd, "200 OK", "text/html; charset=utf-8", webCore.pageHtml)
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
     of "/state", "/frame":
       let payload = if webCore.lastFrameJson.len > 0:
@@ -1292,7 +1919,7 @@ else:
                     else:
                       """{"frameId":0,"backend":"""" & $webCore.backendKind & """"}"""
       writeHttpResponse(clientFd, "200 OK", "application/json; charset=utf-8", payload)
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
     of "/health":
       let healthObj = %*{
@@ -1311,10 +1938,13 @@ else:
         "clipboard": webCore.clipboardText,
         "wantTextInput": webCore.wantTextInput,
         "domNodeCount": webCore.domNodeCount,
-        "canvasCommandCount": webCore.canvasCommandCount
+        "canvasCommandCount": webCore.canvasCommandCount,
+        "sseClients": webCore.sseClients.len,
+        "droppedEvents": webCore.droppedEvents,
+        "inputParseErrors": webCore.inputParseErrors
       }
       writeHttpResponse(clientFd, "200 OK", "application/json; charset=utf-8", $healthObj)
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
     of "/input":
       if httpMethod == "POST":
@@ -1323,7 +1953,7 @@ else:
         writeHttpResponse(clientFd, "200 OK", "application/json; charset=utf-8", resp)
       else:
         writeHttpResponse(clientFd, "405 Method Not Allowed", "application/json", """{"error":"Use POST"}""")
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
     of "/monkey-report":
       if httpMethod == "POST":
@@ -1332,7 +1962,7 @@ else:
       else:
         let rep = if webCore.monkeyReportJson.len > 0: webCore.monkeyReportJson else: """{"ready":false}"""
         writeHttpResponse(clientFd, "200 OK", "application/json; charset=utf-8", rep)
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
     of "/events":
       let sseHdr = "HTTP/1.1 200 OK\r\n" &
@@ -1351,12 +1981,12 @@ else:
           alive: true
         )
       else:
-        discard posix.close(cint(clientFd))
+        discard sockClose(clientFd)
 
     else:
       writeHttpResponse(clientFd, "404 Not Found", "application/json; charset=utf-8",
         """{"error":"Not found","path":"""" & htmlEscape(pathOnly) & """"}""")
-      discard posix.close(cint(clientFd))
+      discard sockClose(clientFd)
 
   proc startWebServer*(preferredPort = 0) =
     if webCore.listenFd != osInvalidSocket and cint(webCore.listenFd) > 0:
@@ -1382,25 +2012,18 @@ else:
       webCore.serverEnabled = false
       return
 
-    var optVal: cint = 1
-    discard posix.setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, addr optVal, SockLen(sizeof(optVal)))
+    sockSetReuseAddr(sock)
     setFdNonBlocking(sock)
 
     var boundPort = 0
     for offset in 0 ..< 30:
       let candidate = basePort + offset
-      var sa: Sockaddr_in
-      zeroMem(addr sa, sizeof(sa))
-      sa.sin_family = typeof(sa.sin_family)(AF_INET)
-      sa.sin_port = posix.htons(uint16(candidate))
-      sa.sin_addr.s_addr = posix.htonl(INADDR_ANY)
-      if bindSocket(sock, cast[ptr SockAddr](addr sa), SockLen(sizeof(sa))) == 0'i32:
-        if posix.listen(sock, SOMAXCONN) == 0'i32:
-          boundPort = candidate
-          break
+      if sockBindAny(sock, candidate) and sockListen(sock) == 0'i32:
+        boundPort = candidate
+        break
 
     if boundPort == 0:
-      discard posix.close(cint(sock))
+      discard sockClose(sock)
       webCore.serverEnabled = false
       return
 
@@ -1408,13 +2031,35 @@ else:
     webCore.serverPort = boundPort
     webCore.serverEnabled = true
 
+  proc reapSseClients() =
+    ## A browser that closed its tab sends nothing -- the socket just goes
+    ## quiet, and the next frame we push at it may still be accepted by the
+    ## kernel. Without looking for EOF here, every closed tab keeps its file
+    ## descriptor until a send fails, and an app that has gone idle sends
+    ## nothing at all, so they pile up until the process runs out of fds.
+    var i = 0
+    while i < webCore.sseClients.len:
+      let fd = webCore.sseClients[i].fd
+      if fd == osInvalidSocket or cint(fd) < 0:
+        webCore.sseClients.delete(i)
+        continue
+      var probe: array[16, char]
+      let flags = cint(MSG_PEEK) or
+        (when declared(MSG_DONTWAIT): cint(MSG_DONTWAIT) else: 0'i32)
+      let n = sockRecv(fd, addr probe[0], probe.len, flags)
+      if n == 0 or (n < 0 and not sockWouldBlock()):
+        discard sockClose(fd)
+        webCore.sseClients[i].alive = false
+        webCore.sseClients.delete(i)
+      else:
+        inc i
+
   proc webPumpServer*() =
     if not webCore.serverEnabled or webCore.listenFd == osInvalidSocket:
       return
+    reapSseClients()
     for _ in 0 ..< 16:
-      var clientSa: Sockaddr_in
-      var clientLen = SockLen(sizeof(clientSa))
-      let clientFd = posix.accept(webCore.listenFd, cast[ptr SockAddr](addr clientSa), addr clientLen)
+      let clientFd = sockAccept(webCore.listenFd)
       if clientFd == osInvalidSocket or cint(clientFd) < 0:
         break
       handleHttpClient(clientFd)
@@ -1422,10 +2067,10 @@ else:
   proc stopWebServer*() =
     for c in webCore.sseClients:
       if c.alive and c.fd != osInvalidSocket:
-        discard posix.close(cint(c.fd))
+        discard sockClose(c.fd)
     webCore.sseClients.setLen(0)
     if webCore.listenFd != osInvalidSocket and cint(webCore.listenFd) > 0:
-      discard posix.close(cint(webCore.listenFd))
+      discard sockClose(webCore.listenFd)
       webCore.listenFd = osInvalidSocket
     webCore.serverEnabled = false
 
@@ -1510,7 +2155,8 @@ proc initWebCore*(kind: WebBackendKind; pageHtml: string) =
       frameId: 0,
       lastPayloadHash: 0'u64,
       lastFrameJson: "",
-      pageHtml: pageHtml
+      pageHtml: pageHtml,
+      droppedEvents: 0
     )
   else:
     webCore = WebCoreState(
@@ -1532,7 +2178,8 @@ proc initWebCore*(kind: WebBackendKind; pageHtml: string) =
       lastFrameJson: "",
       pageHtml: pageHtml,
       listenFd: osInvalidSocket,
-      sseClients: @[]
+      sseClients: @[],
+      droppedEvents: 0
     )
 
 proc webCreateWindowCommon*(layout: var ScreenLayout; icon: pointer; iconLen: int) =

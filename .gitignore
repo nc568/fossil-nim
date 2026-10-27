@@ -11,4 +11,11 @@ nim.cfg
 nimble.develop
 nimble.paths
 nimbledeps
-.github/
+
+# .github/ is deliberately NOT ignored: the CI workflow lives there, and
+# ignoring it meant every change needed `git add -f` and could be silently
+# left out of a commit.
+
+# Dependencies and scratch output of the test harnesses
+node_modules/
+tests/jsdom/node_modules/

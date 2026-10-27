@@ -99,6 +99,10 @@ proc removeLastUtf8Rune(s: var string) =
 
 proc main() {.uirApp.} =
   let win = createWindow(960, 640)
+  # The layout below is drawn for 960x640 and does not reflow below it:
+  # declaring the floor keeps the viewport from shrinking into
+  # territory where the interface is clipped away and unreachable.
+  setMinViewport(960, 640)
   var width = win.width
   var height = win.height
 
@@ -307,8 +311,15 @@ proc main() {.uirApp.} =
         addLog("Quit/Close received")
         running = false
       of WindowResizeEvent, WindowMetricsEvent:
-        width = max(320, e.x)
-        height = max(240, e.y)
+        # 960x640 is the size this showcase is drawn for -- it is what
+        # `createWindow` asks for, and what its content actually occupies
+        # (the graphics tab is two columns reaching +344, the widgets tab
+        # stacks to y+345, the widest separator runs to x=961). A smaller
+        # minimum does not make the demo responsive, it just moves the right
+        # and bottom of it past the window's edge, where `overflow:hidden`
+        # hides it instead of making it reachable.
+        width = max(960, e.x)
+        height = max(640, e.y)
         addLog("Resize -> " & $width & "x" & $height)
       of WindowFocusGainedEvent:
         focusState = "Focused"
@@ -445,7 +456,12 @@ proc main() {.uirApp.} =
     let badgeText = "Clicks: " & $totalClicks & " | Keys: " & $totalKeyDowns &
                     " | Mouse: (" & $mouseX & "," & $mouseY & ")"
     let badgeExt = measureText(fontReg, badgeText)
-    discard drawText(fontReg, max(topRect.x + 360, topRect.x + topRect.w - badgeExt.w - 16),
+    # Right-aligned, but never past the point where the badge still fits: the
+    # `+ 360` floor alone pushed it clean out of a 320px window, which is this
+    # app's own declared minimum.
+    let badgeX = topRect.x + clamp(max(360, topRect.w - badgeExt.w - 16),
+                                   0, max(0, topRect.w - badgeExt.w))
+    discard drawText(fontReg, badgeX,
       topRect.y + 13, badgeText, fgMuted, bgHeader, known = badgeExt)
     drawLine(topRect.x, topRect.y + topRect.h - 1, topRect.x + topRect.w, topRect.y + topRect.h - 1, borderCol)
 
@@ -490,7 +506,11 @@ proc main() {.uirApp.} =
     of TabWidgets:
       let bx = centerRect.x + 20
       let by = centerRect.y + 60
-      discard drawText(fontBold, bx + 335, by + 8, "Counter = " & $counter, palette[1], bgMain)
+      let counterText = "Counter = " & $counter
+      let counterExt = measureText(fontBold, counterText)
+      let counterX = max(bx, centerRect.x + centerRect.w - 16 - counterExt.w)
+      discard drawText(fontBold, counterX, by + 8, counterText, palette[1], bgMain,
+                       known = counterExt)
 
       # Progress / Slider bar
       let barRect = rect(bx, by + 136, 310, 12)

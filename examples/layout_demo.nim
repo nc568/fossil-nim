@@ -47,6 +47,10 @@ proc drawBorder(r: Rect; c: Color) =
 
 proc main() {.uirApp.} =
   let win = createWindow(900, 600)
+  # The layout below is drawn for 900x600 and does not reflow below it:
+  # declaring the floor keeps the viewport from shrinking into
+  # territory where the interface is clipped away and unreachable.
+  setMinViewport(900, 600)
   var width = win.width
   var height = win.height
 
@@ -79,11 +83,26 @@ proc main() {.uirApp.} =
     var cells = parsed.resolve(metrics)
     let tbRect = cells.getOrDefault("toolbar", rect(0, 0, width, 40))
 
+    # Laid out from the toolbar's own width. These used to sit at hardcoded
+    # x=190/332/470/614, which needs 740px of toolbar -- while the window's
+    # own minimum is 420px, so "[- Remove Pane]" and "[Reset Layout]" were
+    # entirely past the right edge there. `overflow:hidden` does not make them
+    # reachable, it just hides them.
+    let tbGap = 8
+    let tbLabelW = min(190, max(0, tbRect.w div 4))
+    let tbAvail = max(0, tbRect.w - tbLabelW - tbGap * 5)
+    let tbBtnW = clamp(tbAvail div 4, 40, 136)
+    let tbBtns: array[4, Rect] = [
+      rect(tbRect.x + tbLabelW + tbGap, tbRect.y + 6, tbBtnW, 28),
+      rect(tbRect.x + tbLabelW + tbGap * 2 + tbBtnW, tbRect.y + 6, tbBtnW, 28),
+      rect(tbRect.x + tbLabelW + tbGap * 3 + tbBtnW * 2, tbRect.y + 6, tbBtnW, 28),
+      rect(tbRect.x + tbLabelW + tbGap * 4 + tbBtnW * 3, tbRect.y + 6, tbBtnW, 28)
+    ]
     let btns = [
-      ToolBtn(id: "split_v", label: "[+ Split Right]", r: rect(tbRect.x + 190, tbRect.y + 6, 134, 28)),
-      ToolBtn(id: "split_h", label: "[+ Split Down]",  r: rect(tbRect.x + 332, tbRect.y + 6, 130, 28)),
-      ToolBtn(id: "remove",  label: "[- Remove Pane]", r: rect(tbRect.x + 470, tbRect.y + 6, 136, 28)),
-      ToolBtn(id: "reset",   label: "[Reset Layout]",  r: rect(tbRect.x + 614, tbRect.y + 6, 126, 28))
+      ToolBtn(id: "split_v", label: "[+ Split Right]", r: tbBtns[0]),
+      ToolBtn(id: "split_h", label: "[+ Split Down]",  r: tbBtns[1]),
+      ToolBtn(id: "remove",  label: "[- Remove Pane]", r: tbBtns[2]),
+      ToolBtn(id: "reset",   label: "[Reset Layout]",  r: tbBtns[3])
     ]
 
     var e = default Event
@@ -92,8 +111,8 @@ proc main() {.uirApp.} =
       of QuitEvent, WindowCloseEvent:
         running = false
       of WindowResizeEvent, WindowMetricsEvent:
-        width = max(420, e.x)
-        height = max(300, e.y)
+        width = max(900, e.x)
+        height = max(600, e.y)
         statusNote = "Window resized to " & $width & "×" & $height
       of MouseMoveEvent:
         mouseX = e.x
@@ -188,7 +207,16 @@ proc main() {.uirApp.} =
           let bCol = if bHov: btnHover else: btnBg
           fillRect(b.r, bCol)
           drawBorder(b.r, divColor)
-          discard drawText(fontSmall, b.r.x + 8, b.r.y + 6, b.label, fg, bCol)
+          # Clip the caption to the button: a label wider than the button it
+          # sits on runs into its neighbour, and past the last one it runs out
+          # of the window.
+          var caption = b.label
+          let captionAvail = b.r.w - 12
+          while caption.len > 1 and measureText(fontSmall, caption).w > captionAvail:
+            caption.setLen(caption.len - 1)
+          if caption.len < b.label.len and caption.len > 1:
+            caption = caption[0 ..< caption.len - 1] & "\u2026"
+          discard drawText(fontSmall, b.r.x + 8, b.r.y + 6, caption, fg, bCol)
       elif name == "status":
         discard drawText(fontSmall, r.x + 10, r.y + 3,
           "status (" & $r.w & "x" & $r.h & ") · " & statusNote, subtleFg, cellBg)

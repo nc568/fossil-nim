@@ -1,23 +1,70 @@
 ## standalone_html_monkey_test.nim -- Pure Nim (--mm:arc) Headless Chromium test
 ## that opens the exported standalone `.html` files directly via `file://`
 ## (no server, zero network) and monkey-tests interactive buttons, animations,
-## keyboard input, and dynamic window resizing in all 9 applications.
+## keyboard input, and dynamic window resizing in all 10 applications.
 
 import std/[os, osproc, strutils]
 
 proc findNodeIndexByText(html, needle: string): int =
   html.find(needle)
 
+proc repoRoot(): string =
+  ## No /home/user paths: the bundle is looked up inside this checkout.
+  let envRoot = getEnv("UIRELAYS_ROOT", "")
+  if envRoot.len > 0 and dirExists(envRoot / "src" / "uirelays"):
+    return envRoot
+  for start in [getCurrentDir(), getAppDir()]:
+    var dir = start
+    for _ in 0 ..< 8:
+      if dirExists(dir / "src" / "uirelays"):
+        return dir
+      let parent = parentDir(dir)
+      if parent == dir:
+        break
+      dir = parent
+  getCurrentDir()
+
+proc findBrowser(): string =
+  let fromEnv = getEnv("UIRELAYS_BROWSER", "")
+  if fromEnv.len > 0:
+    return fromEnv
+  for name in ["chromium", "chromium-browser", "google-chrome",
+               "google-chrome-stable", "chrome"]:
+    let found = findExe(name)
+    if found.len > 0:
+      return found
+  ""
+
 proc main() =
   echo "======================================================================"
   echo " UIRelays Standalone Offline HTML Interactive & Resize Monkey Test"
   echo "======================================================================"
 
-  # Inject a self-verifying monkey test harness into a temporary copy of uirelays_all_apps.html
-  # and open it in Headless Chromium via file:// with zero network.
-  let bundleSrc = readFile("/home/user/uirelays_all_apps.html")
-  doAssert "<canvas" notin bundleSrc.toLowerAscii(), "Zero <canvas> policy violated!"
-  doAssert "WebAssembly" notin bundleSrc, "Zero WASM policy violated!"
+  # Inject a self-verifying monkey test harness into a temporary copy of the
+  # exported bundle and open it in Headless Chromium via file:// with zero
+  # network. The bundle is built by tools/export_interactive_html.nim; if it
+  # is not there yet, build it -- a clean clone must be able to run this.
+  let root = repoRoot()
+  var bundlePath = getEnv("UIRELAYS_BUNDLE", "")
+  if bundlePath.len == 0:
+    bundlePath = root / "exported_html" / "uirelays_all_apps.html"
+  if not fileExists(bundlePath):
+    echo "  bundle not found at ", bundlePath, " -- exporting it first ..."
+    let exportCmd = "nim c --mm:arc --outdir:" & quoteShell(getTempDir() / "uirelays_bins") &
+                    " -r " & quoteShell(root / "tools" / "export_interactive_html.nim")
+    let exportCode = execShellCmd(exportCmd)
+    doAssert exportCode == 0, "Could not export the standalone bundle: " & exportCmd
+  doAssert fileExists(bundlePath), "Bundle still missing after exporting: " & bundlePath
+
+  let bundleSrc = readFile(bundlePath)
+  # The policy is that the apps do not *use* a canvas or WebAssembly. The
+  # Focim demo embeds this repository's README, which talks about both, so
+  # look for API calls rather than for the words.
+  const forbidden = ["getContext(\"2d\")", "getContext('2d')",
+                     "createElement(\"canvas\")", "createElement('canvas')",
+                     "WebAssembly.", "WebAssembly(", "new WebAssembly"]
+  for needle in forbidden:
+    doAssert needle notin bundleSrc, "Zero <canvas>/WASM policy violated: " & needle
 
   let verifierJs = """
 <script>
@@ -45,6 +92,20 @@ function findElementWithText(txt) {
     }
   }
   return null;
+}
+
+function countTextNodes(sub) {
+  // How many rendered text nodes contain `sub` at all. A click helper that
+  // returns false cannot say whether the label was missing from the DOM or
+  // merely unmatched; this can, and the difference decides where the bug is.
+  var vp = document.getElementById("uir-viewport");
+  if (!vp) return -1;
+  var nodes = vp.querySelectorAll(".uir-text");
+  var n = 0;
+  for (var i = 0; i < nodes.length; i++) {
+    if (nodes[i].textContent.indexOf(sub) !== -1) n++;
+  }
+  return n;
 }
 
 function testResizeTo(w, h) {
@@ -188,7 +249,7 @@ async function runAllInteractiveChecks() {
   testResizeTo(1160, 720);
   await sleepMs(80);
   var focimResized = vp.style.width === "1160px";
-  results.push("focim:theme=" + themeClicked + ":split=" + splitClicked + ":tab=" + (tabClicked && hasCalcCode) + ":edit=" + (hasEditedCode && hasDirtyStar && scratchClicked && hasScratchEdited && hasSelReplaced) + ":align=" + exactCellAlign + ":resize=" + focimResized);
+  results.push("focim:theme=" + themeClicked + ":split=" + splitClicked + ":tabClick=" + tabClicked + ":tabCode=" + hasCalcCode + ":edit=" + (hasEditedCode && hasDirtyStar && scratchClicked && hasScratchEdited && hasSelReplaced) + ":align=" + exactCellAlign + ":resize=" + focimResized);
 
   // 5. Web Showcase: click +1 on Widgets tab, then switch to 2. Graphics & Clip + resize
   switchUirApp("web_showcase");
@@ -202,7 +263,7 @@ async function runAllInteractiveChecks() {
   testResizeTo(1020, 680);
   await sleepMs(60);
   var showcaseResized = vp.style.width === "1020px";
-  results.push("web_showcase:inc=" + (incClicked && count1) + ":tab=" + (gfxTab && hasBlit) + ":resize=" + showcaseResized);
+  results.push("web_showcase:inc=" + (incClicked && count1) + ":tabClick=" + gfxTab + ":tabBlit=" + hasBlit + ":tabNodes=" + countTextNodes("Graphics") + ":blitNodes=" + countTextNodes("Procedural") + ":resize=" + showcaseResized);
 
   // 6. Todo: type text, move cursor left into middle with ArrowLeft, insert text,
   //    select with Shift+ArrowLeft, replace selection, click + Add + resize
@@ -280,6 +341,47 @@ async function runAllInteractiveChecks() {
   var helloResized = vp.style.width === "900px";
   results.push("hello:pinkBtn=" + pinkClicked + ":anim=" + (hf1 !== hf2) + ":resize=" + helloResized);
 
+  // 10. Sharks: the densest app here, and the only one that blits. Type into
+  // its input, delete a character, toggle the overlay, and above all assert
+  // that the baked seabed reached the DOM as a real PNG image -- which is
+  // defect N11 checked in an actual browser engine rather than in jsdom.
+  switchUirApp("sharks");
+  await sleepMs(120);
+  var sharksPlaceholder = vp.textContent.indexOf("Ask hai anything...") !== -1;
+  var sharksWord = "reef";
+  for (var si = 0; si < sharksWord.length; si++) {
+    window.__uirActive.key("keydown", sharksWord.charAt(si), "KeyR", false, false, false, false);
+  }
+  await sleepMs(80);
+  var sharksTyped = vp.textContent.indexOf("reef") !== -1;
+  window.__uirActive.key("keydown", "Backspace", "Backspace", false, false, false, false);
+  await sleepMs(80);
+  var sharksDeleted = vp.textContent.indexOf("reef") === -1 &&
+                      vp.textContent.indexOf("ree") !== -1;
+  // blitRGBA paints through an <img> whose src is a data URI PNG. Zero of them
+  // means the encoder returned nothing, which is exactly what it used to do on
+  // the JS backend. The count is taken over the viewport, not the document,
+  // because that is where the driver puts primitives.
+  var sharksImgs = vp.querySelectorAll("img");
+  var sharksPngs = 0;
+  for (var pi = 0; pi < sharksImgs.length; pi++) {
+    var psrc = sharksImgs[pi].getAttribute("src") || "";
+    if (psrc.indexOf("data:image/png") === 0) sharksPngs++;
+  }
+  var sharksBlit = sharksPngs > 0;
+  // 'u' toggles the overlay panel: the title has to disappear with it.
+  var sf1 = document.getElementById("uir-stat-frame").textContent;
+  window.__uirActive.key("keydown", "u", "KeyU", false, false, false, false);
+  await sleepMs(150);
+  var sf2 = document.getElementById("uir-stat-frame").textContent;
+  var sharksToggled = vp.textContent.indexOf("what's on your mind?") === -1;
+  testResizeTo(1100, 700);
+  await sleepMs(80);
+  var sharksResized = vp.style.width === "1100px";
+  results.push("sharks:placeholder=" + sharksPlaceholder + ":typed=" + sharksTyped +
+    ":backspace=" + sharksDeleted + ":blitPng=" + sharksBlit + "(" + sharksPngs + ")" +
+    ":toggleU=" + sharksToggled + ":anim=" + (sf1 !== sf2) + ":resize=" + sharksResized);
+
   // Stop active rAF loop once all checks complete so headless --virtual-time-budget exits immediately
   window.__uirRunId = (window.__uirRunId || 0) + 1;
 
@@ -298,11 +400,30 @@ window.addEventListener("load", function() {
 </script>
 """
 
-  let testHtmlPath = "/tmp/test_standalone_all_apps.html"
+  let testHtmlPath = getTempDir() / "test_standalone_all_apps.html"
   writeFile(testHtmlPath, bundleSrc.replace("</body>", verifierJs & "\n</body>"))
 
-  let cmd = "chromium --headless --no-sandbox --disable-gpu --user-data-dir=/tmp/chromium-profile " &
-            "--window-size=1280,820 --virtual-time-budget=15000 --dump-dom file://" & testHtmlPath & " 2>/dev/null"
+  let browserBin = findBrowser()
+  if browserBin.len == 0:
+    echo "======================================================================"
+    echo " SKIPPED: no headless browser installed."
+    echo " Install chromium (or set UIRELAYS_BROWSER=/path/to/browser) to run"
+    echo " the standalone interactive monkey test; tests/jsdom_monkey_test.nim"
+    echo " covers the same ground with node + jsdom and needs no browser."
+    echo "======================================================================"
+    return
+
+  let cmd = quoteShell(browserBin) &
+            " --headless --no-sandbox --disable-gpu --user-data-dir=" &
+            quoteShell(getTempDir() / "uir-chromium-profile") & " " &
+            # 30 s of virtual time, not the 15 s this used to be: there are
+            # ten apps now, and the tenth redraws ~1700 primitives a frame
+            # while it is on screen, so its checks alone advance the virtual
+            # clock further than the other nine put together. Running out of
+            # budget here shows up as "summary not found in DOM output", which
+            # reads like a rendering failure and is a timeout.
+            "--window-size=1280,820 --virtual-time-budget=30000 --dump-dom file://" &
+            testHtmlPath & " 2>/dev/null"
   let (domOut, exitCode) = execCmdEx(cmd)
   doAssert exitCode == 0, "Chromium failed with exit code " & $exitCode
   let idx = findNodeIndexByText(domOut, "<pre id=\"standalone-monkey-summary\">")
@@ -320,7 +441,7 @@ window.addEventListener("load", function() {
     if ":" in line:
       doAssert "false" notin line, "Interactive check failed on line: " & line
   echo "======================================================================"
-  echo " ALL 9 STANDALONE OFFLINE HTML APPS PASSED INTERACTIVE & RESIZE TESTS!"
+  echo " ALL 10 STANDALONE OFFLINE HTML APPS PASSED INTERACTIVE & RESIZE TESTS!"
   echo "======================================================================"
 
 main()

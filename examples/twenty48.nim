@@ -110,6 +110,10 @@ proc slideLine(line: array[4, int]): tuple[res: array[4, int]; gained: int; move
 
 proc main() {.uirApp.} =
   let win = createWindow(720, 520)
+  # The layout below is drawn for 720x520 and does not reflow below it:
+  # declaring the floor keeps the viewport from shrinking into
+  # territory where the interface is clipped away and unreachable.
+  setMinViewport(720, 520)
   var width = win.width
   var height = win.height
 
@@ -262,8 +266,8 @@ proc main() {.uirApp.} =
       of QuitEvent, WindowCloseEvent:
         running = false
       of WindowResizeEvent, WindowMetricsEvent:
-        width = max(480, ev.x)
-        height = max(380, ev.y)
+        width = max(720, ev.x)
+        height = max(520, ev.y)
       of MouseMoveEvent:
         mouseX = ev.x
         mouseY = ev.y

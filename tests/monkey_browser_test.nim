@@ -1,6 +1,6 @@
 ## Real Headless Chromium Browser Monkey Test Suite + Pure HTML Exporter (Nim --mm:arc).
 ##
-## Tests all 9 UIRelays applications across both `-d:html` (Pure DOM) and
+## Tests all 10 UIRelays applications across both `-d:html` (Pure DOM) and
 ## `-d:canvas` (HTML5 Canvas 2D), and exports the resulting Pure HTML5 + CSS3
 ## DOM markup (zero JS, zero <canvas>, zero WASM) for each application into
 ## `exported_html/<app>.html` and `/home/user/uirelays_all_apps.html`.
@@ -9,6 +9,43 @@ import std/[os, osproc, strutils, json, net, times]
 
 var passes = 0
 var failures = 0
+var skips = 0
+var browserPath = ""
+  ## Filled in by `main()`; declared up here so the checks below can use it.
+
+proc skip(name: string; why: string) =
+  inc skips
+  echo "  SKIP  ", name, "  -- ", why
+
+proc repoRoot(): string =
+  ## Wherever this checkout happens to live: no /home/user paths, and no
+  ## dependence on the working directory the test was started from.
+  let envRoot = getEnv("UIRELAYS_ROOT", "")
+  if envRoot.len > 0 and dirExists(envRoot / "src" / "uirelays"):
+    return envRoot
+  for start in [getCurrentDir(), getAppDir()]:
+    var dir = start
+    for _ in 0 ..< 8:
+      if dirExists(dir / "src" / "uirelays"):
+        return dir
+      let parent = parentDir(dir)
+      if parent == dir:
+        break
+      dir = parent
+  getCurrentDir()
+
+proc findBrowser(): string =
+  ## The browser is a precondition, not a result: without one there is
+  ## nothing here to assert, so the caller skips instead of failing.
+  let fromEnv = getEnv("UIRELAYS_BROWSER", "")
+  if fromEnv.len > 0:
+    return fromEnv
+  for name in ["chromium", "chromium-browser", "google-chrome",
+               "google-chrome-stable", "chrome", "firefox"]:
+    let found = findExe(name)
+    if found.len > 0:
+      return found
+  ""
 
 type
   ExportedAppFrame = object
@@ -335,8 +372,13 @@ proc runMonkeyTarget(appName, srcPath, extraCompileArgs, runArg, backendFlag: st
   let binDir = "/tmp/uirelays_bins"
   createDir(binDir)
   let binPath = binDir / (appName & "_" & backendFlag & "_monkey")
+  let fullSrc = if srcPath.isAbsolute: srcPath else: repoRoot() / srcPath
+  if not fileExists(fullSrc):
+    skip(appName & " [" & backendFlag & "] compiles with --mm:arc",
+         "source not present in this checkout: " & srcPath)
+    return
   let compileCmd = "nim c --mm:arc -d:" & backendFlag & " " & extraCompileArgs &
-                   " -o:" & binPath & " " & srcPath
+                   " -o:" & quoteShell(binPath) & " " & quoteShell(fullSrc)
   echo "\n-------------------------------------------------------------------"
   echo "[Monkey] Building ", appName, " (-d:", backendFlag, " --mm:arc) ..."
   let buildCode = execShellCmd(compileCmd)
@@ -374,16 +416,21 @@ proc runMonkeyTarget(appName, srcPath, extraCompileArgs, runArg, backendFlag: st
 
   # Stage 2: Launch real Headless Chromium to execute in-browser Monkey Test (?monkey=1)
   let url = "http://127.0.0.1:" & $port & "/?monkey=1"
+  let browserBin = browserPath
+  if browserBin.len == 0:
+    skip(appName & " [" & backendFlag & "] in-browser monkey",
+         "no browser installed (set UIRELAYS_BROWSER=/path/to/chromium)")
+    return
   let chromeArgs = @[
     "--headless",
     "--no-sandbox",
     "--disable-gpu",
     "--disable-dev-shm-usage",
-    "--user-data-dir=/tmp/chromium-profile",
+    "--user-data-dir=" & getTempDir() / "uir-chromium-profile",
     "--window-size=1024,768",
     url
   ]
-  let chromeProc = startProcess("/usr/bin/chromium", args = chromeArgs, options = {poUsePath})
+  let chromeProc = startProcess(browserBin, args = chromeArgs, options = {poUsePath})
   defer:
     if chromeProc.running():
       chromeProc.terminate()
@@ -460,19 +507,33 @@ proc runMonkeyTarget(appName, srcPath, extraCompileArgs, runArg, backendFlag: st
   os.sleep(80)
 
 echo "==================================================================="
-echo "UIRelays Chromium Browser Monkey Test Suite (9 Apps x 2 Backends)"
+echo "UIRelays Chromium Browser Monkey Test Suite (10 Apps x 2 Backends)"
 echo "==================================================================="
 
+let root = repoRoot()
+browserPath = findBrowser()
+if browserPath.len == 0:
+  echo "[Monkey] no browser found: every in-browser check is SKIPPED, " &
+       "the HTTP/SSE stages still run."
+
 let targets = [
-  ("calculator",   "examples/calculator.nim",   "--path:src", ""),
-  ("snake",        "examples/snake.nim",        "--path:src", ""),
-  ("twenty48",     "examples/twenty48.nim",     "--path:src", ""),
-  ("focim",        "/home/user/focim/src/focim.nim", "--path:src --path:/home/user/focim/src", "/home/user/focim/README.md"),
-  ("web_showcase", "examples/web_showcase.nim", "--path:src", ""),
-  ("todo",         "examples/todo.nim",         "--path:src", ""),
-  ("paint",        "examples/paint.nim",        "--path:src", ""),
-  ("layout_demo",  "examples/layout_demo.nim",  "--path:src", ""),
-  ("hello",        "examples/hello.nim",        "--path:src", "")
+  ("calculator",   "examples/calculator.nim",   "--path:" & root / "src", ""),
+  ("snake",        "examples/snake.nim",        "--path:" & root / "src", ""),
+  ("twenty48",     "examples/twenty48.nim",     "--path:" & root / "src", ""),
+  # The focim demo lives in this repository; the standalone editor lives in
+  # another one and is simply skipped when it is not checked out next door.
+  ("focim",        "focim_web_port/focim_browser.nim",
+                   "--path:" & root / "src" & " --path:" & root / "focim_web_port", ""),
+  ("web_showcase", "examples/web_showcase.nim", "--path:" & root / "src", ""),
+  ("todo",         "examples/todo.nim",         "--path:" & root / "src", ""),
+  ("paint",        "examples/paint.nim",        "--path:" & root / "src", ""),
+  ("layout_demo",  "examples/layout_demo.nim",  "--path:" & root / "src", ""),
+  ("hello",        "examples/hello.nim",        "--path:" & root / "src", ""),
+  # The densest app here by an order of magnitude: ~1700 rectangles a frame,
+  # a baked 1024x640 buffer blitted through blitRGBA every frame, and a clip
+  # stack. If a backend is going to drop primitives, mis-serialise a large
+  # frame or choke on SSE at that volume, it is this one.
+  ("sharks",       "examples/sharks.nim",       "--path:" & root / "src", "")
 ]
 
 var basePort = 18310
@@ -482,14 +543,17 @@ for (appName, srcPath, extraArgs, runArg) in targets:
   runMonkeyTarget(appName, srcPath, extraArgs, runArg, "canvas", basePort)
   inc basePort
 
-let exportCode = execShellCmd("nim c --mm:arc -d:release --outdir:/tmp/uirelays_bins -r tools/export_interactive_html.nim")
-check("Exported 9 standalone interactive HTML apps (nim js --mm:arc -d:html)", exportCode == 0)
+let exportCode = execShellCmd("nim c --mm:arc --outdir:/tmp/uirelays_bins -r " &
+  quoteShell(root / "tools" / "export_interactive_html.nim"))
+check("Exported 10 standalone interactive HTML apps (nim js --mm:arc -d:html)", exportCode == 0)
 
-let standaloneMonkeyCode = execShellCmd("nim c --mm:arc -d:release --outdir:/tmp/uirelays_bins -r tests/standalone_html_monkey_test.nim")
+let standaloneMonkeyCode = execShellCmd("nim c --mm:arc --outdir:/tmp/uirelays_bins -r " &
+  quoteShell(root / "tests" / "standalone_html_monkey_test.nim"))
 check("Standalone offline HTML apps pass interactive button, animation & dynamic resize monkey tests", standaloneMonkeyCode == 0)
 
 echo "\n==================================================================="
-echo "Monkey Test Summary: Passed = ", passes, " | Failed = ", failures
+echo "Monkey Test Summary: Passed = ", passes, " | Failed = ", failures,
+     " | Skipped = ", skips
 echo "==================================================================="
 if failures > 0:
   quit(1)

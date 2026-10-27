@@ -10,35 +10,71 @@ when not defined(js):
 import ../coords, ../input, ../screen
 import ./web_common
 
+type
+  HtmlPrimKind* = enum
+    ## One entry per DOM element the backend emits, plus the two markers
+    ## that delimit a clip container (`<div class="uir-clip">`).
+    hpRect                  ## `<div class="uir-rect">`
+    hpPoint                 ## `<div class="uir-point">`
+    hpLineH                 ## `<div class="uir-line-h">`
+    hpLineV                 ## `<div class="uir-line-v">`
+    hpSvgLine               ## `<svg class="uir-svg-line">` (diagonal)
+    hpText                  ## `<span class="uir-text">`
+    hpImg                   ## `<div class="uir-img-crop">` wrapping an `<img>`
+    hpBlit                  ## `<div class="uir-blit-clip">` wrapping an `<img>`
+    hpClipOpen              ## opens a clipping container
+    hpClipClose             ## closes it; the pair is always balanced
+
+  HtmlPrim* = object
+    kind*: HtmlPrimKind
+    ## The inline `style` attribute.
+    style*: string
+    ## `textContent` for `hpText`, inner markup for `hpSvgLine`/`hpImg`/`hpBlit`.
+    ##
+    ## For `hpText` this is the **raw** text, never HTML-escaped: the DOM path
+    ## assigns it with `textContent`, which does no decoding, so a pre-escaped
+    ## `&amp;` reaches the user as the literal six characters `&amp;`. Escaping
+    ## is the serializer's job and happens in `renderPrimsToHtml` only.
+    text*: string
+    ## The one attribute that is not `style`: `viewBox` / the `data-clip` rect.
+    extra*: string
+
+proc primTag(k: HtmlPrimKind): string {.inline.} =
+  case k
+  of hpText: "span"
+  of hpSvgLine: "svg"
+  else: "div"
+
+proc primTagName(k: HtmlPrimKind): string {.inline.} =
+  ## What `Element.tagName` reports for this kind: uppercase for HTML
+  ## elements, lowercase for the SVG one. Avoids pulling in `strutils`
+  ## just to fold case.
+  case k
+  of hpText: "SPAN"
+  of hpSvgLine: "svg"
+  else: "DIV"
+
+proc primClass(k: HtmlPrimKind): string {.inline.} =
+  case k
+  of hpRect: "uir-rect"
+  of hpPoint: "uir-point"
+  of hpLineH: "uir-line-h"
+  of hpLineV: "uir-line-v"
+  of hpSvgLine: "uir-svg-line"
+  of hpText: "uir-text"
+  of hpImg: "uir-img-crop"
+  of hpBlit: "uir-blit-clip"
+  of hpClipOpen: "uir-clip"
+  of hpClipClose: ""
+
 var
-  htmlFrameBuffer: string
+  htmlPrims: seq[HtmlPrim]      ## this frame's primitives (see D3 below)
+  htmlPrevPrims: seq[HtmlPrim]  ## last frame's, to diff against
   htmlActiveClip: WebClipState
   htmlClipOpen: bool
   htmlCurrentNodeCount: int
-  lastPublishedHtml*: string
+  lastPublishedHtml*: string    ## the markup the native server would send
 
-proc closeActiveClipDiv() {.inline.} =
-  if htmlClipOpen:
-    htmlFrameBuffer.add "</div>"
-    htmlClipOpen = false
-
-proc syncClipDiv() {.inline.} =
-  if webCore.currentClip != htmlActiveClip:
-    closeActiveClipDiv()
-    htmlActiveClip = webCore.currentClip
-    if htmlActiveClip.enabled:
-      let r = htmlActiveClip.rect
-      let x1 = r.x
-      let y1 = r.y
-      let x2 = max(r.x, r.x + r.w)
-      let y2 = max(r.y, r.y + r.h)
-      htmlFrameBuffer.add "<div class=\"uir-clip\" data-clip=\"" &
-        $r.x & "," & $r.y & "," & $r.w & "," & $r.h &
-        "\" style=\"position:absolute;left:0;top:0;width:100%;height:100%;" &
-        "clip-path:polygon(" & $x1 & "px " & $y1 & "px," &
-        $x2 & "px " & $y1 & "px," & $x2 & "px " & $y2 & "px," &
-        $x1 & "px " & $y2 & "px);pointer-events:none;\">"
-      htmlClipOpen = true
 
 when defined(js):
   const HtmlDriverPageTemplate = ""
@@ -656,8 +692,222 @@ else:
 # Pure HTML/CSS DOM Drawing Relays (Zero <canvas>, Zero WASM)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# The frame is a list of primitives, not a string.
+#
+# D3: the frame used to be a single HTML string handed to `innerHTML`
+# wholesale, so every frame reparsed and rebuilt the whole subtree. That
+# costs real behaviour, not just time: focus, text selection and scroll
+# position die with the nodes that held them, a single moving pixel
+# repaints thousands of them, and the page flickers.
+#
+# Keeping the primitives lets the JS path reconcile the live DOM against
+# them -- an unchanged primitive costs one comparison and zero DOM writes --
+# while the native server path still serialises to HTML for its SSE payload.
+# ---------------------------------------------------------------------------
+
+proc addPrim(kind: HtmlPrimKind; style = ""; text = ""; extra = "") {.inline.} =
+  htmlPrims.add HtmlPrim(kind: kind, style: style, text: text, extra: extra)
+  # Every primitive becomes one element except `hpClipClose`, which closes the
+  # container its `hpClipOpen` already counted. Keeping this equal to
+  # `viewport.querySelectorAll("*").length` is what lets a test detect a
+  # reconciler that leaks or duplicates nodes.
+  if kind != hpClipClose:
+    inc htmlCurrentNodeCount
+
+proc htmlFrameIsEmpty(): bool {.inline.} =
+  ## True only before anything has been drawn this frame. Clip markers do
+  ## not count as content, so a frame that has merely opened a clip is
+  ## still empty as far as the D10 background-fill rule is concerned.
+  htmlPrims.len == 0
+
+proc renderPrimsToHtml(prims: seq[HtmlPrim]): string =
+  ## Serialises a frame back to the markup the HTTP/SSE payload carries.
+  ## Byte-for-byte what the old string builder produced.
+  result = newStringOfCap(prims.len * 96)
+  for p in prims:
+    case p.kind
+    of hpClipClose:
+      result.add "</div>"
+    of hpClipOpen:
+      result.add "<div class=\"uir-clip\" data-clip=\"" & p.extra &
+        "\" style=\"" & p.style & "\">"
+    of hpText:
+      # The primitive carries the raw string (the DOM path assigns it straight
+      # to `textContent`), so the escaping happens here and only here.
+      result.add "<span class=\"uir-text\" style=\"" & p.style & "\">" &
+        htmlEscape(p.text) & "</span>"
+    of hpSvgLine:
+      result.add "<svg class=\"uir-svg-line\" style=\"" & p.style &
+        "\" viewBox=\"" & p.extra & "\">" & p.text & "</svg>"
+    of hpImg, hpBlit:
+      result.add "<div class=\"" & primClass(p.kind) & "\" style=\"" &
+        p.style & "\">" & p.text & "</div>"
+    else:
+      result.add "<div class=\"" & primClass(p.kind) & "\" style=\"" &
+        p.style & "\"></div>"
+
+proc hashPrims(prims: seq[HtmlPrim]; h0: uint64): uint64 =
+  ## Hashes the frame straight from the primitives. The JS path never
+  ## builds the HTML string at all -- it only exists for the SSE payload.
+  result = h0
+  for p in prims:
+    # A separator per field: without it `kind=1, style="2..."` hashes the
+    # same as `kind=12, style="..."`.
+    result = fnv1a64Step(result, $ord(p.kind))
+    result = fnv1a64Step(result, "|")
+    result = fnv1a64Step(result, p.style)
+    result = fnv1a64Step(result, "|")
+    result = fnv1a64Step(result, p.text)
+    result = fnv1a64Step(result, "|")
+    result = fnv1a64Step(result, p.extra)
+    result = fnv1a64Step(result, "|")
+
+# Test-facing views onto the frame model. A test that can see the primitives
+# can assert that the driver built the frame it meant to build, which is the
+# only way to catch a diff that silently drops or reorders an element.
+proc htmlPrimsSnapshot*(): seq[HtmlPrim] {.inline.} =
+  ## The primitives drawn so far this frame, before the next `refresh()`.
+  htmlPrims
+
+proc htmlRenderPrims*(prims: seq[HtmlPrim]): string {.inline.} =
+  ## The markup the native server would publish for this frame.
+  renderPrimsToHtml(prims)
+
+when defined(js):
+  type
+    JsElement {.importc.} = ref object ## a DOM element, reached only through `importjs`
+
+  proc jsGetElementById(id: cstring): JsElement {.importjs: "document.getElementById(#)".}
+  proc jsStyleSet(el: JsElement; prop, value: cstring) {.importjs: "#.style[#] = #".}
+  const SvgNs = "http://www.w3.org/2000/svg"
+  proc jsCreateElement(tag: cstring): JsElement {.importjs: "document.createElement(#)".}
+  proc jsCreateElementNs(ns, tag: cstring): JsElement {.importjs: "document.createElementNS(#, #)".}
+
+  proc jsCreateFor(kind: HtmlPrimKind): JsElement =
+    ## SVG has to be born in the SVG namespace, otherwise the browser hands
+    ## back an HTMLUnknownElement that silently renders nothing.
+    if kind == hpSvgLine: jsCreateElementNs(SvgNs.cstring, "svg".cstring)
+    else: jsCreateElement(primTag(kind).cstring)
+  proc jsAppendChild(parent, child: JsElement) {.importjs: "#.appendChild(#)".}
+  proc jsReplaceChild(parent, fresh, old: JsElement) {.importjs: "#.replaceChild(#, #)".}
+  proc jsRemoveChild(parent, child: JsElement) {.importjs: "#.removeChild(#)".}
+  proc jsLastChild(parent: JsElement): JsElement {.importjs: "#.lastChild".}
+  proc jsChildCount(parent: JsElement): int {.importjs: "#.children.length".}
+  proc jsChildAt(parent: JsElement; i: int): JsElement {.importjs: "#.children[#]".}
+  proc jsTagName(el: JsElement): cstring {.importjs: "#.tagName".}
+
+  proc jsSetStyleText(el: JsElement; v: cstring) {.importjs: "#.style.cssText = #".}
+  proc jsSetTextContent(el: JsElement; v: cstring) {.importjs: "#.textContent = #".}
+  proc jsSetInnerHtml(el: JsElement; v: cstring) {.importjs: "#.innerHTML = #".}
+  proc jsSetAttr(el: JsElement; n, v: cstring) {.importjs: "#.setAttribute(#, #)".}
+
+  proc jsApplyPrim(el: JsElement; p: HtmlPrim) =
+    ## Writes a primitive onto an element. Only reached when the primitive
+    ## actually changed, so an unmoving frame touches no DOM at all.
+    # `setAttribute("class", ...)` and not `el.className = ...`: an SVG
+    # element's `className` is a read-only SVGAnimatedString.
+    jsSetAttr(el, "class".cstring, primClass(p.kind).cstring)
+    jsSetStyleText(el, p.style.cstring)
+    case p.kind
+    of hpRect, hpPoint, hpLineH, hpLineV:
+      # A reused element may have been a clip container or a text span last
+      # frame. Its children are not part of this primitive, so they have to
+      # go -- otherwise a layout that stops clipping leaves the clipped
+      # content behind, still positioned where the old, larger window put it.
+      # `textContent = ""` drops element and text children alike.
+      jsSetTextContent(el, "".cstring)
+    of hpText:
+      jsSetTextContent(el, p.text.cstring)
+    of hpSvgLine:
+      jsSetAttr(el, "viewBox".cstring, p.extra.cstring)
+      jsSetInnerHtml(el, p.text.cstring)
+    of hpImg, hpBlit:
+      jsSetInnerHtml(el, p.text.cstring)
+    of hpClipOpen:
+      # The mirror case: an element that was a leaf last frame becomes a
+      # container now, and must not bring its old contents along.
+      jsSetTextContent(el, "".cstring)
+      jsSetAttr(el, "data-clip".cstring, p.extra.cstring)
+    else:
+      discard
+
+  proc jsReconcile(vp: JsElement; prims: seq[HtmlPrim]; prev: seq[HtmlPrim]) =
+    ## Walks the frame and the live DOM in parallel. Position `i` in the
+    ## frame always means child `i` of the current container, so a
+    ## primitive equal to last frame's at the same position needs no work
+    ## at all -- that is the whole point.
+    var stack: seq[JsElement]
+    var nextChild: seq[int]
+    stack.add vp
+    nextChild.add 0
+    var i = 0
+    while i < prims.len:
+      let p = prims[i]
+      let parent = stack[^1]
+      if p.kind == hpClipClose:
+        while jsChildCount(parent) > nextChild[^1]:
+          jsRemoveChild(parent, jsLastChild(parent))
+        discard stack.pop()
+        discard nextChild.pop()
+      else:
+        let slot = nextChild[^1]
+        var el: JsElement = nil
+        if slot < jsChildCount(parent):
+          el = jsChildAt(parent, slot)
+        # Only skip the writes when the node we would write to is the one
+        # last frame left there.
+        let unchanged = el != nil and i < prev.len and prims[i] == prev[i]
+        if not unchanged:
+          if el == nil or $jsTagName(el) != primTagName(p.kind):
+            let fresh = jsCreateFor(p.kind)
+            if el == nil: jsAppendChild(parent, fresh)
+            else: jsReplaceChild(parent, fresh, el)
+            el = fresh
+          jsApplyPrim(el, p)
+        # A clip container occupies a slot in its parent *and* becomes the
+        # parent for everything up to its `hpClipClose`.
+        inc nextChild[^1]
+        if p.kind == hpClipOpen:
+          stack.add el
+          nextChild.add 0
+      inc i
+    # Drop whatever the previous frame left behind at every level.
+    while stack.len > 0:
+      let parent = stack[^1]
+      while jsChildCount(parent) > nextChild[^1]:
+        jsRemoveChild(parent, jsLastChild(parent))
+      discard stack.pop()
+      discard nextChild.pop()
+
+proc closeActiveClipDiv() {.inline.} =
+  if htmlClipOpen:
+    addPrim(hpClipClose)
+    htmlClipOpen = false
+
+proc syncClipDiv() {.inline.} =
+  if webCore.currentClip != htmlActiveClip:
+    closeActiveClipDiv()
+    htmlActiveClip = webCore.currentClip
+    if htmlActiveClip.enabled:
+      let r = htmlActiveClip.rect
+      let x1 = r.x
+      let y1 = r.y
+      let x2 = max(r.x, r.x + r.w)
+      let y2 = max(r.y, r.y + r.h)
+      let st = "position:absolute;left:0;top:0;width:100%;height:100%;" &
+        "clip-path:polygon(" & $x1 & "px " & $y1 & "px," &
+        $x2 & "px " & $y1 & "px," &
+        $x2 & "px " & $y2 & "px," &
+        $x1 & "px " & $y2 & "px);pointer-events:none;"
+      addPrim(hpClipOpen, st, "", $r.x & "," & $r.y & "," & $r.w & "," & $r.h)
+      # Without this flag `closeActiveClipDiv` never fires, the container is
+      # left open, and every primitive after it lands *inside* the clip --
+      # on the DOM path that also desynchronises the reconciler's stack.
+      htmlClipOpen = true
+
 proc resetHtmlFrameBuffer() =
-  htmlFrameBuffer.setLen(0)
+  htmlPrims.setLen(0)
   htmlActiveClip = WebClipState(enabled: false)
   htmlClipOpen = false
   htmlCurrentNodeCount = 0
@@ -678,43 +928,41 @@ proc htmlSetClipRect(r: Rect) =
 proc htmlFillRect(r: Rect; color: Color) =
   if r.w <= 0 or r.h <= 0 or color.a == 0'u8:
     return
-  if not webCore.currentClip.enabled and r.x <= 0 and r.y <= 0 and
+  # "A full-window opaque fill covers everything, so drop what we have."
+  # True only at the start of a frame. Halfway through, the same call is an
+  # overlay (a lock screen, a scene painted over its backdrop) and silently
+  # discarding the frame so far paints a blank screen.
+  if htmlFrameIsEmpty() and not webCore.currentClip.enabled and
+     r.x <= 0 and r.y <= 0 and
      r.w >= webCore.layout.width and r.h >= webCore.layout.height and
      color.a == 255'u8:
     resetHtmlFrameBuffer()
   syncClipDiv()
-  inc htmlCurrentNodeCount
-  htmlFrameBuffer.add "<div class=\"uir-rect\" style=\"left:" & $r.x &
-    "px;top:" & $r.y & "px;width:" & $r.w & "px;height:" & $r.h &
-    "px;background:" & toCssRgba(color) & ";\"></div>"
+  addPrim(hpRect, "left:" & $r.x & "px;top:" & $r.y & "px;width:" & $r.w &
+    "px;height:" & $r.h & "px;background:" & toCssRgba(color) & ";")
 
 proc htmlDrawPoint(x, y: int; color: Color) =
   if color.a == 0'u8:
     return
   syncClipDiv()
-  inc htmlCurrentNodeCount
-  htmlFrameBuffer.add "<div class=\"uir-point\" style=\"left:" & $x &
-    "px;top:" & $y & "px;width:1px;height:1px;background:" &
-    toCssRgba(color) & ";\"></div>"
+  addPrim(hpPoint, "left:" & $x & "px;top:" & $y &
+    "px;width:1px;height:1px;background:" & toCssRgba(color) & ";")
 
 proc htmlDrawLine(x1, y1, x2, y2: int; color: Color) =
   if color.a == 0'u8:
     return
   syncClipDiv()
-  inc htmlCurrentNodeCount
   let cssCol = toCssRgba(color)
   if y1 == y2:
     let lx = min(x1, x2)
     let lw = max(1, abs(x2 - x1) + 1)
-    htmlFrameBuffer.add "<div class=\"uir-line-h\" style=\"left:" & $lx &
-      "px;top:" & $y1 & "px;width:" & $lw & "px;height:1px;background:" &
-      cssCol & ";\"></div>"
+    addPrim(hpLineH, "left:" & $lx & "px;top:" & $y1 & "px;width:" & $lw &
+      "px;height:1px;background:" & cssCol & ";")
   elif x1 == x2:
     let ly = min(y1, y2)
     let lh = max(1, abs(y2 - y1) + 1)
-    htmlFrameBuffer.add "<div class=\"uir-line-v\" style=\"left:" & $x1 &
-      "px;top:" & $ly & "px;width:1px;height:" & $lh & "px;background:" &
-      cssCol & ";\"></div>"
+    addPrim(hpLineV, "left:" & $x1 & "px;top:" & $ly &
+      "px;width:1px;height:" & $lh & "px;background:" & cssCol & ";")
   else:
     let minX = min(x1, x2)
     let minY = min(y1, y2)
@@ -724,18 +972,30 @@ proc htmlDrawLine(x1, y1, x2, y2: int; color: Color) =
     let relY1 = y1 - minY
     let relX2 = x2 - minX
     let relY2 = y2 - minY
-    htmlFrameBuffer.add "<svg class=\"uir-svg-line\" style=\"left:" & $minX &
-      "px;top:" & $minY & "px;width:" & $w & "px;height:" & $h &
-      "px;overflow:visible;\" viewBox=\"0 0 " & $w & " " & $h & "\">" &
-      "<line x1=\"" & $relX1 & "\" y1=\"" & $relY1 &
-      "\" x2=\"" & $relX2 & "\" y2=\"" & $relY2 &
-      "\" stroke=\"" & cssCol & "\" stroke-width=\"1.25\" stroke-linecap=\"round\"/></svg>"
+    addPrim(hpSvgLine,
+      "left:" & $minX & "px;top:" & $minY & "px;width:" & $w & "px;height:" &
+        $h & "px;overflow:visible;",
+      "<line x1=\"" & $relX1 & "\" y1=\"" & $relY1 & "\" x2=\"" & $relX2 &
+        "\" y2=\"" & $relY2 & "\" stroke=\"" & cssCol &
+        "\" stroke-width=\"1.25\" stroke-linecap=\"round\"/>",
+      "0 0 " & $w & " " & $h)
 
 proc buildFontCssStyle(slot: WebFontSlot; fg, bg: Color): string =
+  ## `letter-spacing: calc(charWidth - 1ch)` is what makes a monospace cell
+  ## land exactly on `charWidth` pixels: every glyph already advances by `1ch`,
+  ## so the correction is the same for all of them and the row adds up.
+  ## For a proportional font that is false -- each glyph has its own advance,
+  ## so a constant correction makes the row drift off the measured width and
+  ## the text slides over its neighbours. There the advance *is* the layout,
+  ## so leave letter-spacing alone and use the width `measureText` returned.
+  let spacing = if slot.isMonospace:
+      "letter-spacing:calc(" & $slot.charWidth & "px - 1ch);"
+    else:
+      "letter-spacing:normal;"
   result = "font-family:" & slot.family & ";font-size:" & $slot.size &
     "px;line-height:" & $slot.metrics.lineHeight & "px;height:" &
-    $slot.metrics.lineHeight & "px;font-variant-ligatures:none;letter-spacing:calc(" &
-    $slot.charWidth & "px - 1ch);color:" & toCssRgba(fg) & ";"
+    $slot.metrics.lineHeight & "px;font-variant-ligatures:none;" & spacing &
+    "color:" & toCssRgba(fg) & ";"
   if FontStyle.bold in slot.style:
     result.add "font-weight:700;"
   if FontStyle.italics in slot.style:
@@ -748,23 +1008,18 @@ proc htmlDrawText(f: Font; x, y: int; text: string; fg, bg: Color): TextExtent =
   if text.len == 0 or result.w <= 0:
     return
   syncClipDiv()
-  inc htmlCurrentNodeCount
   let slot = webGetFontSlot(f)
-  htmlFrameBuffer.add "<span class=\"uir-text\" style=\"left:" & $x &
-    "px;top:" & $y & "px;width:" & $result.w & "px;" & buildFontCssStyle(slot, fg, bg) & "\">" &
-    htmlEscape(text) & "</span>"
+  addPrim(hpText, "left:" & $x & "px;top:" & $y & "px;width:" & $result.w &
+    "px;" & buildFontCssStyle(slot, fg, bg), text)
 
 proc htmlDrawMeasuredText(f: Font; x, y: int; text: string; fg, bg: Color;
                           size: TextExtent) =
   if text.len == 0 or size.w <= 0:
     return
   syncClipDiv()
-  inc htmlCurrentNodeCount
   let slot = webGetFontSlot(f)
-  htmlFrameBuffer.add "<span class=\"uir-text\" style=\"left:" & $x &
-    "px;top:" & $y & "px;width:" & $size.w & "px;" &
-    buildFontCssStyle(slot, fg, bg) & "\">" &
-    htmlEscape(text) & "</span>"
+  addPrim(hpText, "left:" & $x & "px;top:" & $y & "px;width:" & $size.w &
+    "px;" & buildFontCssStyle(slot, fg, bg), text)
 
 proc htmlDrawImage(img: Image; src, dst: Rect) =
   let slot = webGetImageSlot(img)
@@ -780,12 +1035,12 @@ proc htmlDrawImage(img: Image; src, dst: Rect) =
   let offsetY = -int(float(max(0, src.y)) * scaleY + 0.5)
 
   syncClipDiv()
-  inc htmlCurrentNodeCount
-  htmlFrameBuffer.add "<div class=\"uir-img-crop\" style=\"left:" & $dst.x &
-    "px;top:" & $dst.y & "px;width:" & $dst.w & "px;height:" & $dst.h &
-    "px;overflow:hidden;\"><img class=\"uir-img\" src=\"" & slot.dataUri &
-    "\" alt=\"\" style=\"position:absolute;left:" & $offsetX & "px;top:" &
-    $offsetY & "px;width:" & $imgW & "px;height:" & $imgH & "px;\"/></div>"
+  addPrim(hpImg,
+    "left:" & $dst.x & "px;top:" & $dst.y & "px;width:" & $dst.w & "px;height:" &
+      $dst.h & "px;overflow:hidden;",
+    "<img class=\"uir-img\" src=\"" & slot.dataUri &
+      "\" alt=\"\" style=\"position:absolute;left:" & $offsetX & "px;top:" &
+      $offsetY & "px;width:" & $imgW & "px;height:" & $imgH & "px;\"/>")
 
 proc htmlBlitRGBA(pixels: ptr UncheckedArray[uint32]; w, h: int; dst: Rect): bool =
   if pixels == nil or w <= 0 or h <= 0 or dst.w <= 0 or dst.h <= 0:
@@ -797,50 +1052,51 @@ proc htmlBlitRGBA(pixels: ptr UncheckedArray[uint32]; w, h: int; dst: Rect): boo
   let cw = min(w, dst.w)
   let ch = min(h, dst.h)
   syncClipDiv()
-  inc htmlCurrentNodeCount
-  htmlFrameBuffer.add "<div class=\"uir-blit-clip\" style=\"left:" & $dst.x &
-    "px;top:" & $dst.y & "px;width:" & $cw & "px;height:" & $ch &
-    "px;overflow:hidden;\"><img class=\"uir-blit\" src=\"" & dataUri &
-    "\" alt=\"\" style=\"position:absolute;left:0;top:0;width:" & $w &
-    "px;height:" & $h & "px;image-rendering:pixelated;\"/></div>"
+  addPrim(hpBlit,
+    "left:" & $dst.x & "px;top:" & $dst.y & "px;width:" & $cw & "px;height:" &
+      $ch & "px;overflow:hidden;",
+    "<img class=\"uir-blit\" src=\"" & dataUri &
+      "\" alt=\"\" style=\"position:absolute;left:0;top:0;width:" & $w &
+      "px;height:" & $h & "px;image-rendering:pixelated;\"/>")
   result = true
 
 proc htmlRefresh() =
   closeActiveClipDiv()
   inc webCore.totalFramesRendered
   webCore.domNodeCount = htmlCurrentNodeCount
-  lastPublishedHtml = htmlFrameBuffer
 
-  let metaAndDom = webCore.windowTitle & "|" &
-                   $webCore.layout.width & "x" & $webCore.layout.height & "|" &
-                   cursorToCss(webCore.currentCursor) & "|" &
-                   webCore.clipboardText & "|" &
-                   htmlFrameBuffer
-  let h = fnv1a64(metaAndDom)
+  var h = fnv1a64(webCore.windowTitle & "|" &
+                  $webCore.layout.width & "x" & $webCore.layout.height & "|" &
+                  cursorToCss(webCore.currentCursor) & "|" &
+                  webCore.clipboardText)
+  h = hashPrims(htmlPrims, h)
   if h != webCore.lastPayloadHash or webCore.frameId == 0:
     webCore.lastPayloadHash = h
     inc webCore.frameId
     when defined(js):
-      let domCs = cstring(htmlFrameBuffer)
+      let nCnt = htmlCurrentNodeCount
+      let vp = jsGetElementById("uir-viewport".cstring)
+      if vp != nil:
+        let wVal = webCore.layout.width
+        let hVal = webCore.layout.height
+        jsStyleSet(vp, "width".cstring, ($wVal & "px").cstring)
+        jsStyleSet(vp, "height".cstring, ($hVal & "px").cstring)
+        jsStyleSet(vp, "cursor".cstring, cursorToCss(webCore.currentCursor).cstring)
+        # How many elements this frame should have put in the viewport.
+        {.emit: "window.__uirDomNodeCount = `nCnt`;".}
+        # The point of D3: reconcile, never `innerHTML = ...`.
+        jsReconcile(vp, htmlPrims, htmlPrevPrims)
       let titleCs = cstring(webCore.windowTitle)
       let curCs = cstring(cursorToCss(webCore.currentCursor))
       let clipCs = cstring(webCore.clipboardText)
       let wVal = webCore.layout.width
       let hVal = webCore.layout.height
       let fId = webCore.frameId
-      let nCnt = htmlCurrentNodeCount
       {.emit: """
-      var vp = document.getElementById("uir-viewport");
-      if (vp) {
-        vp.style.width = `wVal` + "px";
-        vp.style.height = `hVal` + "px";
-        vp.style.cursor = `curCs`;
-        vp.innerHTML = `domCs`;
-      }
       var tEl = document.getElementById("uir-win-title");
       if (tEl) tEl.textContent = `titleCs`;
       var sEl = document.getElementById("uir-stat-size");
-      if (sEl) sEl.textContent = `wVal` + "×" + `hVal`;
+      if (sEl) sEl.textContent = `wVal` + "\u00d7" + `hVal`;
       var fEl = document.getElementById("uir-stat-frame");
       if (fEl) fEl.textContent = "frame: " + `fId`;
       var nEl = document.getElementById("uir-stat-nodes");
@@ -851,6 +1107,8 @@ proc htmlRefresh() =
       if (clEl && document.activeElement !== clEl) clEl.value = `clipCs`;
       """.}
     else:
+      let frameHtml = renderPrimsToHtml(htmlPrims)
+      lastPublishedHtml = frameHtml
       let frameObj = %*{
         "frameId": webCore.frameId,
         "backend": "html",
@@ -862,16 +1120,22 @@ proc htmlRefresh() =
         "clipboard": webCore.clipboardText,
         "wantTextInput": webCore.wantTextInput,
         "domNodeCount": htmlCurrentNodeCount,
-        "html": htmlFrameBuffer
+        "html": frameHtml
       }
       webCore.lastFrameJson = $frameObj
       broadcastSseFrame()
+
+  # Hand this frame's primitives to the next one as its "before" picture.
+  # Swapping keeps both seqs' capacity, so a steady-state frame allocates
+  # nothing at all.
+  swap(htmlPrims, htmlPrevPrims)
 
   webPumpServer()
   resetHtmlFrameBuffer()
 
 proc htmlShutdown() =
   resetHtmlFrameBuffer()
+  htmlPrevPrims.setLen(0)
   webShutdownCommon()
 
 proc initHtmlDriver*() =
@@ -888,7 +1152,8 @@ proc initHtmlDriver*() =
     restoreState: htmlRestoreState,
     setClipRect: htmlSetClipRect,
     setCursor: webSetCursor,
-    setWindowTitle: webSetWindowTitle
+    setWindowTitle: webSetWindowTitle,
+    setMinViewport: webSetMinViewport
   )
   fontRelays = FontRelays(
     openFont: webOpenFont,

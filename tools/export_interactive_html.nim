@@ -1,9 +1,9 @@
-## export_interactive_html.nim -- Pure Nim (--mm:arc) builder that compiles all 9
+## export_interactive_html.nim -- Pure Nim (--mm:arc) builder that compiles all 10
 ## UIRelays applications with `nim js --mm:arc -d:danger --opt:size -d:html` and
 ## packages them into standalone, self-contained, responsive interactive HTML files
 ## (Zero <canvas>, Zero WASM, Zero external network dependencies).
 
-import std/[os, strutils]
+import std/[os, strutils, osproc]
 
 type
   AppEntry = object
@@ -19,63 +19,70 @@ const Apps = [
     tabLabel: "1. Calculator",
     title: "Minimalist Calculator + Live Paper Tape",
     desc: "Click any calculator button (0-9, +, -, ×, ÷, =, ±, %, ⌫, C, AC) or type on your keyboard; resize the window to watch the keypad and paper tape stretch dynamically.",
-    srcPath: "/home/user/uirelays/examples/calculator.nim"
+    srcPath: "examples/calculator.nim"
   ),
   AppEntry(
     id: "snake",
     tabLabel: "2. Snake",
     title: "Minimalist Snake Game",
     desc: "Use Arrow keys / WASD or click the on-screen D-pad buttons ([▲], [▼], [◄], [►], [Pause], [Restart]) to steer the animated snake; resize the window to scale the arena.",
-    srcPath: "/home/user/uirelays/examples/snake.nim"
+    srcPath: "examples/snake.nim"
   ),
   AppEntry(
     id: "twenty48",
     tabLabel: "3. 2048",
     title: "Minimalist 2048 Puzzle",
     desc: "Use Arrow keys / WASD or click the on-screen [▲ Up], [▼ Down], [◄ Left], [► Right], and [New Game] buttons to slide and merge tiles; resize the window to scale the board.",
-    srcPath: "/home/user/uirelays/examples/twenty48.nim"
+    srcPath: "examples/twenty48.nim"
   ),
   AppEntry(
     id: "focim",
     tabLabel: "4. Focim IDE",
     title: "Focim — The Focussed Nim Editor",
     desc: "Click tabs ([config], [layout], README.md, calculator.nim, snake.nim), click Explorer actions ([Theme: paper], [Theme: amber], [Split Editor]), edit code or #RRGGBB colors live, or drag panel borders!",
-    srcPath: "/home/user/uirelays/focim_web_port/focim_browser.nim"
+    srcPath: "focim_web_port/focim_browser.nim"
   ),
   AppEntry(
     id: "web_showcase",
     tabLabel: "5. Web Showcase",
     title: "UIRelays Web Backend Showcase",
     desc: "Switch between Overview, Controls, Graphics, Paint Pad, and Events tabs; click [+1], [-1], [Reset], toggles, drag the slider, paint with the mouse, or type text.",
-    srcPath: "/home/user/uirelays/examples/web_showcase.nim"
+    srcPath: "examples/web_showcase.nim"
   ),
   AppEntry(
     id: "todo",
     tabLabel: "6. Todo App",
     title: "Todo App (uirelays/layout)",
     desc: "Type a task and press Enter or click [+ Add], click tasks to toggle completion, click [x] to delete, or filter by All / Active / Completed in the sidebar.",
-    srcPath: "/home/user/uirelays/examples/todo.nim"
+    srcPath: "examples/todo.nim"
   ),
   AppEntry(
     id: "paint",
     tabLabel: "7. Paint",
     title: "Minimalist Paint Pad",
     desc: "Click and drag on the drawing surface to paint, click the 6 color swatches, or click [Brush -], [Brush +], and [Clear]; resize the window to expand the canvas.",
-    srcPath: "/home/user/uirelays/examples/paint.nim"
+    srcPath: "examples/paint.nim"
   ),
   AppEntry(
     id: "layout_demo",
     tabLabel: "8. Layout Demo",
     title: "Interactive NIF Layout & Splitter Demo",
     desc: "Drag any border between cells to resize panels live, or click [+ Split Right], [+ Split Down], [- Remove Pane], and [Reset Layout] in the toolbar.",
-    srcPath: "/home/user/uirelays/examples/layout_demo.nim"
+    srcPath: "examples/layout_demo.nim"
   ),
   AppEntry(
     id: "hello",
     tabLabel: "9. Hello",
     title: "Hello UIRelays + Live Animation",
     desc: "Click anywhere to place the crosshair, click [Accent], [Pink], [Green], or [Anim: ON/OFF] to control the animated diagonal ray wave, and resize the window.",
-    srcPath: "/home/user/uirelays/examples/hello.nim"
+    srcPath: "examples/hello.nim"
+  ),
+  AppEntry(
+    id: "sharks",
+    tabLabel: "10. Hammerhead Reef",
+    title: "Hammerhead Reef (blitRGBA seabed + mosaic sharks)",
+    desc: "Four hammerhead sharks over a seabed that is baked once and republished with a single blitRGBA per frame. Click [UI panel: ON/OFF] and [Follow mouse: ON/OFF], move the mouse, type into the panel and press Enter, or press U / F / ESC.",
+    srcPath: "examples/sharks.nim"
   )
 ]
 
@@ -347,37 +354,138 @@ window.addEventListener("DOMContentLoaded", function() {
 </html>
 """
 
+proc repoRoot(): string =
+  ## Directory of this checkout, found without assuming where it was cloned
+  ## (`/home/user/uirelays` in the original version of this tool) and without
+  ## assuming what the working directory is when it runs.
+  let envRoot = getEnv("UIRELAYS_ROOT", "")
+  if envRoot.len > 0 and dirExists(envRoot / "src" / "uirelays"):
+    return envRoot
+  for start in [getCurrentDir(), getAppDir()]:
+    var dir = start
+    for _ in 0 ..< 8:
+      if dirExists(dir / "src" / "uirelays"):
+        return dir
+      let parent = parentDir(dir)
+      if parent == dir:
+        break
+      dir = parent
+  getCurrentDir()
+
+proc checkZeroCanvasPolicy(js: string): string =
+  ## What the policy really forbids is *using* a canvas or WebAssembly, not
+  ## the letters: an app that embeds a README mentioning `<canvas>` (the
+  ## Focim demo does exactly that with this repository's README) is still a
+  ## pure-DOM app. So look for API calls, not for substrings -- the page
+  ## template itself is checked for `<canvas>` markup in `web_html_test.nim`,
+  ## which is where a stray element would actually render.
+  const forbidden = [
+    "getContext(\"2d\")", "getContext('2d')", "getContext(`2d`)",
+    "createElement(\"canvas\")", "createElement('canvas')",
+    "WebAssembly.", "WebAssembly(", "new WebAssembly"
+  ]
+  for needle in forbidden:
+    if needle in js:
+      return needle
+  ""
+
 proc main() =
-  createDir("/tmp/uir_js")
-  createDir("/home/user/uirelays/exported_html")
+  let root = repoRoot()
+  let outDir = getEnv("UIRELAYS_EXPORT_DIR", root / "exported_html")
+  let bundleOut = getEnv("UIRELAYS_BUNDLE_OUT", outDir / "uirelays_all_apps.html")
+  let workDir = getEnv("UIRELAYS_TMPDIR", getTempDir() / "uir_js")
+
+  createDir(workDir)
+  createDir(outDir)
 
   let nimBin = block:
-    let found = findExe("nim")
-    if found.len > 0: found else: "/tmp/nim-2.2.2/bin/nim"
+    let fromEnv = getEnv("NIM", "")
+    if fromEnv.len > 0: fromEnv
+    else:
+      let found = findExe("nim")
+      if found.len > 0: found else: "nim"
+
+  # `UIRELAYS_ONLY_SELFTEST=1` builds just the selftest page below and skips
+  # the ten application pages and the bundle: CI runs the digest check on three
+  # operating systems and does not need to re-export the whole gallery there.
+  let onlySelftest = getEnv("UIRELAYS_ONLY_SELFTEST", "") == "1"
+
+  var appList: seq[AppEntry] = @[]
+  if not onlySelftest:
+    for a in Apps: appList.add a
 
   var compiled: seq[tuple[app: AppEntry, js: string]] = @[]
-  for app in Apps:
-    let outJs = "/tmp/uir_js/" & app.id & ".js"
+  for app in appList:
+    let srcPath = root / app.srcPath
+    if not fileExists(srcPath):
+      echo "  SKIP  ", app.id, " (", app.srcPath, " not in this checkout)"
+      continue
+    let outJs = workDir / app.id & ".js"
+    # `--jsbigint64:off -d:nimStringHash2` keeps `nim js` away from BigInt,
+    # which `std/times` and friends mix with plain numbers and crash on.
     let cmd = nimBin & " js --mm:arc -d:danger --opt:size -d:html " &
-              "--path:/home/user/uirelays/src --path:/home/user/uirelays/focim_web_port " &
-              "--path:src --path:focim_web_port " &
-              "-o:" & outJs & " " & app.srcPath
+              "--jsbigint64:off -d:nimStringHash2 " &
+              "--path:" & quoteShell(root / "src") & " " &
+              "--path:" & quoteShell(root / "focim_web_port") & " " &
+              "-o:" & quoteShell(outJs) & " " & quoteShell(srcPath)
     echo "Compiling JS for ", app.id, " ..."
     let code = execShellCmd(cmd)
-    doAssert code == 0, "Failed compiling JS for " & app.id
+    if code != 0:
+      quit "Failed compiling JS for " & app.id & " (command: " & cmd & ")", 1
     let jsContent = readFile(outJs)
-    doAssert "<canvas" notin jsContent.toLowerAscii(), "Forbidden <canvas> found in " & app.id
-    doAssert "WebAssembly" notin jsContent, "Forbidden WebAssembly found in " & app.id
+    let violation = checkZeroCanvasPolicy(jsContent)
+    doAssert violation.len == 0, "Zero <canvas>/WASM policy violated in " &
+      app.id & ": " & violation
     compiled.add((app: app, js: jsContent))
 
     let standaloneHtml = buildStandaloneHtml(app, jsContent)
-    let standalonePath = "/home/user/uirelays/exported_html/" & app.id & ".html"
+    let standalonePath = outDir / app.id & ".html"
     writeFile(standalonePath, standaloneHtml)
     echo "  -> Wrote ", standalonePath, " (", standaloneHtml.len div 1024, " KB)"
 
+  # A page whose app is compiled with `-d:sharksSelftest`: it renders a fixed
+  # number of frames of a fixed-size scene and prints one `SHARKS_DIGEST` line
+  # through `console.log`. That line is what lets CI compare the *browser*
+  # rendering against the native one bit for bit, so it is built outside
+  # `exported_html/` and never shipped: the pages users get must keep
+  # animating.
+  let selftestOut = getEnv("UIRELAYS_SELFTEST_OUT", "")
+  if selftestOut.len > 0:
+    let selftestSrc = root / getEnv("UIRELAYS_SELFTEST_SRC", "examples/sharks.nim")
+    let frames = getEnv("UIRELAYS_SELFTEST_FRAMES", "120")
+    let outJs = workDir / "selftest_sharks.js"
+    let cmd = nimBin & " js --mm:arc -d:danger --opt:size -d:html " &
+              "--jsbigint64:off -d:nimStringHash2 " &
+              "-d:sharksSelftest -d:sharksFrames=" & frames & " " &
+              "--path:" & quoteShell(root / "src") & " " &
+              "-o:" & quoteShell(outJs) & " " & quoteShell(selftestSrc)
+    echo "Compiling JS selftest page ..."
+    if execShellCmd(cmd) != 0:
+      quit "Failed compiling the selftest page (command: " & cmd & ")", 1
+    let jsContent = readFile(outJs)
+    let violation = checkZeroCanvasPolicy(jsContent)
+    doAssert violation.len == 0,
+      "Zero <canvas>/WASM policy violated in the selftest page: " & violation
+    let entry = AppEntry(
+      id: "sharks_selftest",
+      tabLabel: "Hammerhead Reef selftest",
+      title: "Hammerhead Reef selftest (" & frames & " frames)",
+      desc: "Renders a deterministic scene and logs SHARKS_DIGEST for CI to compare against the native backends.",
+      srcPath: "examples/sharks.nim")
+    createDir(parentDir(selftestOut))
+    writeFile(selftestOut, buildStandaloneHtml(entry, jsContent))
+    echo "  -> Wrote ", selftestOut
+
+  if onlySelftest:
+    if not fileExists(getEnv("UIRELAYS_SELFTEST_OUT", "")):
+      quit "UIRELAYS_ONLY_SELFTEST=1 but no selftest page was written", 1
+    return
+
+  if compiled.len == 0:
+    quit "No application sources found under " & root, 1
+
   let bundleHtml = buildAllAppsBundleHtml(compiled)
-  writeFile("/home/user/uirelays_all_apps.html", bundleHtml)
-  writeFile("/home/user/uirelays/exported_html/uirelays_all_apps.html", bundleHtml)
-  echo "  -> Wrote /home/user/uirelays_all_apps.html (", bundleHtml.len div 1024, " KB)"
+  writeFile(bundleOut, bundleHtml)
+  echo "  -> Wrote ", bundleOut, " (", bundleHtml.len div 1024, " KB)"
 
 main()

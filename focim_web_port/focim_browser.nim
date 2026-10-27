@@ -32,10 +32,12 @@ const
     (compiler "nim")))
 """
 
-  ReadmeContent = staticRead("/home/user/focim/README.md")
-  CalcContent   = staticRead("/home/user/uirelays/examples/calculator.nim")
-  SnakeContent  = staticRead("/home/user/uirelays/examples/snake.nim")
-  T2048Content  = staticRead("/home/user/uirelays/examples/twenty48.nim")
+  # Relative to this file, not to somebody's home directory: `staticRead` of an
+  # absolute path only compiles on the machine it was written on.
+  ReadmeContent = staticRead("../README.md")
+  CalcContent   = staticRead("../examples/calculator.nim")
+  SnakeContent  = staticRead("../examples/snake.nim")
+  T2048Content  = staticRead("../examples/twenty48.nim")
 
   FocimBannerSvgRaw =
     "<svg xmlns='http://www.w3.org/2000/svg' width='460' height='120' viewBox='0 0 460 120'>" &

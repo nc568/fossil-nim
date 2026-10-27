@@ -19,25 +19,88 @@ when defined(js):
   proc uirRequestAnimationFrame*(cb: proc(t: float)) {.importjs: "window.__uirScheduleFrame(#)".}
   proc uirGetRunId*(): int {.importjs: "(window.__uirRunId || 0)".}
 
+const UirFrameLoopMarkers = ["refresh", "pollEvent", "waitEvent", "sleep"]
+  ## Calls that only ever appear in a UIRelays main loop. Used to tell the
+  ## `while running:` loop apart from an unrelated `while` that happens to
+  ## sit earlier in the same procedure (initialisation, parsing, retry...).
+
+proc hasFrameLoopMarker(n: NimNode): bool =
+  ## True when `n` (or anything nested in it, but not a nested routine) calls
+  ## one of `UirFrameLoopMarkers`. `n.strVal` is only read for identifiers and
+  ## symbols, so the walk cannot crash on literals or on empty nodes.
+  if n.kind in {nnkProcDef, nnkFuncDef, nnkMethodDef, nnkConverterDef,
+                nnkLambda, nnkDo, nnkTemplateDef, nnkMacroDef}:
+    return false
+  if n.kind in {nnkIdent, nnkSym}:
+    if n.strVal in UirFrameLoopMarkers:
+      return true
+  elif n.kind in {nnkOpenSymChoice, nnkClosedSymChoice}:
+    for i in 0 ..< n.len:
+      if hasFrameLoopMarker(n[i]):
+        return true
+    return false
+  for i in 0 ..< n.len:
+    if hasFrameLoopMarker(n[i]):
+      return true
+  return false
+
+proc collectWhileLoops(body: NimNode; loops: var seq[int]) =
+  ## Collects the indices of every `while` statement that is a direct
+  ## statement of the procedure body. Only direct statements can be turned
+  ## into a frame callback: hoisting a loop out of an `if` or a `block` would
+  ## change when (and whether) it runs.
+  for i in 0 ..< body.len:
+    if body[i].kind == nnkWhileStmt:
+      loops.add i
+
+proc countNestedWhileLoops(n: NimNode): int =
+  ## How many `while` statements sit somewhere below `n`. Used only to tell
+  ## the user *why* no main loop was found.
+  if n.kind in {nnkProcDef, nnkFuncDef, nnkMethodDef, nnkConverterDef,
+                nnkLambda, nnkDo, nnkTemplateDef, nnkMacroDef}:
+    return 0
+  for i in 0 ..< n.len:
+    if n[i].kind == nnkWhileStmt:
+      inc result
+    result += countNestedWhileLoops(n[i])
+
 macro uirApp*(p: untyped): untyped =
   ## Transforms a UIRelays `while running:` main loop into a non-blocking
-  ## `requestAnimationFrame` callback when compiled with `nim js` (`--mm:arc`),
-  ## while preserving the native loop unchanged when compiled with `nim c`.
+  ## frame callback when compiled with `nim js` (`--mm:arc`), while preserving
+  ## earlier initialization `while` loops and native compilation (`nim c`).
   if not defined(js):
     return p
   expectKind(p, {nnkProcDef, nnkFuncDef})
   result = copyNimTree(p)
   let body = result.body
+
+  # Which `while` is the main loop? Taking the first one silently breaks any
+  # procedure that has an initialisation loop before the real one (a `while`
+  # that drains stdin, waits for a file, walks a list...): the wrong loop
+  # becomes the frame callback and the tab hangs. Prefer the last loop that
+  # actually drives the relays, fall back to the last loop at all, and fail
+  # loudly instead of no-op'ing when there is nothing to transform.
+  var loops: seq[int] = @[]
+  collectWhileLoops(body, loops)
+
   var whileIdx = -1
-  for i in 0 ..< body.len:
-    if body[i].kind == nnkWhileStmt:
-      whileIdx = i
+  for i in countdown(loops.len - 1, 0):
+    if hasFrameLoopMarker(body[loops[i]][1]):
+      whileIdx = loops[i]
       break
+  if whileIdx < 0 and loops.len > 0:
+    whileIdx = loops[^1]
   if whileIdx < 0:
-    return result
-  let whileNode = body[whileIdx]
-  let cond = whileNode[0]
-  let loopBody = whileNode[1]
+    var msg = "uirApp: procedure '" & $p.name & "' has no top-level `while` loop, " &
+      "so there is nothing to turn into a browser frame callback. " &
+      "In `nim js` the loop must be written directly in the procedure body"
+    let nested = countNestedWhileLoops(body)
+    if nested > 0:
+      msg.add " (found " & $nested & " nested/conditional `while` loop(s): hoist the main loop to the top level)"
+    error(msg, p)
+
+  let cond = body[whileIdx][0]
+  let loopBody = body[whileIdx][1]
   var afterStmts = newStmtList()
   for i in (whileIdx + 1) ..< body.len:
     afterStmts.add(body[i])

@@ -67,6 +67,14 @@ type
       ## What the window says it is *showing* -- a document name, typically,
       ## and it changes as often as that does. What it says it *is* is
       ## `WM_CLASS`, which `createWindow` sets and nothing changes.
+    setMinViewport*: proc (w, h: int) {.nimcall.}
+      ## Optional (nil where a backend has no say in how small the window may
+      ## get). The smallest area the application can lay itself out in.
+      ##
+      ## A web backend raises the viewport to at least this size. That matters
+      ## because `overflow:hidden` does not make content reachable, it hides
+      ## it: an app that clamps its own layout variable to 680px while the
+      ## viewport stays 356px draws 324px of interface nobody can click.
 
   FontRelays* = object
     openFont*: proc (path: string; size: int; style: FontStyles;
@@ -218,6 +226,15 @@ proc restoreState*() = windowRelays.restoreState()
 proc setClipRect*(r: Rect) = windowRelays.setClipRect(r)
 proc setCursor*(c: CursorKind) = windowRelays.setCursor(c)
 proc setWindowTitle*(title: string) = windowRelays.setWindowTitle(title)
+
+proc setMinViewport*(w, h: int) =
+  ## Declare the smallest window this application can be drawn in. Call it
+  ## once after `createWindow`. Backends that cannot enforce a floor ignore
+  ## it, so an app should still clamp its own layout -- but where the floor
+  ## *is* enforced, the size the app is handed will never be smaller than
+  ## this, and its clamps stop lying about what the user can reach.
+  if windowRelays.setMinViewport != nil:
+    windowRelays.setMinViewport(w, h)
 
 type
   StyledSlot = object
